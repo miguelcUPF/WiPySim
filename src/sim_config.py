@@ -4,21 +4,43 @@ SIMULATION_TIME_us = 1e6
 # ---Network Topology Parameters--- #
 
 
-# ---Traffic Loading Parameters--- #
-ENABLE_TRAFFIC_LOADING = True  # Whether to load traffic from a file
+# ---Traffic Configuration--- #
 
-TRAFFIC_SOURCES_LOADING = {
-    1: {  # Node 1 as a source
-        "destinations": [2, 3],  # Destination nodes
-        "traffic_paths": [  # Traffic trace files
-            "tests/sim_traces/traffic_trace_node_1_to_node_2_VR.csv",
-            "tests/sim_traces/traffic_trace_node_1_to_node_2_Poisson.csv"
+## ---Traffic Loading--- ##
+# This specifies the loading of traffic traces from files between source and destination nodes.
+# Each entry consists of a source node, and for each destination, a list of traffic trace files and their corresponding simulation starting time.
+# Keys:
+# - "source": the source node number (int).
+# - "destinations": a list of dictionaries for each destination node.
+# - "destination": the destination node number (int).
+# - "traffic_files": a list of dictionaries specifying traffic trace files for that destination and starting time.
+# - "file": path to the traffic trace file (string).
+# - "start_time_us": the simulation time to start loading the traffic file (int, in microseconds) If not provided, 0 is assumed.
+TRAFFIC_LOAD_CONFIG = [
+    {
+        "source": 1,
+        "destinations": [
+            {
+                "destination": 2,
+                "traffic_files": [
+                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_VR.csv",
+                        "start_time_us": 5000},  # Start after 5000 us
+                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_Poisson.csv"}
+                ]
+            },
+            {
+                "destination": 3,
+                "traffic_files": [
+                    {"file": "tests/ws_traces/tshark_processed_traffic.tsv",
+                        "start_time_us": 15000}
+                ]
+            }
         ]
     }
-}
+]
 
 
-# ---Traffic Generation Parameters--- #
+## ---Traffic Generation--- ##
 TRAFFIC_MODEL = "Poisson"
 
 ## Poisson/Bursty/VR Traffic Parameters ##

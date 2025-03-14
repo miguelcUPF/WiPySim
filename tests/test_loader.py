@@ -13,8 +13,8 @@ import src.utils.plotters
 sim_config.ENABLE_CONSOLE_LOGGING = True
 sim_config.USE_COLORS_IN_EVENT_LOGS = True
 
-sim_config.EXCLUDED_CONSOLE_LEVELS = []
-sim_config.EXCLUDED_CONSOLE_MODULES = ["LOAD"]
+sim_config.EXCLUDED_CONSOLE_LEVELS = ["DEBUG"]
+sim_config.EXCLUDED_CONSOLE_MODULES = []
 
 sim_config.ENABLE_EVENT_RECORDING = False
 
@@ -30,22 +30,39 @@ importlib.reload(src.utils.plotters)
 
 logger = get_logger("MAIN")
 
-ENABLE_TRAFFIC_LOADING = True
-TRAFFIC_SOURCES_LOADING = {
-    1: {  # Node 1 as a source
-        "destinations": [2, 3],  # Destination nodes
-        "traffic_paths": [  # Traffic trace files
-            "tests/sim_traces/traffic_trace_node_1_to_node_2_VR.csv",
-            "tests/sim_traces/traffic_trace_node_1_to_node_2_Poisson.csv"
+TRAFFIC_LOAD_CONFIG = [
+    {
+        "source": 1,
+        "destinations": [
+            {
+                "destination": 2,
+                "traffic_files": [
+                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_VR.csv",
+                        "start_time_us": 5000},  # Start after 5000 us
+                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_Poisson.csv"}
+                ]
+            }
         ]
     },
-    2: {  # Node 2 as a source
-        "destinations": [1],  # Destination nodes
-        "traffic_paths": [  # Traffic trace files
-            "tests/ws_traces/tshark_processed_traffic.tsv",
+    {
+        "source": 2,
+        "destinations": [
+            {"destination": 1,
+                "traffic_files": [
+                    {"start_time_us": 1000},
+                    {"file": "nonexistingfile.csv"},
+                ]
+             },
+            {
+                "destination": 3,
+                "traffic_files": [
+                    {"file": "tests/ws_traces/tshark_processed_traffic.tsv",
+                        "start_time_us": 2000}
+                ]
+            }
         ]
     }
-}
+]
 
 SIMULATION_TIME_us = 1e6
 
@@ -67,42 +84,61 @@ class DummyMac:
 
 if __name__ == "__main__":
     print("\033[93m\n" + "="*24 + "  TEST STARTED  " + "="*24 + "\033[0m")
-    if ENABLE_TRAFFIC_LOADING:
-        logger.header(f"Starting Traffic Loader...")
+    logger.header(f"Starting Traffic Loader...")
 
-        env = simpy.Environment()
-        update_logger_env(env)
+    env = simpy.Environment()
+    update_logger_env(env)
 
-        nodes_app_layer = {}
-        nodes_mac_layer = {}
-        for source, config in TRAFFIC_SOURCES_LOADING.items():
-            if source not in nodes_app_layer:
-                app_layer = APP(env, source)
-                nodes_app_layer[source] = app_layer
-            else:
-                app_layer = nodes_app_layer[source]
+    nodes_app_layer = {}
+    nodes_mac_layer = {}
 
-            if source not in nodes_mac_layer:
-                mac_layer = DummyMac(env)
-                nodes_mac_layer[source] = mac_layer
-            else:
-                mac_layer = nodes_mac_layer[source]
+    def initialize_layers(source):
+        app_layer = nodes_app_layer.get(source) or APP(env, source)
+        mac_layer = nodes_mac_layer.get(source) or DummyMac(env)
 
-            app_layer.mac_layer = mac_layer
+        nodes_app_layer[source] = app_layer
+        nodes_mac_layer[source] = mac_layer
 
-            for destination, file_path in zip(config["destinations"], config["traffic_paths"]):
-                traffic_loader = TrafficLoader(
-                    env, source, destination, file_path, app_layer
-                )
+        app_layer.mac_layer = mac_layer
+        return app_layer, mac_layer
 
-        env.run(until=SIMULATION_TIME_us)
+    for config in TRAFFIC_LOAD_CONFIG:
+        source = config.get("source")
 
-        for node_id, mac_layer in nodes_mac_layer.items():
-            logger.header(f"Traffic Node {node_id}")
-            logger.info(
-                f"Load: {mac_layer.load_bits*1e-6:.2f} Mbits \t Rate: {(mac_layer.load_bits*1e-6) / (SIMULATION_TIME_us*1e-6):.2f} Mbps")
-            mac_layer.plotter.show_generation(
-                title=f"Traffic Node {node_id}", save_name=f"loaded_traffic_node_{node_id}")
+        if not source:
+            continue
+
+        app_layer, mac_layer = initialize_layers(source)
+
+        for dest_config in config["destinations"]:
+            destination = dest_config.get("destination")
+
+            if not destination:
+                logger.warning(
+                    f"Destination not specified for node {source}!")
+                continue
+
+            for tf_config in dest_config["traffic_files"]:
+                filepath = tf_config.get("file")
+                start_time_us = tf_config.get("start_time_us", 0)
+
+                if not filepath:
+                    logger.warning(
+                        f"File not specified for node {source} to node {destination}")
+                    continue
+
+                TrafficLoader(env, source, destination,
+                              app_layer, filepath, start_time_us)
+
+    env.run(until=SIMULATION_TIME_us)
+
+    for node_id, mac_layer in nodes_mac_layer.items():
+        logger.header(f"Traffic Node {node_id}")
+        logger.info(
+            f"Load: {mac_layer.load_bits*1e-6:.2f} Mbits \t Rate: {(mac_layer.load_bits*1e-6) / (SIMULATION_TIME_us*1e-6):.2f} Mbps")
+
+        mac_layer.plotter.show_generation(
+            title=f"Traffic Node {node_id}", save_name=f"loaded_traffic_node_{node_id}")
 
     print("\033[93m\n" + "="*23 + "  TEST COMPLETED  " + "="*23)
     if len(plt.get_fignums()) > 0:
