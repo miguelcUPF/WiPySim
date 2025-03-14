@@ -92,7 +92,7 @@ def get_logger(module_name, env=None):
 
     logger = logging.getLogger(module_name)
 
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(HEADER_LEVEL)
 
     if ENABLE_CONSOLE_LOGGING:
         console_handler = logging.StreamHandler()

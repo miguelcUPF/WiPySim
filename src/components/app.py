@@ -1,6 +1,6 @@
 import simpy
 from src.traffic.generator import TrafficGenerator
-from src.utils.traffic_recorder import TrafficRecorder
+from src.traffic.recorder import TrafficRecorder
 
 class APP:
     def __init__(self, env: simpy.Environment, node_id: int):

@@ -37,9 +37,9 @@ TRAFFIC_LOAD_CONFIG = [
             {
                 "destination": 2,
                 "traffic_files": [
-                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_VR.csv",
+                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2.csv",
                         "start_time_us": 5000},  # Start after 5000 us
-                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_Poisson.csv"}
+                    {"file": "tests/sim_traces/traffic_trace_node_3_to_node_1.csv"}
                 ]
             }
         ]

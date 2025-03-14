@@ -12,10 +12,10 @@ SIMULATION_TIME_us = 1e6
 # Keys:
 # - "source": the source node number (int).
 # - "destinations": a list of dictionaries for each destination node.
-# - "destination": the destination node number (int).
-# - "traffic_files": a list of dictionaries specifying traffic trace files for that destination and starting time.
-# - "file": path to the traffic trace file (string).
-# - "start_time_us": the simulation time to start loading the traffic file (int, in microseconds) If not provided, 0 is assumed.
+#   - "destination": the destination node number (int).
+#   - "traffic_files": a list of dictionaries specifying traffic trace files for that destination and starting time.
+#      - "file": path to the traffic trace file (string).
+#      - "start_time_us": the simulation time to start loading the traffic file (int, in microseconds). Defaults to 0.
 TRAFFIC_LOAD_CONFIG = [
     {
         "source": 1,
@@ -23,9 +23,9 @@ TRAFFIC_LOAD_CONFIG = [
             {
                 "destination": 2,
                 "traffic_files": [
-                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_VR.csv",
+                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2.csv",
                         "start_time_us": 5000},  # Start after 5000 us
-                    {"file": "tests/sim_traces/traffic_trace_node_1_to_node_2_Poisson.csv"}
+                    {"file": "tests/sim_traces/traffic_trace_node_3_to_node_1.csv"}
                 ]
             },
             {
@@ -41,18 +41,53 @@ TRAFFIC_LOAD_CONFIG = [
 
 
 ## ---Traffic Generation--- ##
-TRAFFIC_MODEL = "Poisson"
-
-## Poisson/Bursty/VR Traffic Parameters ##
-APP_TRAFFIC_LOAD_kbps = 100e3
-MAX_PACKET_SIZE_bytes = 1280
-
-## Bursty/VR Traffic Parameters ##
-BURST_SIZE_pkts = 20
-AVG_INTER_PACKET_TIME_us = 6
-
-## VR Traffic Parameters ##
-FPS = 90
+# This defines the traffic generation models (e.g., Poisson, VR, Bursty) between source and destination nodes,and their respective parameters.
+# Each entry consists of a source node, and for each destination, a list of traffic generation models and their corresponding parameters.
+# Keys:
+# - "source": the source node number (int).
+# - "destinations": a list of dictionaries for each destination node.
+#   - "destination": the destination node number (int).
+#   - "models": a list of dictionaries specifying traffic models and parameters.
+#      - "model": type of traffic model (str) e.g., "Poisson", "Bursty", or "VR".
+#      - "start_time_us": the simulation time to start loading the traffic file (int, in microseconds) If not provided, 0 is assumed.
+#      - "app_traffic_load_kbps": traffic load in kbps (int, in kbps). Defaults to 100e3 kbps.
+#      - "max_packet_size_bytes": maximum packet size (int, in bytes). Defaults to 1280 bytes.
+#      - "burst_size_pkts" (Bursty and VR models only): number of packets per burst (int). Defaults to 20.
+#      - "avg_inter_packet_time_us" (Bursty and VR models only): average inter-packet time (int, in microseconds). Defaults to 6.
+#      - "fps" (VR model only): generation framerate (int, in frames per second). Defaults to 90 fps.
+TRAFFIC_GEN_CONFIG = [
+    {
+        "source": 1,  # Source node 1
+        "destinations": [  # List of destinations for source node 1
+            {
+                "destination": 2,  # Destination node 2
+                "models": [  # List of traffic models to generate from node 1 to node 2
+                    {
+                        "model": "Poisson",  # Poisson model
+                        "traffic_load_kbps": 50e3,
+                        "packet_size_bytes": 1280
+                    },
+                    {
+                        "model": "VR",  # VR model
+                        "start_time_us": 2000,  # Start time in microseconds for VR model
+                        "fps": 60  # Frames per second for VR model
+                    }
+                ]
+            },
+            {
+                "destination": 3,  # Destination node 3
+                "models": [  # List of traffic models to generate from node 1 to node 3
+                    {
+                        "model": "Bursty",  # Bursty model
+                        "traffic_load_kbps": 50e3,
+                        "packet_size_bytes": 1024,
+                        "burst_size_pkts": 30  # Number of packets in each burst
+                    }
+                ]
+            }
+        ]
+    }
+]
 
 # ---MAC Layer Parameters--- #
 SLOT_TIME_us = 9
