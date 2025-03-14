@@ -27,6 +27,24 @@ sim_config.ENABLE_FIGS_OVERWRITE = True
 importlib.reload(src.utils.event_logger)
 importlib.reload(src.utils.plotters)
 
+NODES = [
+    {"id": 1, "pos": (0, 0, 0)}, 
+    {"id": 2, "pos": (3, 4, 0)},
+    {"id": 3, "pos": (6, 8, 2)},
+    {"id": 4, "pos": (5, 5, 5)},
+    {"id": 5, "pos": (1, 2, 3)},
+    {"id": 6, "pos": (7, 6, 4)},
+    {"id": 7, "pos": (9, 1, 8)},
+    {"id": 8, "pos": (2, 9, 7)}
+]
+
+LINKS = [
+    {"nodes": (1, 2), "channel": 1},
+    {"nodes": (3, 4), "channel": 2},
+    {"nodes": (5, 6), "channel": 1},
+    {"nodes": (7, 8), "channel": 3}
+]
+
 logger = get_logger("MAIN")
 
 if __name__ == "__main__":
@@ -40,16 +58,9 @@ if __name__ == "__main__":
 
     # Create nodes
     nodes = [
-        Node(env, 1, (0, 0, 0)),
-        Node(env, 2, (3, 4, 0)),
-        Node(env, 3, (6, 8, 2)),
-        Node(env, 4, (5, 5, 5)),
-        Node(env, 5, (1, 2, 3)),
-        Node(env, 6, (7, 6, 4)),
-        Node(env, 7, (9, 1, 8)),
-        Node(env, 8, (2, 9, 7)),
+        Node(env, node["id"], node["pos"])
+        for node in NODES
     ]
-
     logger.header(f"Creating Nodes...")
     logger.info(f"Nodes in Network (before):")
     logger.default(f"{network.get_nodes()}")
@@ -62,12 +73,9 @@ if __name__ == "__main__":
 
     # Create bidirectional links
     bidirectional_links = [
-        (nodes[0], nodes[1], 1),  # 1 <-> 2
-        (nodes[2], nodes[3], 2),  # 3 <-> 4
-        (nodes[4], nodes[5], 1),  # 5 <-> 6
-        (nodes[6], nodes[7], 3)   # 7 <-> 8
+        (network.get_node_by_id(link["nodes"][0]), network.get_node_by_id(link["nodes"][1]), link["channel"])
+        for link in LINKS
     ]
-
     logger.header(f"Creating Bidirectional Links...")
     logger.info(f"Links in Network (before):")
     logger.default(f"{network.get_links()}")

@@ -1,8 +1,35 @@
 # ---Simulation Parameters--- #
 SIMULATION_TIME_us = 1e6
 
-# ---Network Topology Parameters--- #
+# ---Network Topology--- #
 
+## ---Nodes--- ##
+# This defines the nodes in the network and their respective positions.
+# Keys:
+# - "id": the unique node identifier (int).
+# - "pos": a tuple (x, y, z) specifying the node’s coordinates.
+NODES = [
+    {"id": 1, "pos": (0, 0, 0)}, 
+    {"id": 2, "pos": (3, 4, 0)},
+    {"id": 3, "pos": (6, 8, 2)},
+    {"id": 4, "pos": (5, 5, 5)},
+    {"id": 5, "pos": (1, 2, 3)},
+    {"id": 6, "pos": (7, 6, 4)},
+    {"id": 7, "pos": (9, 1, 8)},
+    {"id": 8, "pos": (2, 9, 7)}   
+]
+
+## --- Links --- ##
+# This defines bidirectional links between nodes, with an optional channel specification.
+# Keys:
+# - "nodes": a tuple (source, destination) representing the link.
+# - "channel" (optional): the channel assigned to the link. If no channel is provided, dynamic channel selection is used.
+LINKS = [
+    {"nodes": (1, 2), "channel": 1},
+    {"nodes": (3, 4), "channel": 2},
+    {"nodes": (5, 6), "channel": 1},
+    {"nodes": (7, 8), "channel": 3},
+]
 
 # ---Traffic Configuration--- #
 
@@ -15,7 +42,7 @@ SIMULATION_TIME_us = 1e6
 #   - "destination": the destination node number (int).
 #   - "traffic_files": a list of dictionaries specifying traffic trace files for that destination and starting time.
 #      - "file": path to the traffic trace file (string).
-#      - "start_time_us": the simulation time to start loading the traffic file (int, in microseconds). Defaults to 0.
+#      - "start_time_us" (optional): the simulation time to start loading the traffic file (int, in microseconds). Defaults to 0.
 TRAFFIC_LOAD_CONFIG = [
     {
         "source": 1,
@@ -49,12 +76,12 @@ TRAFFIC_LOAD_CONFIG = [
 #   - "destination": the destination node number (int).
 #   - "models": a list of dictionaries specifying traffic models and parameters.
 #      - "model": type of traffic model (str) e.g., "Poisson", "Bursty", or "VR".
-#      - "start_time_us": the simulation time to start loading the traffic file (int, in microseconds) If not provided, 0 is assumed.
-#      - "app_traffic_load_kbps": traffic load in kbps (int, in kbps). Defaults to 100e3 kbps.
-#      - "max_packet_size_bytes": maximum packet size (int, in bytes). Defaults to 1280 bytes.
-#      - "burst_size_pkts" (Bursty and VR models only): number of packets per burst (int). Defaults to 20.
-#      - "avg_inter_packet_time_us" (Bursty and VR models only): average inter-packet time (int, in microseconds). Defaults to 6.
-#      - "fps" (VR model only): generation framerate (int, in frames per second). Defaults to 90 fps.
+#      - "start_time_us" (optional): the simulation time to start loading the traffic file (int, in microseconds) If not provided, 0 is assumed.
+#      - "app_traffic_load_kbps" (optional): traffic load in kbps (int, in kbps). Defaults to 100e3 kbps.
+#      - "max_packet_size_bytes" (optional): maximum packet size (int, in bytes). Defaults to 1280 bytes.
+#      - "burst_size_pkts" (optional, Bursty and VR models only): number of packets per burst (int). Defaults to 20.
+#      - "avg_inter_packet_time_us" (optional, Bursty and VR models only): average inter-packet time (int, in microseconds). Defaults to 6.
+#      - "fps" (optional, VR model only): generation framerate (int, in frames per second). Defaults to 90 fps.
 TRAFFIC_GEN_CONFIG = [
     {
         "source": 1,  # Source node 1
@@ -124,8 +151,8 @@ TTL_ns = 5e8
 ENABLE_CONSOLE_LOGGING = True  # Show logs in console
 USE_COLORS_IN_EVENT_LOGS = True  # Enable/disable colors
 
-EXCLUDED_CONSOLE_LEVELS = []
-EXCLUDED_CONSOLE_MODULES = ["GEN", "LOAD", "PLOTTER"]
+EXCLUDED_CONSOLE_LEVELS = ["DEBUG"]
+EXCLUDED_CONSOLE_MODULES = []
 
 ENABLE_EVENT_RECORDING = True
 EVENT_RECORDING_PATH = "data/events"
