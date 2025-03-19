@@ -24,7 +24,7 @@ import src.components.medium
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"LOAD": ["ALL"]}
+cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 

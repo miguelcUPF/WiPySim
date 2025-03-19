@@ -192,7 +192,7 @@ class MEDIUM:
             return tx_duration_us
 
         self.logger.header(
-            f"Transmitting {ppdu.type} from {ppdu.src_id} to {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
+            f"Transmitting {ppdu.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
         )
 
         tx_duration_us = _calculate_tx_time(
@@ -203,7 +203,7 @@ class MEDIUM:
         start_time = self.env.now
         while self.env.now - start_time < tx_duration_us:
             if self.any_collision_detected(channels_ids):
-                collision_detected = False
+                collision_detected = True
             yield self.env.timeout(1)
 
         if not collision_detected:
