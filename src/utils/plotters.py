@@ -3,14 +3,15 @@ import os
 import src.components.network as Network
 import networkx as nx
 import matplotlib.colors as mcolors
+import matplotlib.lines as mlines
 
 from matplotlib import rcParams
 from collections import deque
 
-from src.utils.support import get_project_root, get_unique_filename
+from src.utils.file_manager import get_project_root
 from src.utils.event_logger import get_logger
-from src.sim_config import ENABLE_FIGS_DISPLAY, ENABLE_FIGS_SAVING, FIGS_SAVE_PATH, ENABLE_FIGS_OVERWRITE
-
+from src.user_config import ENABLE_FIGS_DISPLAY, ENABLE_FIGS_SAVING, FIGS_SAVE_PATH
+from src.components.network import AP, STA
 
 rcParams['font.family'] = 'serif'
 rcParams['font.serif'] = ['DejaVu Serif']
@@ -31,14 +32,10 @@ class BasePlotter:
             return
 
         save_folder = os.path.join(get_project_root(), FIGS_SAVE_PATH)
-        os.makedirs(save_folder, exist_ok=True)  # Ensure folder exists
+        os.makedirs(save_folder, exist_ok=True)
 
-        if not ENABLE_FIGS_OVERWRITE:
-            filepath = get_unique_filename(
-                save_folder, save_name, save_format)
-        else:
-            filepath = os.path.join(
-                save_folder, f"{save_name}.{save_format}")
+        filepath = os.path.join(
+            save_folder, f"{save_name}.{save_format}")
         fig.savefig(filepath)
         self.logger.debug(f"Saved plot: {filepath}")
 
@@ -49,18 +46,16 @@ class NetworkPlotter(BasePlotter):
     def __init__(self, env=None):
         super().__init__(env)
 
-    def plot_network(self, network: Network, node_size=30, edge_alpha=0.6, label_nodes=True, show_distances=True, save_name="network_3d", save_format="pdf"):
+    def plot_network(self, network: Network, node_size=80, label_nodes=True, show_distances=True, save_name="network_3d", save_format="pdf"):
         """
-        Plots the network graph using matplotlib.
+        Plots a network graph using matplotlib.
 
         Parameters
         ----------
         network : Network
             The network to plot.
         node_size : int, optional
-            Size of the node markers. Defaults to 30.
-        edge_alpha : float, optional
-            Transparency of the edges. Defaults to 0.6.
+            Size of the node markers. Defaults to 80.
         label_nodes : bool, optional
             Whether to label each node with its ID. Defaults to True.
         show_distances : bool, optional
@@ -74,60 +69,96 @@ class NetworkPlotter(BasePlotter):
         -------
         None
         """
-        if network is None:
+        if network is None or nx.is_empty(network.graph):
+            self.logger.warning("Network is empty. Nothing to plot.")
             return
 
         plt.ion()
 
-        self.logger.header(f"Generating network graph plot...")
+        self.logger.header(f"Generating Network 3D plot...")
 
         # Create a figure and a 3D Axes
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
 
+        nodes = network.get_nodes()
         pos = nx.get_node_attributes(network.graph, "pos")
-        channels = nx.get_edge_attributes(network.graph, "channel")
-        unique_channels = sorted(set(channels.values()))
-        num_channels = len(unique_channels)
-        cmap = plt.get_cmap("viridis", num_channels)
-        channel_colors = {ch: cmap(i) for i, ch in enumerate(unique_channels)}
 
-        # Plot edges
-        for edge in network.graph.edges():
-            x1, y1, z1 = pos[edge[0]]
-            x2, y2, z2 = pos[edge[1]]
-            ax.plot([x1, x2], [y1, y2], [z1, z2], color=channel_colors[channels[edge]],
-                    alpha=edge_alpha)
-
-            # Label the edges with distance if requested
-            if show_distances:
-                ax.text((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2,
-                        f"{network.get_distance_between_nodes(network.get_node_by_id(edge[0]), network.get_node_by_id(edge[1])):.2f}", color=channel_colors[channels[edge]],  fontsize=8, ha='center', va='center', zorder=10)
+        unique_bss = set(
+            node.bss_id for node in nodes if isinstance(node, (AP, STA)))
+        cmap = plt.get_cmap("tab20", len(unique_bss))
+        bss_colors = {bss_id: cmap(i) for i, bss_id in enumerate(unique_bss)}
 
         # Plot nodes
         for id, (x, y, z) in pos.items():
-            ax.scatter(x, y, z, c="white", edgecolors='black',
-                       marker="o", s=node_size)
+            node = network.get_node(id)
+            if isinstance(node, AP):
+                marker = "o"  # Circle for APs
+            elif isinstance(node, STA):
+                marker = "s"  # Square for STAs
+            else:
+                marker = "D"
 
-            # Label the nodes if requested
+            color = bss_colors[node.bss_id]
+
+            ax.scatter(x, y, z, c=[color], edgecolors=[
+                       "black"], marker=marker, s=node_size)
+
             if label_nodes:
-                z_min, z_max = ax.get_zlim()
-                z_range = z_max - z_min
-                relative_offset = z_range * 0.08
-                ax.text(x, y, z + relative_offset, f"{id}", fontsize=8,
-                        ha='center', va='center', zorder=10)
+                ax.text(x, y, z, f"{id}", fontsize=7, color="black",
+                        ha='center', va='center', zorder=50, fontweight='bold')
 
-        # Set the labels, title and legend
+        # Plot edges
+        for edge in network.graph.edges:
+            node_src = network.get_node(edge[0])
+            node_dst = network.get_node(edge[1])
+
+            color = bss_colors[node_src.bss_id]
+
+            x1, y1, z1 = pos[node_src.id]
+            x2, y2, z2 = pos[node_dst.id]
+
+            ax.plot([x1, x2], [y1, y2], [z1, z2], color=color, lw=1)
+
+            # Label the edges with distance if requested
+            if show_distances:
+                distance = network.get_distance_between_nodes(
+                    node_src.id, node_dst.id, 2)
+                ax.text((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2,
+                        f"{distance}", color="#272727",  fontsize=8, ha='center', va='center', zorder=10)
+
+        # Plot traffic arrows
+        for node_src in nodes:
+            for traffic_source in node_src.traffic_sources:
+                x1, y1, z1 = pos[node_src.id]
+                x2, y2, z2 = pos[traffic_source.dst_id]
+
+                color = bss_colors[node_src.bss_id]
+
+                ax.quiver(x1, y1, z1, x2 - x1, y2 - y1, z2 - z1,
+                          color=color, arrow_length_ratio=0.1, lw=1)
+
+        legend_elements_bss = [
+            mlines.Line2D([0], [0], color=bss_colors[bss],
+                          lw=4, label=f"BSS: {bss}")
+            for bss in unique_bss
+        ]
+        legend_elements = [
+            mlines.Line2D([], [], color='black', marker='s', markerfacecolor='none', linestyle='None',
+                          markeredgewidth=1, markersize=5, label="STA"),
+            mlines.Line2D([], [], color='black', marker='o', markerfacecolor='none', linestyle='None', markeredgewidth=1,
+                          markersize=5, label="AP")
+        ]
+
+        ax.legend(handles=legend_elements_bss + legend_elements, loc="best",
+                  fontsize="small", frameon=False)
+
+        # Set the labels, title and background color
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
         ax.set_title(f"3D Network Graph (t={network.env.now} ms)")
         ax.set_facecolor('white')
-
-        legend_elements = [plt.Line2D(
-            [0], [0], color=channel_colors[ch], lw=4, label=f"Ch: {ch}") for ch in unique_channels]
-        ax.legend(handles=legend_elements, loc="best",
-                  fontsize="small", frameon=False)
 
         plt.tight_layout()
 
@@ -154,7 +185,7 @@ class TrafficPlotter(BasePlotter):
         `time_attr` can be 'creation_time_us' or 'reception_time_us'.
         """
         if not self.traffic_data:
-            self.logger.warning("No data to plot")
+            self.logger.warning(f"No data to plot: {title}")
             return
 
         plt.ion()
@@ -192,7 +223,7 @@ class TrafficPlotter(BasePlotter):
 
         plt.tight_layout()
 
-        if ENABLE_FIGS_SAVING:
+        if ENABLE_FIGS_SAVING and save_name is not None:
             self.save_plot(fig, save_name, save_format)
 
         if ENABLE_FIGS_DISPLAY:

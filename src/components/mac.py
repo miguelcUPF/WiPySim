@@ -1,9 +1,32 @@
 import simpy
 import random
 
-from src.sim_config import COMMON_RETRY_LIMIT, CW_MIN, CW_MAX, SLOT_TIME_us, DIFS_us, SIFS_us, MAX_TX_QUEUE_SIZE_pkts, MAX_RX_QUEUE_SIZE_pkts, MAX_AMPDU_SIZE_bytes, BACK_TIMEOUT_us
-from src.utils.data_units import Packet, AMPDU, MPDU, BACK
-from src.utils.states import MACState
+from typing import cast
+
+from src.sim_params import (
+    COMMON_RETRY_LIMIT,
+    CW_MIN,
+    CW_MAX,
+    SLOT_TIME_us,
+    DIFS_us,
+    SIFS_us,
+    MAX_TX_QUEUE_SIZE_pkts,
+    MAX_AMPDU_SIZE_bytes,
+    BACK_TIMEOUT_us,
+    ENABLE_RTS_CTS,
+    RTS_THRESHOLD_bytes,
+    CTS_TIMEOUT_us,
+)
+from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
+from src.components.network import Node
+from src.utils.event_logger import get_logger
+
+
+class MACState:
+    IDLE = 0
+    CONTEND = 1
+    TX = 2
+    RX = 3
 
 
 class MAC:
@@ -12,197 +35,359 @@ class MAC:
     MAC layer receiver. Handles frame reception, ACK/BACK responses, and demultiplexing MPDUs.
     """
 
-    def __init__(self, env: simpy.Environment, node_id: int):
+    def __init__(self, env: simpy.Environment, node: Node):
         self.env = env
-        self.name = "MAC"
-        self.app_layer = None
-        self.phy_layer = None
 
-        self.node_id = node_id
+        self.node = node
 
-        # TX
         self.state = MACState.IDLE
 
-        self.selected_channels = []
-
-        self.tx_queue = simpy.Store(env, capacity=MAX_TX_QUEUE_SIZE_pkts)
-
-        self.tx_ampdu = None
-        self.retries = 0
-
-        self.backoff_finished = False
+        self.tx_queue: simpy.Store[MPDU] = simpy.Store(
+            env, capacity=MAX_TX_QUEUE_SIZE_pkts
+        )
 
         self.ampdu_counter = 0
-        self.pkt_drop_counter = 0
 
-        self.rx_back = None
+        self.backoff_slots = 0
+        self.retries = 0
 
-        # RX
-        self.rx_queue = simpy.Store(env, capacity=MAX_RX_QUEUE_SIZE_pkts)
+        self.tx_ampdu: AMPDU = None
+        self.rx_back: BACK = None
 
-        self.env.process(self.run())
+        self.cts_event = None
+        self.back_event = None
+
+        self.pkts_tx = 0
+        self.pkts_dropped = 0
+        self.tx_attempts = 0
+        self.tx_failures = 0
+
+        self.name = "MAC"
+        self.logger = get_logger(self.name, env)
+
+        self.active_processes = []
+
+        p = self.env.process(self.run())
+
+        self.active_processes.append(p)
+
+    def del_mpdu_from_queue(self, mpdu):
+        """Find and remove the specified MPDU from the tx_queue."""
+        for i, item in enumerate(self.tx_queue.items):
+            if item == mpdu:
+                del self.tx_queue.items[i]
+                return item
+        return None
+
+    def stop(self):
+        """Stop all running MAC processes."""
+        for process in self.active_processes:
+            if process.is_alive:
+                process.interrupt()
+
+        if self.cts_event and not self.cts_event.triggered:
+            self.cts_event.fail(Exception("MAC Stopped"))
+
+        if self.back_event and not self.back_event.triggered:
+            self.back_event.fail(Exception("MAC Stopped"))
+
+        self.logger.debug(f"{self.node.type} {self.src_id} -> MAC stopped.")
+        self.active_processes.clear()
 
     def tx_enqueue(self, packet: Packet):
         """Enqueues a packet for transmission"""
-        if len(self.tx_queue.items) < MAX_TX_QUEUE_SIZE_pkts:
+        if len(self.tx_queue.items) >= MAX_TX_QUEUE_SIZE_pkts:
+            self.pkts_dropped += 1
+            self.logger.warning(
+                f"{self.node.type} {self.node.id} -> Packet {packet.id} dropped due to full tx queue"
+            )
+        else:
             mpdu = MPDU(packet, self.env.now)
             self.tx_queue.put(mpdu)
 
-            self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                        f"{self.name}: Packet {packet.id} added to tx queue.", type="debug")
-        else:
-            self.pkt_drop_counter += 1
-            self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                        f"{self.name}: Packet {packet.id} dropped due to full tx queue.", type="warn")
-        
-    def set_selected_channels(self, channels: list[int]):
-        # TODO: Implement channel selection and BW selection (bonding)
-        self.selected_channels = channels
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Packet {packet.id} added to tx queue (Queue length: {len(self.tx_queue.items)}, In transmission: {len(self.tx_ampdu.mpdus) if self.tx_ampdu else 0})"
+            )
 
-    def run(self):
-        """Handles channel access and transmission"""
-        while True:
-            if self.state == MACState.IDLE:
-                if len(self.tx_queue.items) == 0:
-                    yield self.env.timeout(1)
-                    continue
-                else:
-                    yield self.env.process(self.contend())
-                    yield self.env.process(self.backoff())
-
-                    if self.backoff_finished:
-                        # TODO: implement RTS/CTS
-                        yield self.env.process(self.transmit())
-
-    def contend(self):
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Starting contending for channels {self.selected_channels}...", type="header")
-
+    def wait_for_idle(self, duration: float):
+        """Check if all the used channels have been idle for the given duration."""
         self.set_state(MACState.CONTEND)
+        self.logger.header(
+            f"{self.node.type} {self.node.id} -> Contending for primary channel {self.node.phy_layer.primary_channel_id} during {duration} μs ..."
+        )
 
-        yield self.env.process(self.env.network.medium.are_channels_idle_for(self.selected_channels, DIFS_us))
+        start_time = None
+
+        while True:
+            if self.node.phy_layer.is_primary_channel_idle():
+                if start_time is None:
+                    start_time = self.env.now
+                elif self.env.now - start_time >= duration:
+                    self.logger.debug(
+                        f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} has been idle for {duration} μs"
+                    )
+                    return
+            else:
+                start_time = None  # Reset the timer if the channel becomes busy
+            yield self.env.timeout(1)
 
     def backoff(self):
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Starting backoff...", type="header")
-        self.set_state(MACState.BACKOFF)
+        self.logger.header(f"{self.node.type} {self.node.id} -> Starting Backoff...")
 
-        self.backoff_finished = False
+        if self.backoff_slots > 0:
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Backoff slots already set ({self.backoff_slots})"
+            )
+        else:
+            cw = min(CW_MIN * (2**self.retries), CW_MAX)
+            self.backoff_slots = random.randint(0, cw)
+            self.logger.info(
+                f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
+            )
 
-        cw = min(CW_MIN * (2 ** self.retries), CW_MAX)
-        backoff_slots = random.randint(0, cw)
+        while self.backoff_slots > 0:
+            start_time = self.env.now
 
-        for _ in range(backoff_slots):
-            yield self.env.timeout(SLOT_TIME_us)
-            if not self.env.network.medium.are_all_channels_idle(self.selected_channels):
-                self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                            f"{self.name}: Backoff interrupted by channel activity...", type="warn")
-                self.backoff_finished = False
-                return
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Backoff finished", type="debug")
-        self.backoff_finished = True
+            # Wait for one slot time while continuously monitoring the channel
+            while self.env.now - start_time < SLOT_TIME_us:
+                if not self.node.phy_layer.is_primary_channel_idle():
+                    self.logger.debug(
+                        f"{self.node.type} {self.node.id} -> Channel busy, pausing backoff ({self.backoff_slots})..."
+                    )
+                    return
+
+                yield self.env.timeout(1)
+
+            self.backoff_slots -= 1
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
+            )
+
+        self.tx_attempts += 1
+
+        self.node.phy_layer.occupy_channels()
+
+        self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished")
 
     def ampdu_aggregation(self):
-        """Aggregates MDPUS from the queue into an A-MPDU frame."""
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Starting aggregation...", type="header")
+        """Aggregates MDPUS into an A-MPDU frame."""
+        if self.tx_ampdu:
+            if self.tx_ampdu.retries >= COMMON_RETRY_LIMIT:
+                self.logger.info(
+                    f"{self.node.type} {self.node.id} -> A-MPDU {self.tx_ampdu.id} dropped after max retries"
+                )
+                self.tx_ampdu = None
+            elif (
+                self.tx_ampdu.retries == 0
+            ):  # If 0 it means that CTS timeout occurred, so no need to aggregate
+                return
+            else:
+                self.logger.info(
+                    f"{self.node.type} {self.node.id} -> No need to aggregate, retransmitting A-MPDU {self.tx_ampdu.id} (retries={self.tx_ampdu.retries}) in next transmission..."
+                )
+                return
+
+        self.logger.header(f"{self.node.type} {self.node.id} -> Aggregating MPDUs...")
+
         agg_mpdus = []
         total_size = 0
 
-        while self.tx_queue.items and total_size + self.tx_queue.items[0].size <= MAX_AMPDU_SIZE_bytes:
-            mpdu = yield self.tx_queue.get()
+        first_mpdu = cast(MPDU, self.tx_queue.items[0])
+        destination = first_mpdu.dst_id
+
+        for item in self.tx_queue.items[:]:
+            mpdu = cast(MPDU, item)
+            if mpdu.dst_id != destination:
+                continue
+
+            if total_size + mpdu.size_bytes > MAX_AMPDU_SIZE_bytes:
+                break
+
             agg_mpdus.append(mpdu)
-            total_size += mpdu.size
+            total_size += mpdu.size_bytes
+
+        if not agg_mpdus:
+            return
 
         self.ampdu_counter += 1
-        self.tx_ampdu = AMPDU(
-            self.ampdu_counter, agg_mpdus, self.env.now)
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Created AMPDU {self.tx_ampdu.id} with {len(agg_mpdus)} MPDUs and size {total_size}", type="debug")
+        self.tx_ampdu = AMPDU(self.ampdu_counter, agg_mpdus, self.env.now)
 
-    def transmit(self):
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Starting transmission...", type="header")
-        self.set_state(MACState.TX)
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Created AMPDU {self.tx_ampdu.id} with {len(agg_mpdus)} MPDUs and size {total_size} bytes"
+        )
 
-        if not self.tx_ampdu:
-            yield self.env.process(self.ampdu_aggregation())
+    def rts_cts(self):
+        """Handles RTS/CTS exchange before data transmission."""
+        rts = RTS(self.tx_ampdu.src_id, self.tx_ampdu.dst_id, self.env.now)
 
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Transmitting A-MPDU {self.tx_ampdu.id}", type="debug")
+        yield self.env.process(self.transmit(rts))
+        yield self.env.process(self.wait_for_cts())
 
-        yield self.env.process(self.phy_layer.transmit_ampdu(self.tx_ampdu))
+    def wait_for_cts(self):
+        self.set_state(MACState.RX)
+        self.logger.header(
+            f"{self.node.type} {self.node.id} -> Waiting for CTS from {self.tx_ampdu.dst_id}..."
+        )
+        self.cts_event = self.env.event()
 
-        yield self.env.process(self.wait_for_back())
+        yield self.env.timeout(CTS_TIMEOUT_us) | self.cts_event
 
-    def handle_retransmission(self, lost_mpdu):
-        for mpdu in lost_mpdu:
-            mpdu.packet.retries += 1
-            if mpdu.packet.retries <= COMMON_RETRY_LIMIT:
-                self.tx_enqueue(mpdu.packet)
-            else:
-                self.pkt_drop_counter += 1
-                self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                            f"{self.name}: MPDU {mpdu.packet.id} dropped after max retries", type="error")
-        yield self.env.timeout(0)
-
-    def wait_for_back(self):
-        self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Waiting for back...", type="header")
-        self.set_state(MACState.WAIT_FOR_BACK)
-        
-        back_event = self.env.event()
-        self.env.process(self.receive_back(back_event))
-
-        yield self.env.timeout(BACK_TIMEOUT_us) | back_event
-
-        if back_event.triggered:
-            lost_mpdus = self.rx_back.lost_mpdus
-            if lost_mpdus:
-                self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                            f"{self.name}: {len(lost_mpdus)} MPDUS lost, retransmitting in next transmission", type="warn")
-                yield self.env.process(self.handle_retransmission(lost_mpdus))
-
-            yield self.env.process(self.next_tx())
-        else:
-            self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                        f"{self.name}: BACK timeout, retransmitting entire AMPDU", type="warn")
-            yield self.env.process(self.rtx_ampdu())
-
-    def receive_back(self, back_event):
-        back_packet = yield self.env.process(self.phy_layer.receive_back())
-
-        if back_packet:
-            self.rx_back = back_packet
-            self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                    f"{self.name}: Reception of BACK from AMPDU {self.tx_ampdu.id}", type="info")
-            back_event.succeed()
-        else:
-            pass
-
-    def rtx_ampdu(self):
-        self.retries += 1
-        self.tx_ampdu.retries += 1
-        if self.retries < COMMON_RETRY_LIMIT+1:
-            self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                        f"{self.name}: Retransmitting A-MPDU...", type="header")
-            yield self.env.process(self.backoff())
-            yield self.env.process(self.transmit())
+        if not self.cts_event.triggered:
+            self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
+            self.cts_event = None
+            self.retries += 1
+            self.tx_failures += 1
+            return
         else:
             self.retries = 0
-            self.env.event_logger.log_event(self.env.now, f"Node {self.node_id}",
-                                        f"{self.name}: AMPDU {self.tx_ampdu.id} dropped after max retries", type="error")
-            self.tx_ampdu = None
-            self.set_state(MACState.IDLE)
+            yield self.env.process(self.wait_for_idle(SIFS_us))
+            yield self.env.process(self.transmit_ampdu())
 
-    def next_tx(self):
-        self.tx_ampdu = None
-        self.retries = 0
+    def transmit_ampdu(self):
+        yield self.env.process(self.transmit(self.tx_ampdu))
+        yield self.env.process(self.wait_for_back())
+
+    def wait_for_back(self):
+        self.set_state(MACState.RX)
+        self.logger.header(
+            f"{self.node.type} {self.node.id} -> Waiting for BACK from {self.tx_ampdu.dst_id}..."
+        )
+        self.back_event = self.env.event()
+
+        yield self.env.timeout(BACK_TIMEOUT_us) | self.back_event
+
+        if ENABLE_RTS_CTS:
+            self.node.phy_layer.end_nav()
+
+        if not self.back_event.triggered:
+            self.logger.warning(f"{self.node.type} {self.node.id} -> BACK timeout...")
+            self.back_event = None
+            self.tx_ampdu.retries += 1
+            self.retries += 1
+            self.tx_failures += 1
+            return
+        else:
+            sent_mpdus = self.tx_ampdu.mpdus
+
+            lost_mpdus = self.rx_back.lost_mpdus
+
+            rx_mpdus = set(sent_mpdus) - set(lost_mpdus)
+
+            self.logger.info(
+                f"{self.node.type} {self.node.id} -> {len(rx_mpdus)} Packets succesfully transmitted"
+            )
+
+            if lost_mpdus:
+                self.logger.warning(
+                    f"{self.node.type} {self.node.id} -> {len(lost_mpdus)} Packets lost"
+                )
+
+            for mpdu in lost_mpdus:
+                mpdu.retries += 1
+                mpdu.is_corrupted = False
+                if mpdu.retries >= COMMON_RETRY_LIMIT:
+                    self.pkts_dropped += 1
+                    self.del_mpdu_from_queue(mpdu)
+                    self.logger.warning(
+                        f"{self.node.type} {self.node.id} -> MPDU {mpdu.packet.id} dropped after max retries"
+                    )
+
+            for mpdu in sent_mpdus:
+                if mpdu not in lost_mpdus:
+                    self.del_mpdu_from_queue(mpdu)
+                    self.pkts_tx += 1
+
+            self.tx_ampdu = None
+            self.retries = 0
+
+    def transmit(self, data_unit: DataUnit):
+        self.set_state(MACState.TX)
+        self.logger.header(
+            f"{self.node.type} {self.node.id} -> Sending {data_unit.type} from MAC to PHY..."
+        )
+        yield self.env.process(self.node.phy_layer.transmit(data_unit))
+
+    def receive(self, data_unit: DataUnit):
+
+        if data_unit.dst_id != self.node.id:
+            self.logger.warning(
+                f"{self.node.type} {self.node.id} -> Received {data_unit.type} from node {data_unit.src_id} not for me (dst={data_unit.dst_id})"
+            )
+            return
+
+        data_unit.reception_time_us = self.env.now
+
+        self.logger.success(
+            f"{self.node.type} {self.node.id} -> Received {data_unit.type}{f' {data_unit.id}' if data_unit.type == 'AMPDU' else ''} from node {data_unit.src_id}"
+        )
+
+        if data_unit.type == "AMPDU":
+            back = BACK(data_unit, self.node.id, data_unit.src_id, self.env.now)
+
+            for mpdu in data_unit.mpdus:
+                back.add_lost_mpdus(mpdu) if mpdu.is_corrupted else False
+
+            self.env.process(self.send_response(back))
+            # TODO: put received packets to APP or sink, compute rx stats and also at the end of sim tx stats (coll. probability)
+
+        elif data_unit.type == "RTS":
+            if self.state == MACState.IDLE:
+                cts = CTS(data_unit.dst_id, data_unit.src_id, self.env.now)
+                self.env.process(self.send_response(cts))
+
+        elif data_unit.type == "CTS":
+            if self.cts_event and not self.cts_event.triggered:
+                self.cts_event.succeed()  # Trigger CTS event
+            else:
+                self.logger.warning(
+                    f"{self.node.type} {self.node.id} -> Ignoring CTS received from {data_unit.src_id} (outdated) "
+                )
+
+        elif data_unit.type == "BACK":
+            if self.back_event and not self.back_event.triggered:
+                self.rx_back = data_unit  # Store received BACK frame
+                self.back_event.succeed()  # Trigger BACK event
+                self.set_state(MACState.IDLE)
+            else:
+                self.logger.warning(
+                    f"{self.node.type} {self.node.id} -> Ignoring BACK received from {data_unit.src_id} (outdated) "
+                )
+
+    def send_response(self, data_unit):
+        yield self.env.process(self.wait_for_idle(SIFS_us))
+        yield self.env.process(self.transmit(data_unit))
         self.set_state(MACState.IDLE)
-        yield self.env.timeout(0)
 
     def set_state(self, new_state: MACState):
+        """Updates the MAC state."""
         if self.state != new_state:
-            self.env.event_logger.log_event(self.env.now,  f"Node {self.node_id}", f"MAC: State changed from {self.state} to {new_state}", type="debug")
             self.state = new_state
+            state_name = [
+                name for name, value in vars(MACState).items() if value == self.state
+            ][0]
+
+            self.logger.info(
+                f"{self.node.type} {self.node.id} -> MAC state: {self.state} ({state_name})"
+            )
+
+    def run(self):
+        """Handles channel access, contention, and transmission"""
+        while True:
+            yield self.env.timeout(1)
+            if len(self.tx_queue.items) > 0:
+                yield self.env.process(self.wait_for_idle(DIFS_us))
+                yield self.env.process(self.backoff())
+
+                if self.backoff_slots > 0:
+                    continue
+
+                self.ampdu_aggregation()
+
+                if ENABLE_RTS_CTS and self.tx_ampdu.size_bytes > RTS_THRESHOLD_bytes:
+                    yield self.env.process(self.rts_cts())
+                else:
+                    if self.tx_ampdu.size_bytes <= RTS_THRESHOLD_bytes:
+                        self.logger.info(
+                            f"{self.node.type} {self.node.id} -> No need to send RTS/CTS for AMPDU {self.tx_ampdu.id} (size={self.tx_ampdu.size_bytes} bytes < {RTS_THRESHOLD_bytes} bytes)"
+                        )
+                    yield self.env.process(self.transmit_ampdu())

@@ -1,17 +1,18 @@
 import logging
 import json
 import os
-from src.sim_config import ENABLE_CONSOLE_LOGGING, USE_COLORS_IN_EVENT_LOGS, EXCLUDED_CONSOLE_LEVELS, EXCLUDED_CONSOLE_MODULES, ENABLE_EVENT_RECORDING, EVENT_RECORDING_PATH
+from src.user_config import ENABLE_CONSOLE_LOGGING, USE_COLORS_IN_LOGS, EXCLUDED_LOGS, ENABLE_LOGS_RECORDING, LOGS_RECORDING_PATH
+from src.utils.messages import EXECUTION_TERMINATED_MSG
 
 COLORS = {
-    "HEADER": "\033[95m",     # Magenta
-    "DEBUG": "\033[94m",      # Blue
-    "INFO": "\033[96m",       # Cyan
-    "DEFAULT": "\033[0m",     # Default color
-    "SUCCESS": "\033[92m",    # Green
+    "HEADER": "\033[95m",           # Magenta
+    "DEBUG": "\033[94m",            # Blue
+    "INFO": "\033[96m",             # Cyan
+    "DEFAULT": "\033[0m",           # Default color
+    "SUCCESS": "\033[92m",          # Green
     "WARNING": "\033[38;5;214m",    # Orange
-    "ERROR": "\033[91m",      # Red
-    "CRITICAL": "\033[1;91m"  # Bold Red
+    "ERROR": "\033[91m",            # Red
+    "CRITICAL": "\033[1;38;5;1m",   # Bold Dark Red
 }
 
 HEADER_LEVEL = 5
@@ -44,14 +45,11 @@ logging.Logger.default = default
 
 logger_cache = {}
 
-
 class ConfigFilter(logging.Filter):
     def filter(self, record):
         if not ENABLE_CONSOLE_LOGGING:
             return False
-        if record.levelname in EXCLUDED_CONSOLE_LEVELS:
-            return False
-        if record.name in EXCLUDED_CONSOLE_MODULES:
+        if record.levelname in EXCLUDED_LOGS.get(record.name, []) or "ALL" in EXCLUDED_LOGS.get(record.name, []):
             return False
         return True
 
@@ -63,11 +61,21 @@ class ConsoleFormatter(logging.Formatter):
     def format(self, record):
         record.sim_time = self.env.now if self.env else 0
 
-        if USE_COLORS_IN_EVENT_LOGS:
+        if USE_COLORS_IN_LOGS:
             log_color = COLORS.get(record.levelname, COLORS["DEFAULT"])
-            record.clevelname = f"{log_color}{record.levelname}{COLORS['DEFAULT']}"
-            record.cmsg = f"{log_color}{record.msg}{COLORS['DEFAULT']}"
-        return f"[t = {record.sim_time:^18.1f}] {record.name:^10} {record.cmsg}"
+            record.clevelname = f"{log_color}{record.levelname}{COLORS["DEFAULT"]}"
+            record.cmsg = f"{log_color}{record.msg}{COLORS["DEFAULT"]}"
+        else:
+            record.clevelname = record.levelname
+            record.cmsg = record.msg
+
+        if record.levelname == "CRITICAL":
+            formatted_message = f"{record.levelname}: {record.cmsg}"
+            formatted_message += "\n" + EXECUTION_TERMINATED_MSG
+            raise SystemExit(formatted_message)
+
+        formatted_message = f"[t = {record.sim_time:^18.1f}] {record.name:^10} {record.cmsg}" if self.env else f"{record.levelname}: {record.cmsg}"
+        return formatted_message
 
 
 class FileFormatter(logging.Formatter):
@@ -101,11 +109,11 @@ def get_logger(module_name, env=None):
         console_handler.addFilter(ConfigFilter())
         logger.addHandler(console_handler)
 
-    if ENABLE_EVENT_RECORDING:
-        if not os.path.exists(EVENT_RECORDING_PATH):
-            os.makedirs(EVENT_RECORDING_PATH)
+    if ENABLE_LOGS_RECORDING:
+        if not os.path.exists(LOGS_RECORDING_PATH):
+            os.makedirs(LOGS_RECORDING_PATH)
 
-        log_file = os.path.join(EVENT_RECORDING_PATH, f"{module_name}.json")
+        log_file = os.path.join(LOGS_RECORDING_PATH, f"{module_name}.json")
 
         file_handler = logging.FileHandler(log_file, mode="w")
         file_formatter = FileFormatter(env)

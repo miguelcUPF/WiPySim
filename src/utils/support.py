@@ -1,42 +1,35 @@
-import os, shutil
+from src.components.network import Network
+from src.traffic.generator import TrafficGenerator
+from src.traffic.loader import TrafficLoader
 
-def get_project_root() -> str:
-    """Finds the root directory of the project."""
-    current_dir = os.path.abspath(os.path.dirname(__file__))
-    while True:
-        if os.path.exists(os.path.join(current_dir, 'setup.py')):
-            return current_dir
-        parent_dir = os.path.dirname(current_dir)
-        current_dir = parent_dir
+import simpy
 
-def clean_folder(folder_path):
-    """Deletes all files inside the folder if it exists."""
-    if os.path.exists(folder_path):
-        shutil.rmtree(folder_path)  # Delete folder and all contents
-    os.makedirs(folder_path, exist_ok=True)
 
-def get_unique_filename(folder, filename, ext):
-    """
-    Generates a unique filename considering the existing files in the folder by appending (1), (2), etc. to the filename.
+def initialize_network(env: simpy.Environment, bsss_config: dict, network: Network = None):
+    if not network:
+        network = Network(env)
 
-    Parameters
-    ----------
-    folder (str): Folder path
-    filename (str): Desired filename (without extension)
-    ext (str): File extension (without dot, e.g., "pdf")
+    for bss in bsss_config:
+        bss_id = bss["id"]
 
-    Returns
-    -------
-    str: Unique file path.
-    """
-    file_path = os.path.join(folder, f"{filename}.{ext}")
-    if not os.path.exists(file_path):
-        return file_path
+        # Create the AP
+        ap_id = bss["ap"]["id"]
+        ap_pos = bss["ap"]["pos"]
+        ap = network.add_ap(ap_id, ap_pos, bss_id)
 
-    # If file exists, append (1), (2), etc.
-    counter = 1
-    while True:
-        new_file_path = os.path.join(folder, f"{filename} ({counter}).{ext}")
-        if not os.path.exists(new_file_path):
-            return new_file_path
-        counter += 1
+        # Create associated STAs
+        for sta in bss["stas"]:
+            sta_id = sta["id"]
+            sta_pos = sta["pos"]
+            network.add_sta(sta_id, sta_pos, bss_id, ap)
+        for flow in bss["traffic_flows"]:
+            dst_id = flow["destination"]
+
+            src_node = network.get_node(ap_id)
+
+            if "file" in flow:
+                traffic_loader = TrafficLoader(env, src_node, dst_id, **flow["file"])
+                src_node.add_traffic_flow(traffic_loader)
+            if "model" in flow:
+                traffic_generator = TrafficGenerator(env, src_node, dst_id, **flow["model"])
+                src_node.add_traffic_flow(traffic_generator)

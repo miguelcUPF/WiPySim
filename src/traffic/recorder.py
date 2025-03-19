@@ -1,7 +1,7 @@
 import os
 import csv
-from src.sim_config import ENABLE_TRAFFIC_GEN_RECORDING, TRAFFIC_GEN_RECORD_PATH
-from src.utils.support import get_project_root, clean_folder
+from src.user_config import ENABLE_TRAFFIC_GEN_RECORDING, TRAFFIC_GEN_RECORDING_PATH
+from src.utils.file_manager import get_project_root, clean_folder
 
 
 class TrafficRecorder:
@@ -19,7 +19,7 @@ class TrafficRecorder:
 
     def get_filepath(self, packet):
         if not self.filepath:
-            save_folder = os.path.join(get_project_root(), TRAFFIC_GEN_RECORD_PATH)
+            save_folder = os.path.join(get_project_root(), TRAFFIC_GEN_RECORDING_PATH)
             clean_folder(save_folder)
             self.filepath = os.path.join(save_folder, f"{self.save_name}_node_{self.node_id}_to_node_{packet.destination}.{self.save_format}")
         return self.filepath

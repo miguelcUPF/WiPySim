@@ -1,6 +1,5 @@
 matplotlib
 networkx
-numpy
 pandas
 simpy
 setuptools

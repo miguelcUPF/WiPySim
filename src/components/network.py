@@ -2,189 +2,255 @@ import networkx as nx
 import math
 import simpy
 
-from src.components.mac import MAC
-from src.components.phy import PHY
-from src.components.app import APP
-from src.components.medium import Medium
-
 from src.utils.event_logger import get_logger
 
 
 class Node:
-    def __init__(self, env: simpy.Environment, id: int, position: tuple[float, float, float]):
+    def __init__(
+        self,
+        env: simpy.Environment,
+        id: int,
+        position: tuple[float, float, float],
+        type: str,
+        medium,
+    ):
         """Initializes an individual network node object."""
+        from src.components.medium import MEDIUM
+
+        from src.components.mac import MAC
+        from src.components.phy import PHY
+        from src.components.app import APP
+
         self.id = id
         self.position = position  # x, y, z
-        self.app_layer = APP(env, id)
-        self.mac_layer = MAC(env, id)
-        self.phy_layer = PHY(env, id)
+        self.type = type
 
-        self.app_layer.mac_layer = self.mac_layer
+        self.medium: MEDIUM = medium
 
-        self.mac_layer.app_layer = self.app_layer
-        self.mac_layer.phy_layer = self.phy_layer
+        self.app_layer = APP(env, self)
+        self.mac_layer = MAC(env, self)
+        self.phy_layer = PHY(env, self)
 
-        self.phy_layer.mac_layer = self.mac_layer
+        self.traffic_flows = []
 
-    def set_position(self, position: tuple[float, float, float]):
-        """Updates the node's position."""
-        self.position = position
+        self.name = "NODE"
+        self.logger = get_logger(self.name, env)
+
+    def add_traffic_flow(self, traffic_flow):
+        self.traffic_flows.append(traffic_flow)
+        self.logger.debug(
+            f"{self.type} {self.id} -> Added traffic source: {traffic_flow.__class__.__name__}"
+        )
+
+    def stop_traffic(self):
+        for source in self.traffic_flows:
+            source.stop()
+
+    def stop(self):
+        self.app_layer.stop()
+        self.mac_layer.stop()
+        self.phy_layer.stop()
+
+        self.stop_traffic()
 
     def __repr__(self):
-        return f"Node({self.id}, pos={self.position})"
+        return f"{self.__class__.__name__}({self.id}, pos={self.position})"
+
+
+class AP(Node):
+    def __init__(
+        self,
+        env: simpy.Environment,
+        id: int,
+        position: tuple[float, float, float],
+        bss_id: int,
+        medium,
+    ):
+        """Access Point (AP) node."""
+        super().__init__(env, id, position, "AP", medium)
+        self.bss_id = bss_id
+
+        self.associated_stas = []
+
+    def add_sta(self, sta):
+        """Associates a STA with this AP."""
+        self.associated_stas.append(sta)
+
+    def get_stas(self):
+        return self.associated_stas
+
+    def __repr__(self):
+        return f"AP({self.id}, pos={self.position}, BSS={self.bss_id}, STAs={[sta.id for sta in self.associated_stas]})"
+
+
+class STA(Node):
+    def __init__(
+        self,
+        env: simpy.Environment,
+        id: int,
+        position: tuple[float, float, float],
+        bss_id: int,
+        ap: AP,
+        medium,
+    ):
+        """Station (STA) node, associated with an AP and BSS."""
+        super().__init__(env, id, position, "STA", medium)
+        self.bss_id = bss_id
+        self.ap = ap
+        ap.add_sta(self)  # Automatically associate with the AP
+
+    def __repr__(self):
+        return (
+            f"STA({self.id}, pos={self.position}, BSS={self.bss_id}, AP={self.ap.id})"
+        )
 
 
 class Network:
-    def __init__(self, env: simpy.Environment):
-        self.env = env
-        self.name = "NETWORK"
-        self.graph = nx.Graph()
-        self.nodes = {}
-        self.medium = Medium(env)
+    def __init__(self, env: simpy.Environment = None):
+        from src.components.medium import MEDIUM
 
-        self.logger = get_logger(self.name)
+        self.env = env
+
+        self.graph = nx.Graph()
+
+        self.nodes = {}
+
+        self.medium = MEDIUM(env, self)
+
+        self.name = "NETWORK"
+        self.logger = get_logger(self.name, env)
 
     @staticmethod
-    def _calculate_distance(pos1: tuple[float, float, float], pos2: tuple[float, float, float]) -> float:
+    def _calculate_distance(
+        position_1: tuple[float, float, float], position_2: tuple[float, float, float]
+    ) -> float:
         """Returns the Euclidean distance between two 3D points."""
-        x1, y1, z1 = pos1
-        x2, y2, z2 = pos2
+        x1, y1, z1 = position_1
+        x2, y2, z2 = position_2
         return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
 
-    def add_node(self, node: Node):
-        """Adds a node to the network and stores its position."""
+    def add_ap(
+        self, ap_id: int, position: tuple[float, float, float], bss_id: int
+    ) -> AP:
+        """Adds an Access Point (AP) to the network."""
+        if ap_id in self.nodes:
+            existing_node = self.nodes[ap_id]
+            if isinstance(existing_node, AP):
+                self.logger.warning(
+                    f"AP {ap_id} already exists in the network... Returning existing AP."
+                )
+                return existing_node
+            else:
+                self.logger.error(
+                    f"Node {ap_id} already exists as a {existing_node.__class__.__name__}, cannot add as AP!"
+                )
+                return None
+
+        self.logger.debug(f"Adding AP {ap_id} to BSS {bss_id} at position {position}")
+        ap = AP(self.env, ap_id, position, bss_id, self.medium)
+        self.nodes[ap_id] = ap
+        self.graph.add_node(ap_id, pos=position, type="AP", bss_id=bss_id)
+        return ap
+
+    def add_sta(
+        self, sta_id: int, position: tuple[float, float, float], bss_id: int, ap: AP
+    ) -> STA:
+        """Adds a Station (STA) to the network and associates it with an AP."""
+        if sta_id in self.nodes:
+            existing_node = self.nodes[sta_id]
+            if isinstance(existing_node, STA):
+                self.logger.warning(
+                    f"STA {sta_id} already exists in the network... Returning existing STA."
+                )
+                return existing_node
+            else:
+                self.logger.error(
+                    f"Node {sta_id} already exists as a {existing_node.__class__.__name__}, cannot add as STA!"
+                )
+                return None
+
         self.logger.debug(
-            f"Adding node {node.id} to the network at position {node.position}")
+            f"Adding STA {sta_id} to BSS {bss_id} at position {position}, connected to AP {ap.id}"
+        )
+        sta = STA(self.env, sta_id, position, bss_id, ap, self.medium)
+        self.nodes[sta_id] = sta
+        self.graph.add_node(sta_id, pos=position, type="STA", bss_id=bss_id)
+        self.graph.add_edge(ap.id, sta_id)
+        return sta
 
-        x, y, z = node.position
-        self.graph.add_node(node.id, pos=(x, y, z))
-        self.nodes[node.id] = node
+    def get_aps(self) -> list[AP]:
+        return [node for node in self.nodes.values() if isinstance(node, AP)]
 
-    def add_nodes(self, nodes: list[Node]):
-        """Adds multiple nodes to the network."""
-        for node in nodes:
-            self.add_node(node)
+    def get_stas(self) -> list[STA]:
+        return [node for node in self.nodes.values() if isinstance(node, STA)]
+
+    def get_node(self, node_id: int) -> Node:
+        if node_id not in self.nodes:
+            self.logger.warning(f"Node {node_id} not found")
+            return None
+        return self.nodes[node_id]
 
     def get_nodes(self) -> list[Node]:
-        """Returns a list of all nodes in the network."""
-        return [self.get_node_by_id(id) for id in self.graph.nodes]
+        return list(self.nodes.values())
 
-    def get_node_by_id(self, id: int) -> Node:
-        return self.nodes[id]
+    def get_node_pos(self, node_id: int) -> tuple[float, float, float]:
+        return self.graph.nodes[node_id]["pos"]
 
-    def get_nodes_by_id(self, ids: list[int]) -> list[Node]:
-        return [self.get_node_by_id(id) for id in ids]
+    def remove_node(self, node_id: int):
+        if node_id not in self.nodes:
+            self.logger.warning(f"Node {node_id} not found... Cannot remove.")
+            return
 
-    def get_node_positions(self) -> list[tuple[float, float, float]]:
-        """Returns the positions of all nodes in the network."""
-        return [self.graph.nodes[id]["pos"] for id in self.graph.nodes]
+        node = self.nodes[node_id]
 
-    def get_node_degree(self, id: int) -> int:
-        return self.graph.degree(id)
+        if isinstance(node, AP):
+            # If the node is an AP, remove all associated STAs
+            self.logger.debug(f"Removing AP {node_id} and all associated STAs")
+            for sta in node.get_stas():
+                self.remove_node(sta.id)
+        elif isinstance(node, STA):
+            self.logger.debug(f"Removing STA {node_id}")
 
-    def get_nodes_degrees(self) -> list[int]:
-        return [self.graph.degree(id) for id in self.graph.nodes]
+        self.graph.remove_node(node_id)
+        self.nodes[node_id].stop()
+        del self.nodes[node_id]
 
-    def remove_node(self, node: Node):
-        """Removes a node from the network."""
-        self.logger.debug(f"Removing node {node.id} from the network")
+    def update_node_position(
+        self, node_id: int, new_position: tuple[float, float, float]
+    ):
+        node = self.get_node(node_id)
+        if node:
+            self.logger.debug(f"Updating Node {node_id} position to {new_position}")
+            node.position = new_position
+            self.graph.nodes[node_id]["pos"] = new_position
+        else:
+            self.logger.warning(f"Node {node_id} not found. Cannot update position.")
 
-        id = node.id
-        self.graph.remove_node(id)
-        del self.nodes[id]
+    def get_distance_between_nodes(
+        self, node1_id: int, node2_id: int, digits=0
+    ) -> float:  # TODO
+        node1 = self.get_node(node1_id)
+        node2 = self.get_node(node2_id)
 
-    def remove_nodes(self, nodes: list[Node]):
-        for node in nodes:
-            self.remove_node(node)
+        if not node1 or not node2:
+            self.logger.warning(f"One or both nodes not found: {node1_id}, {node2_id}")
+            return -1
 
-    def update_node_position(self, node: Node, new_position: tuple[float, float, float]):
-        """Updates the position of a node in the network."""
-        self.logger.debug(
-            f"Updating node {node.id} position to {new_position}")
-
-        node.set_position(new_position)
-        id = node.id
-        self.graph.nodes[id]["pos"] = new_position
-
-    def update_nodes_positions(self, nodes: list[Node], new_positions: list[tuple[float, float, float]]):
-        for node, new_position in zip(nodes, new_positions):
-            self.update_node_position(node, new_position)
-
-    def add_link(self, link: tuple[Node, Node, int]):
-        """Creates a link between two nodes and stores the distance."""
-        node1, node2, channel_id = link
-
-        self.logger.debug(
-            f"Adding link between node {node1.id} and node {node2.id}")
-
-        distance = round(self._calculate_distance(node1.position, node2.position), 4)
-        self.graph.add_edge(node1.id, node2.id,
-                            distance=distance, channel=channel_id)
-
-    def add_links(self, links: list[tuple[Node, Node, int]]):
-        for link in links:
-            self.add_link(link)
-
-    def remove_link(self, link: tuple[Node, Node]):
-        """Removes a link between two nodes."""
-        node1, node2 = link
-
-        self.logger.debug(
-            f"Removing link between node {node1.id} and node {node2.id}")
-
-        if self.graph.has_edge(node1.id, node2.id):
-            self.graph.remove_edge(node1.id, node2.id)
-
-    def remove_links(self, links: list[tuple[Node, Node]]):
-        for link in links:
-            self.remove_link(link)
-
-    def update_link_channel(self, link: tuple[Node, Node], channel: int = None) -> None:
-        """Updates the channel of a link."""
-        node1, node2 = link
-
-        self.logger.debug(
-            f"Updating channel of link between node {node1.id} to node {node2.id}")
-
-        if self.graph.has_edge(node1.id, node2.id):
-            self.graph[node1.id][node2.id]["channel"] = channel
-
-    def update_links_channels(self, links: list[tuple[Node, Node]], channels: list[int]):
-        for link, channel in zip(links, channels):
-            self.update_link_channel(link, channel)
-
-    def get_distance_between_nodes(self, node1: Node, node2: Node) -> float:
-        """Returns the distance between two connected nodes."""
-        if self.graph.has_edge(node1.id, node2.id):
-            return self.graph[node1.id][node2.id]["distance"]
-
-    def get_node_links(self, id: int) -> list[tuple[int, int]]:
-        """Returns a list of links for a node."""
-        return [(id, neighbor) for neighbor in self.graph[id]]
-
-    def get_links(self) -> list[tuple[int, int, dict]]:
-        """Returns a list of links in the network."""
-        return list(self.graph.edges(data=True))
-
-    def get_links_by_channel(self, channel: int) -> list[tuple[int, int]]:
-        """Returns a list of links with the specified channel."""
-        return [(u, v) for u, v, data in self.graph.edges(data=True) if data["channel"] == channel]
-
-    def get_nodes_by_channel(self, channel: int) -> list[int]:
-        """Returns a list of nodes that use the specified channel."""
-        nodes = set()
-        for u, v in self.get_links_by_channel(channel):
-            nodes.add(self.get_node_by_id(u))
-            nodes.add(self.get_node_by_id(v))
-        return list(set(nodes))
-
-    def is_bidirectional_link(self, nodes: tuple[Node, Node]) -> bool:
-        """Returns True if the link is bidirectional, False otherwise."""
-        return self.graph.has_edge(nodes[0].id, nodes[1].id) and self.graph.has_edge(nodes[1].id, nodes[0].id)
+        return round(self._calculate_distance(node1.position, node2.position), digits)
 
     def clear(self):
+        for node in self.nodes.values():
+            node.stop()
         self.graph.clear()
         self.nodes.clear()
 
     def __repr__(self):
-        return f"Network(nodes={list(self.graph.nodes)}, edges={list(self.graph.edges)})"
+        network_repr = f"Network("
+
+        for node in self.nodes.values():
+            if isinstance(node, AP):
+                associated_stas = [sta.id for sta in node.get_stas()]
+                network_repr += f"AP {node.id} with STAs: {associated_stas},"
+
+        network_repr += ")"
+        return network_repr
