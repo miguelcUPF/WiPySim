@@ -1,6 +1,5 @@
-from src.components.network import Network, Node
+from src.components.network import Network
 from src.utils.event_logger import get_logger
-from src.utils.data_units import DataUnit, PPDU
 from src.utils.support import initialize_network
 from src.utils.messages import (
     STARTING_TEST_MSG,
@@ -13,7 +12,6 @@ from src.utils.messages import (
 import simpy
 import importlib
 import random
-import matplotlib.pyplot as plt
 
 import src.user_config as cfg
 import src.sim_params as sparams
@@ -33,7 +31,6 @@ sparams.ENABLE_RTS_CTS = True  # Test: False and True
 sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
 
 importlib.reload(src.utils.event_logger)
-importlib.reload(src.utils.plotters)
 importlib.reload(src.components.mac)
 
 

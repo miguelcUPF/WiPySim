@@ -116,29 +116,24 @@ class MEDIUM:
         self.env = env
 
         self.network = network
-
+        
         self.channels = {ch: Channel20MHz(env, ch) for ch in range(1, NUM_CHANNELS + 1)}
 
         self.name = "MEDIUM"
         self.logger = get_logger(self.name, env)
 
     def get_valid_channels(self) -> list:
-        max_bond_size = NUM_CHANNELS * 20
-
-        if max_bond_size not in VALID_BONDS:
-            valid_values = {1, 2, 4, 8}
-            self.logger.critical(
-                f"Invalid NUM_CHANNELS: {NUM_CHANNELS}. It must be one of {valid_values}."
-            )
-            return None
+        available_channels = set(self.channels.keys())  # Extract available channel IDs
 
         valid_channel_bonds = []
         for bw, bond_list in VALID_BONDS.items():
-            if bw <= max_bond_size:
-                valid_channel_bonds.extend(bond_list)
+            # Filter bonds that are fully contained in the available channels
+            valid_channel_bonds.extend(
+                [bond for bond in bond_list if set(bond).issubset(available_channels)]
+            )
 
-        valid_channels = list(tuple(channel) for channel in valid_channel_bonds)
-        return valid_channels
+        return valid_channel_bonds
+
 
     def are_channels_idle(self, node: Node, channels_ids: list[int]):
         """Checks if all selected channels are idle."""
