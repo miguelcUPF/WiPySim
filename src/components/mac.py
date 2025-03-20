@@ -165,8 +165,6 @@ class MAC:
 
         self.tx_attempts += 1
 
-        self.node.phy_layer.occupy_channels()
-
         self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished")
 
     def ampdu_aggregation(self):
@@ -305,7 +303,9 @@ class MAC:
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Sending {data_unit.type} from MAC to PHY..."
         )
+        self.node.phy_layer.occupy_channels()
         yield self.env.process(self.node.phy_layer.transmit(data_unit))
+        self.node.phy_layer.release_channels()
 
     def receive(self, data_unit: DataUnit):
 

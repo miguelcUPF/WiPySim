@@ -100,6 +100,8 @@ class Channel20MHz:
 
     def release(self, node: Node):
         """Removes a node from the channel."""
+        if node.id not in self.nodes_transmitting:
+            return
         self.logger.debug(f"Channel {self.id} -> Released by {node.type} {node.id}")
         self.nodes_transmitting.pop(node.id, None)
         if len(self.nodes_transmitting) == 0:
@@ -116,7 +118,7 @@ class MEDIUM:
         self.env = env
 
         self.network = network
-        
+
         self.channels = {ch: Channel20MHz(env, ch) for ch in range(1, NUM_CHANNELS + 1)}
 
         self.name = "MEDIUM"
@@ -133,7 +135,6 @@ class MEDIUM:
             )
 
         return valid_channel_bonds
-
 
     def are_channels_idle(self, node: Node, channels_ids: list[int]):
         """Checks if all selected channels are idle."""
@@ -212,7 +213,6 @@ class MEDIUM:
             self.logger.warning(
                 f"Collision detected while transmitting {ppdu.type} from {ppdu.src_id} to {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}"
             )
-        self.release_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
     def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
         def _calculate_path_loss(distance_m: float):
