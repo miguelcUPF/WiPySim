@@ -1,0 +1,371 @@
+{
+    "creation_time": "2025-03-20T16:27:54",
+    "logs": [
+        {
+            "level": "SUCCESS",
+            "sim_time": 0,
+            "module": "MAIN",
+            "message": "Simulation parameters validated."
+        },
+        {
+            "level": "SUCCESS",
+            "sim_time": 0,
+            "module": "MAIN",
+            "message": "User configuration validated."
+        },
+        {
+            "level": "WARNING",
+            "sim_time": 0,
+            "module": "MAIN",
+            "message": "The following data will be recorded and will overwrite existing files in the configured paths: logs."
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NETWORK",
+            "message": "Adding AP 1 to BSS 1 at position (0, 0, 0)"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NETWORK",
+            "message": "Adding STA 2 to BSS 1 at position (3, 4, 0), connected to AP 1"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NETWORK",
+            "message": "Adding STA 3 to BSS 1 at position (6, 8, 2), connected to AP 1"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NODE",
+            "message": "AP 1 -> Added traffic source: TrafficLoader"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NODE",
+            "message": "AP 1 -> Added traffic source: TrafficLoader"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NETWORK",
+            "message": "Adding AP 4 to BSS 2 at position (5, 5, 1)"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NETWORK",
+            "message": "Adding STA 5 to BSS 2 at position (7.62, 0.02, 0.89), connected to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "NODE",
+            "message": "AP 4 -> Added traffic source: TrafficGenerator"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 0,
+            "module": "MAC",
+            "message": "AP 1 -> Packet 1 added to tx queue (Queue length: 1, In transmission: 0)"
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "MAC",
+            "message": "AP 1 -> MAC state: 1 (CONTEND)"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "MAC",
+            "message": "AP 1 -> Contending for primary channel None during 34 \u03bcs ..."
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 1 -> Selecting channels at random..."
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 4 -> Allocated to AP 1"
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 1 -> Selected channels: 4"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 1 -> Selecting primary channel at random..."
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 1 -> Selected primary channel: 4"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "Node 1 -> Selecting MCS..."
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 1 -> Selected MCS: 11"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 1 -> Broadcasting channel info to associated STAs..."
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "MEDIUM",
+            "message": "Broadcasting channel info from AP 1 to STA 2..."
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 4 -> Allocated to STA 2"
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "STA 2 -> Updated PHY settings (channels_ids: 4, primary_channel_id: 4)"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "MEDIUM",
+            "message": "Broadcasting channel info from AP 1 to STA 3..."
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 4 -> Allocated to STA 3"
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "STA 3 -> Updated PHY settings (channels_ids: 4, primary_channel_id: 4)"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 1 -> Broadcasting MCS info to associated STAs..."
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "MEDIUM",
+            "message": "Broadcasting MCS info from AP 1 to STA 2..."
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "STA 2 -> Updated PHY settings (mcs_index: 11)"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "MEDIUM",
+            "message": "Broadcasting MCS info from AP 1 to STA 3..."
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "STA 3 -> Updated PHY settings (mcs_index: 11)"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 4 -> Selecting channels at random..."
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 1 -> Allocated to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 2 -> Allocated to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 3 -> Allocated to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 4 -> Allocated to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 5 -> Allocated to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 6 -> Allocated to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 7 -> Allocated to AP 4"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 8 -> Allocated to AP 4"
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 4 -> Selected channels: 1, 2, 3, 4, 5, 6, 7, 8"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 4 -> Selecting primary channel at random..."
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 4 -> Selected primary channel: 6"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "Node 4 -> Selecting MCS..."
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 4 -> Selected MCS: 11"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 4 -> Broadcasting channel info to associated STAs..."
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "MEDIUM",
+            "message": "Broadcasting channel info from AP 4 to STA 5..."
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 1 -> Allocated to STA 5"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 2 -> Allocated to STA 5"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 3 -> Allocated to STA 5"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 4 -> Allocated to STA 5"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 5 -> Allocated to STA 5"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 6 -> Allocated to STA 5"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 7 -> Allocated to STA 5"
+        },
+        {
+            "level": "DEBUG",
+            "sim_time": 1,
+            "module": "CHANNEL",
+            "message": "Channel 8 -> Allocated to STA 5"
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "STA 5 -> Updated PHY settings (channels_ids: 1, 2, 3, 4, 5, 6, 7, 8, primary_channel_id: 6)"
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "AP 4 -> Broadcasting MCS info to associated STAs..."
+        },
+        {
+            "level": "HEADER",
+            "sim_time": 1,
+            "module": "MEDIUM",
+            "message": "Broadcasting MCS info from AP 4 to STA 5..."
+        },
+        {
+            "level": "INFO",
+            "sim_time": 1,
+            "module": "PHY",
+            "message": "STA 5 -> Updated PHY settings (mcs_index: 11)"
+        }
+    ]
+}

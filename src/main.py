@@ -382,7 +382,7 @@ def warn_overwriting_enabled_paths():
 
     if enabled_settings:
         logger.warning(
-            f"The following data will be recorded and may overwrite existing files: {', '.join(enabled_settings)}."
+            f"The following data will be recorded and will overwrite existing files in the configured paths: {', '.join(enabled_settings)}."
         )
         input(PRESS_TO_CONTINUE_MSG)
 
@@ -399,7 +399,7 @@ if __name__ == "__main__":
     env = simpy.Environment()
     network = initialize_network(env, cfg.BSSs, cfg.NETWORK_BOUNDS_m)
 
-    # TODO: run simulation
+    env.run(until=cfg.SIMULATION_TIME_us)
 
     print(SIMULATION_TERMINATED_MSG)
 

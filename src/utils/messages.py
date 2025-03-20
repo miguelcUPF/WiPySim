@@ -31,5 +31,5 @@ PRESS_TO_EXIT_MSG = (
 
 # Press enter to continue message
 PRESS_TO_CONTINUE_MSG = (
-    "\033[93m" + "=" * 10 + "  Press Enter to continue   " + "=" * 10
+    "\033[93m" + "=" * 21 + "   Press Enter to continue  " + "=" * 21
 )
