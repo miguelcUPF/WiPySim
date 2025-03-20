@@ -17,15 +17,15 @@ LOGS_RECORDING_PATH = "data/events"
 # <module_name>: Module name (e.g., "NETWORK", "NODE", "GEN", "LOAD", "APP", "MAC", "PHY", "MEDIUM", "CHANNEL")
 # <excluded_log_level>: Log levels to exclude (e.g., "HEADER","DEBUG", "INFO", "WARNING", "ALL")
 EXCLUDED_LOGS = {
-    "NETWORK": [],
-    "NODE": [],
+    "NETWORK": ["ALL"],
+    "NODE": ["ALL"],
     "GEN": ["ALL"],
     "LOAD": ["ALL"],
-    "APP": [],
-    "MAC": [],
-    "PHY": [],
-    "MEDIUM": [],
-    "CHANNEL": [],
+    "APP": ["ALL"],
+    "MAC": ["ALL"],
+    "PHY": ["ALL"],
+    "MEDIUM": ["ALL"],
+    "CHANNEL": ["ALL"],
 }
 
 # --- Visualization --- #

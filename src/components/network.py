@@ -175,7 +175,7 @@ class Network:
 
     def get_node(self, node_id: int) -> Node:
         if node_id not in self.nodes:
-            self.logger.warning(f"Node {node_id} not found")
+            self.logger.error(f"Node {node_id} not found")
             return None
         return self.nodes[node_id]
 
@@ -187,7 +187,7 @@ class Network:
 
     def remove_node(self, node_id: int):
         if node_id not in self.nodes:
-            self.logger.warning(f"Node {node_id} not found... Cannot remove.")
+            self.logger.error(f"Node {node_id} not found... Cannot remove.")
             return
 
         node = self.nodes[node_id]
@@ -212,7 +212,7 @@ class Network:
             node.position = new_position
             self.graph.nodes[node_id]["pos"] = new_position
         else:
-            self.logger.warning(f"Node {node_id} not found. Cannot update position.")
+            self.logger.error(f"Node {node_id} not found. Cannot update position.")
 
     def get_distance_between_nodes(
         self, node1_id: int, node2_id: int, digits=0
@@ -221,7 +221,7 @@ class Network:
         node2 = self.get_node(node2_id)
 
         if not node1 or not node2:
-            self.logger.warning(f"One or both nodes not found: {node1_id}, {node2_id}")
+            self.logger.error(f"One or both nodes not found: {node1_id}, {node2_id}")
             return -1
 
         return round(self._calculate_distance(node1.position, node2.position), digits)

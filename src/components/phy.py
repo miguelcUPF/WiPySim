@@ -169,9 +169,9 @@ class PHY:
 
     def run(self):
         if self.node.type == "AP":
-            yield self.env.timeout(1)
             self.select_channels()
             self.select_primary_channel_id()
             self.select_mcs_index()
             self.broadcast_channel_info()
             self.broadcast_mcs_info()
+            yield self.env.timeout(0)

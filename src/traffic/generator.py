@@ -75,7 +75,7 @@ class TrafficGenerator:
             case 'VR':
                 p = self.env.process(self.generate_vr_traffic())
             case _:
-                self.logger.warning(
+                self.logger.error(
                     f"{self.node.type} {self.src_id} -> Invalid traffic model specified (from node {self.src_id} to node {self.dst_id}): {self.traffic_model}")
 
         self.active_processes.append(p)

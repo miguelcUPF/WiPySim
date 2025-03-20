@@ -87,7 +87,7 @@ class TrafficLoader:
         df["inter_arrival_us"] = df["timestamp_us"].diff().fillna(0).astype(int)
 
         if df.empty:
-            self.logger.warning(
+            self.logger.error(
                 f"Traffic file is empty: {filepath}")
 
         return df.sort_values(by="timestamp_us")
