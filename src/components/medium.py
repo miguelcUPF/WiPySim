@@ -67,9 +67,6 @@ class Channel20MHz:
 
     def occupy(self, node: Node):
         """Marks the channel as busy by a node and checks for collisions."""
-        if node.id == self.nav_master_id:
-            return
-
         self.logger.debug(f"Channel {self.id} -> Occupied by {node.type} {node.id}")
 
         if node.id in self.nav_nodes_ids:
