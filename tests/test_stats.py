@@ -1,6 +1,5 @@
 from src.components.network import Network
 from src.utils.event_logger import get_logger
-import src.utils.statistics
 from src.utils.support import initialize_network
 from src.utils.messages import (
     STARTING_TEST_MSG,
@@ -46,9 +45,9 @@ cfg.STATS_SAVE_PATH = "data/statistics"
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
-sparams.MAX_TX_QUEUE_SIZE_pkts = 100  # Test: 10, 50, 100
-sparams.ENABLE_RTS_CTS = True  # Test: False and True
-sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
+sparams.MAX_TX_QUEUE_SIZE_pkts = 100
+sparams.ENABLE_RTS_CTS = True
+sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.NUM_CHANNELS = 1
 

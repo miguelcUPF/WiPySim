@@ -30,9 +30,9 @@ cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
-sparams.MAX_TX_QUEUE_SIZE_pkts = 100  # Test: 10, 50, 100
-sparams.ENABLE_RTS_CTS = True  # Test: False and True
-sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
+sparams.MAX_TX_QUEUE_SIZE_pkts = 100
+sparams.ENABLE_RTS_CTS = True
+sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.NUM_CHANNELS = 1
 

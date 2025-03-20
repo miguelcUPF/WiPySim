@@ -57,3 +57,23 @@ def initialize_network(
                 src_node.add_traffic_flow(traffic_generator)
 
     return network
+
+
+def add_bss_automatically(BSSs, num_bss: int = 0, last_node_id: int = 0):
+    bss_id = num_bss + 1
+    ap_id = last_node_id + 1
+    sta_id = last_node_id + 2
+
+    new_bss = {
+        "id": bss_id,
+        "ap": {"id": ap_id},
+        "stas": [{"id": sta_id}],
+        "traffic_flows": [
+            {
+                "destination": sta_id,
+                "model": {"name": "Poisson"},
+            }
+        ]
+    }
+    BSSs.append(new_bss)
+    return BSSs
