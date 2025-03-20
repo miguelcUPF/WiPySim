@@ -28,6 +28,8 @@ cfg.ENABLE_FIGS_DISPLAY = True
 cfg.ENABLE_FIGS_SAVING = True
 cfg.FIGS_SAVE_PATH = "figs/tests"
 
+cfg.NETWORK_BOUNDS_m = (10, 10, 2)
+
 importlib.reload(src.utils.event_logger)
 importlib.reload(src.utils.plotters)
 
@@ -51,22 +53,22 @@ BSSs = [
         "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
         "stas": [
             {"id": 2, "pos": (3, 4, 0)},  # Associated Stations (STAs)
-            {"id": 3, "pos": (6, 8, 2)},
+            {"id": 3, "pos": (6, 8, 1)},
         ],
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 4, "pos": (5, 5, 5)},
+        "ap": {"id": 4, "pos": (5, 5, 1)},
         "stas": [
-            {"id": 5, "pos": (1, 2, 3)},
+            {"id": 5, "pos": (1, 2, 1)},
             {"id": 6, "pos": (5, 0, 1)},
             {"id": 7, "pos": (0, 5, 1)},
         ],
     },
     {
         "id": 3,  # Another BSS
-        "ap": {"id": 8, "pos": (9, 10, 11)},
-        "stas": [{"id": 9, "pos": (1, 2, 3)}],
+        "ap": {"id": 8, "pos": (9, 10, 1)},
+        "stas": [{"id": 9, "pos": (1, 2, 2)}],
     },
 ]
 
@@ -87,7 +89,7 @@ if __name__ == "__main__":
         f"STAs in Network (before): {list(sta.id for sta in network.get_stas())}"
     )
 
-    initialize_network(env, BSSs, network)
+    initialize_network(env, BSSs, cfg.NETWORK_BOUNDS_m, network)
 
     logger.info(f"APs in Network (after): {list(ap.id for ap in network.get_aps())}")
     logger.info(
@@ -105,7 +107,7 @@ if __name__ == "__main__":
     )
 
     network.update_node_position(1, (1, 0, 1))
-    network.update_node_position(2, (3, 3, 3))
+    network.update_node_position(2, (3, 3, 1))
 
     logger.info(
         f"Node 1 and 2 positions (after): Node 1 -> {network.get_node(1).position}, Node 2 -> {network.get_node(2).position}"
@@ -114,8 +116,8 @@ if __name__ == "__main__":
     assert network.get_node(1).position == (1, 0, 1), logger.error(
         f"Expected node 1 position to be (1, 0, 1), got {network.get_node(1).position}"
     )
-    assert network.get_node(2).position == (3, 3, 3), logger.error(
-        f"Expected node 2 position to be (3, 3, 3), got {network.get_node(2).position}"
+    assert network.get_node(2).position == (3, 3, 1), logger.error(
+        f"Expected node 2 position to be (3, 3, 1), got {network.get_node(2).position}"
     )
 
     # Test removing nodes

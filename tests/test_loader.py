@@ -29,6 +29,8 @@ cfg.ENABLE_FIGS_SAVING = False
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
+cfg.NETWORK_BOUNDS_m = (10, 10, 2) 
+
 importlib.reload(src.utils.event_logger)
 importlib.reload(src.utils.plotters)
 
@@ -51,8 +53,8 @@ BSSs = [
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 3, "pos": (5, 5, 5)},
-        "stas": [{"id": 4, "pos": (1, 2, 3)}],
+        "ap": {"id": 3, "pos": (5, 5, 1)},
+        "stas": [{"id": 4, "pos": (1, 2, 1)}],
         "traffic_flows": [
             {
                 "destination": 4,
@@ -92,7 +94,7 @@ if __name__ == "__main__":
 
     network = Network(env)
 
-    initialize_network(env, BSSs, network)
+    initialize_network(env, BSSs, cfg.NETWORK_BOUNDS_m, network)
 
     for node in network.get_nodes():
         node.mac_layer = DummyMAC(env)

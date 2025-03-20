@@ -42,17 +42,6 @@ class Node:
             f"{self.type} {self.id} -> Added traffic source: {traffic_flow.__class__.__name__}"
         )
 
-    def stop_traffic(self):
-        for source in self.traffic_flows:
-            source.stop()
-
-    def stop(self):
-        self.app_layer.stop()
-        self.mac_layer.stop()
-        self.phy_layer.stop()
-
-        self.stop_traffic()
-
     def __repr__(self):
         return f"{self.__class__.__name__}({self.id}, pos={self.position})"
 
@@ -212,7 +201,6 @@ class Network:
             self.logger.debug(f"Removing STA {node_id}")
 
         self.graph.remove_node(node_id)
-        self.nodes[node_id].stop()
         del self.nodes[node_id]
 
     def update_node_position(
@@ -239,8 +227,6 @@ class Network:
         return round(self._calculate_distance(node1.position, node2.position), digits)
 
     def clear(self):
-        for node in self.nodes.values():
-            node.stop()
         self.graph.clear()
         self.nodes.clear()
 
@@ -250,7 +236,7 @@ class Network:
         for node in self.nodes.values():
             if isinstance(node, AP):
                 associated_stas = [sta.id for sta in node.get_stas()]
-                network_repr += f"AP {node.id} with STAs: {associated_stas},"
+                network_repr += f"AP {node.id} with STAs: {associated_stas}, "
 
         network_repr += ")"
         return network_repr

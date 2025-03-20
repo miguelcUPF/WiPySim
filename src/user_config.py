@@ -43,15 +43,16 @@ ENABLE_STATS_COLLECTION = False  # Enable/disable collecting statistics
 STATS_SAVE_PATH = "data/statistics"
 
 # --- Network Configuration (Basic Service Sets - BSSs) --- #
+NETWORK_BOUNDS_m = (10, 10, 2)  # spatial limits of the network in meters (x, y, z)
 # Defines the BSSs in the network and their associated nodes.
 # Keys:
 # - "id": Unique BSS identifier (int).
 # - "ap": The Access Point (AP) of the BSS.
 #   - "id": Unique AP ID (int).
-#   - "pos": Tuple (x, y, z) specifying the AP’s coordinates in meters.
+#   - "pos" (optional): Tuple (x, y, z) specifying the AP’s coordinates in meters. If not specified, the AP is placed at random within the network bounds.
 # - "stas": List of associated Stations (STAs).
 #   - "id": Unique STA ID (int).
-#   - "pos": Tuple (x, y, z) specifying the STA’s coordinates in meters.
+#   - "pos" (optional): Tuple (x, y, z) specifying the STA’s coordinates in meters. If not specified, the STA is placed at random within the network bounds.
 # - "traffic_flows": List of traffic flows from the AP to a destination STA.
 #   - "destination": The STA receiving traffic (int).
 #   - "file": (Optional) Loads traffic from a file. Required columns: "frame.time_relative", "frame.len"
@@ -84,9 +85,9 @@ BSSs = [
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 4, "pos": (5, 5, 5)},
+        "ap": {"id": 4, "pos": (5, 5, 1)},
         "stas": [
-            {"id": 5, "pos": (1, 2, 3)}
+            {"id": 5}
         ],
         "traffic_flows": [
             {

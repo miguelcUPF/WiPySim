@@ -28,6 +28,8 @@ cfg.EXCLUDED_LOGS = {"LOAD": ["ALL"]}
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
+cfg.NETWORK_BOUNDS_m = (10, 10, 2)
+
 sparams.MAX_TX_QUEUE_SIZE_pkts = 100  # Test: 10, 50, 100
 sparams.ENABLE_RTS_CTS = True  # Test: False and True
 
@@ -164,7 +166,7 @@ if __name__ == "__main__":
     network = Network(env)
     network.medium = DummyMedium(env, network)
 
-    initialize_network(env, BSSs, network)
+    initialize_network(env, BSSs, cfg.NETWORK_BOUNDS_m, network)
 
     for node in network.get_nodes():
         node.phy_layer = DummyPHY(env, node)

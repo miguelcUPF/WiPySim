@@ -28,6 +28,8 @@ cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
+cfg.NETWORK_BOUNDS_m = (10, 10, 2)
+
 sparams.MAX_TX_QUEUE_SIZE_pkts = 100  # Test: 10, 50, 100
 sparams.ENABLE_RTS_CTS = True  # Test: False and True
 sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
@@ -59,17 +61,16 @@ BSSs = [
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 4, "pos": (5, 5, 5)},  # BSS Access Point (AP)
-        "stas": [{"id": 5, "pos": (1, 2, 3)}],
+        "ap": {"id": 4, "pos": (5, 5, 1)},  # BSS Access Point (AP)
+        "stas": [{"id": 5, "pos": (1, 2, 1)}],
         "traffic_flows": [
             {
                 "destination": 5,
                 "model": {"name": "Poisson"},
             },
         ],
-    }
+    },
 ]
-
 
 
 if __name__ == "__main__":
@@ -82,7 +83,7 @@ if __name__ == "__main__":
 
     network = Network(env)
 
-    initialize_network(env, BSSs, network)
+    initialize_network(env, BSSs, cfg.NETWORK_BOUNDS_m, network)
 
     env.run(until=SIMULATION_TIME_us)
 

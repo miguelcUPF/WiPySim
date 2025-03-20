@@ -65,34 +65,7 @@ class MAC:
         self.name = "MAC"
         self.logger = get_logger(self.name, env)
 
-        self.active_processes = []
-
-        p = self.env.process(self.run())
-
-        self.active_processes.append(p)
-
-    def del_mpdu_from_queue(self, mpdu):
-        """Find and remove the specified MPDU from the tx_queue."""
-        for i, item in enumerate(self.tx_queue.items):
-            if item == mpdu:
-                del self.tx_queue.items[i]
-                return item
-        return None
-
-    def stop(self):
-        """Stop all running MAC processes."""
-        for process in self.active_processes:
-            if process.is_alive:
-                process.interrupt()
-
-        if self.cts_event and not self.cts_event.triggered:
-            self.cts_event.fail(Exception("MAC Stopped"))
-
-        if self.back_event and not self.back_event.triggered:
-            self.back_event.fail(Exception("MAC Stopped"))
-
-        self.logger.debug(f"{self.node.type} {self.src_id} -> MAC stopped.")
-        self.active_processes.clear()
+        self.env.process(self.run())
 
     def tx_enqueue(self, packet: Packet):
         """Enqueues a packet for transmission"""
@@ -108,6 +81,14 @@ class MAC:
             self.logger.debug(
                 f"{self.node.type} {self.node.id} -> Packet {packet.id} added to tx queue (Queue length: {len(self.tx_queue.items)}, In transmission: {len(self.tx_ampdu.mpdus) if self.tx_ampdu else 0})"
             )
+
+    def del_mpdu_from_queue(self, mpdu: MPDU):
+        """Find and remove the specified MPDU from the tx_queue."""
+        for i, item in enumerate(self.tx_queue.items):
+            if item == mpdu:
+                del self.tx_queue.items[i]
+                return item
+        return None
 
     def wait_for_idle(self, duration: float):
         """Check if all the used channels have been idle for the given duration."""
@@ -140,7 +121,7 @@ class MAC:
             )
         else:
             cw = min(CW_MIN * (2**self.retries), CW_MAX)
-            self.backoff_slots = random.randint(0, cw)
+            self.backoff_slots = random.randint(0, max(0, cw - 1))
             self.logger.info(
                 f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
             )

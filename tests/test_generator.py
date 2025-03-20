@@ -32,6 +32,8 @@ cfg.FIGS_SAVE_PATH = "figs/tests"
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = True
 cfg.TRAFFIC_GEN_RECORDING_PATH = "tests/sim_traces"
 
+cfg.NETWORK_BOUNDS_m = (10, 10, 2)
+
 importlib.reload(src.utils.event_logger)
 importlib.reload(src.utils.plotters)
 importlib.reload(src.traffic.recorder)
@@ -56,8 +58,8 @@ BSSs = [
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 3, "pos": (5, 5, 5)},
-        "stas": [{"id": 4, "pos": (1, 2, 3)}],
+        "ap": {"id": 3, "pos": (5, 5, 1)},
+        "stas": [{"id": 4, "pos": (1, 2, 1)}],
         "traffic_flows": [
             {
                 "destination": 4,
@@ -74,8 +76,8 @@ BSSs = [
     },
     {
         "id": 3,  # Another BSS
-        "ap": {"id": 5, "pos": (5, 5, 5)},
-        "stas": [{"id": 6, "pos": (1, 2, 3)}],
+        "ap": {"id": 5, "pos": (5, 6, 1)},
+        "stas": [{"id": 6, "pos": (1, 2, 2)}],
         "traffic_flows": [
             {
                 "destination": 6,
@@ -114,7 +116,7 @@ if __name__ == "__main__":
 
     network = Network(env)
 
-    initialize_network(env, BSSs, network)
+    initialize_network(env, BSSs, cfg.NETWORK_BOUNDS_m, network)
 
     for node in network.get_nodes():
         node.mac_layer = DummyMAC(env)
