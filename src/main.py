@@ -157,6 +157,7 @@ def validate_config():
         "PHY",
         "MEDIUM",
         "CHANNEL",
+        "STATS"
     ]
     valid_log_levels = ["HEADER", "DEBUG", "INFO", "WARNING", "ALL"]
 

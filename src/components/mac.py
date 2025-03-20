@@ -17,9 +17,10 @@ from src.sim_params import (
     RTS_THRESHOLD_bytes,
     CTS_TIMEOUT_us,
 )
-from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.components.network import Node
+from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.utils.event_logger import get_logger
+from src.utils.statistics import MACStateStats
 
 
 class MACState:
@@ -40,7 +41,7 @@ class MAC:
 
         self.node = node
 
-        self.state = MACState.IDLE
+        self.state = MACState.IDLE  # TODO: record and plot states
 
         self.tx_queue: simpy.Store[MPDU] = simpy.Store(
             env, capacity=MAX_TX_QUEUE_SIZE_pkts
@@ -57,10 +58,10 @@ class MAC:
         self.cts_event = None
         self.back_event = None
 
-        self.pkts_tx = 0
-        self.pkts_dropped = 0
-        self.tx_attempts = 0
-        self.tx_failures = 0
+        self.is_first_tx = True
+        self.is_first_rx = True
+
+        self.mac_state_stats = MACStateStats()
 
         self.name = "MAC"
         self.logger = get_logger(self.name, env)
@@ -70,13 +71,16 @@ class MAC:
     def tx_enqueue(self, packet: Packet):
         """Enqueues a packet for transmission"""
         if len(self.tx_queue.items) >= MAX_TX_QUEUE_SIZE_pkts:
-            self.pkts_dropped += 1
+            self.node.tx_stats.pkts_dropped_queue_lim += 1
+            
             self.logger.warning(
                 f"{self.node.type} {self.node.id} -> Packet {packet.id} dropped due to full tx queue"
             )
         else:
             mpdu = MPDU(packet, self.env.now)
             self.tx_queue.put(mpdu)
+
+            self.node.tx_stats.add_to_tx_queue_history(self.env.now, len(self.tx_queue.items))
 
             self.logger.debug(
                 f"{self.node.type} {self.node.id} -> Packet {packet.id} added to tx queue (Queue length: {len(self.tx_queue.items)}, In transmission: {len(self.tx_ampdu.mpdus) if self.tx_ampdu else 0})"
@@ -144,7 +148,13 @@ class MAC:
                 f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
             )
 
-        self.tx_attempts += 1
+        if self.is_first_tx:
+            self.node.tx_stats.first_tx_attempt_us = self.env.now
+            self.is_first_tx = False
+        else:
+            self.node.tx_stats.last_tx_attempt_us = self.env.now
+
+        self.node.tx_stats.tx_attempts += 1
 
         self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished")
 
@@ -199,14 +209,18 @@ class MAC:
         """Handles RTS/CTS exchange before data transmission."""
         rts = RTS(self.tx_ampdu.src_id, self.tx_ampdu.dst_id, self.env.now)
 
+        self.node.tx_stats.rts_tx += 1
+
         yield self.env.process(self.transmit(rts))
         yield self.env.process(self.wait_for_cts())
 
     def wait_for_cts(self):
         self.set_state(MACState.RX)
+
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Waiting for CTS from {self.tx_ampdu.dst_id}..."
         )
+
         self.cts_event = self.env.event()
 
         yield self.env.timeout(CTS_TIMEOUT_us) | self.cts_event
@@ -214,8 +228,11 @@ class MAC:
         if not self.cts_event.triggered:
             self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
             self.cts_event = None
+
             self.retries += 1
-            self.tx_failures += 1
+            if ENABLE_RTS_CTS:
+                self.node.tx_stats.tx_failures += 1
+
             return
         else:
             self.retries = 0
@@ -223,6 +240,8 @@ class MAC:
             yield self.env.process(self.transmit_ampdu())
 
     def transmit_ampdu(self):
+        self.node.tx_stats.ampdus_tx += 1
+
         yield self.env.process(self.transmit(self.tx_ampdu))
         yield self.env.process(self.wait_for_back())
 
@@ -241,9 +260,13 @@ class MAC:
         if not self.back_event.triggered:
             self.logger.warning(f"{self.node.type} {self.node.id} -> BACK timeout...")
             self.back_event = None
+
             self.tx_ampdu.retries += 1
+
             self.retries += 1
-            self.tx_failures += 1
+            if not ENABLE_RTS_CTS:
+                self.node.tx_stats.tx_failures += 1
+
             return
         else:
             sent_mpdus = self.tx_ampdu.mpdus
@@ -252,21 +275,32 @@ class MAC:
 
             rx_mpdus = set(sent_mpdus) - set(lost_mpdus)
 
+            self.node.tx_stats.pkts_tx += len(sent_mpdus)
+
+            for mpdu in sent_mpdus:
+                self.node.tx_stats.tx_app_bytes += mpdu.packet.size_bytes
+
+            self.node.tx_stats.pkts_success += len(rx_mpdus)
+
             self.logger.info(
-                f"{self.node.type} {self.node.id} -> {len(rx_mpdus)} Packets succesfully transmitted"
+                f"{self.node.type} {self.node.id} -> {len(rx_mpdus)} Packets succesfully transmitted according to BACK"
             )
 
             if lost_mpdus:
+                self.node.tx_stats.pkts_fail += len(lost_mpdus)
+
                 self.logger.warning(
-                    f"{self.node.type} {self.node.id} -> {len(lost_mpdus)} Packets lost"
+                    f"{self.node.type} {self.node.id} -> {len(lost_mpdus)} Packet transmission failures according to BACK"
                 )
 
             for mpdu in lost_mpdus:
                 mpdu.retries += 1
                 mpdu.is_corrupted = False
                 if mpdu.retries >= COMMON_RETRY_LIMIT:
-                    self.pkts_dropped += 1
+                    self.node.tx_stats.pkts_dropped_retry_lim += 1
+
                     self.del_mpdu_from_queue(mpdu)
+
                     self.logger.warning(
                         f"{self.node.type} {self.node.id} -> MPDU {mpdu.packet.id} dropped after max retries"
                     )
@@ -274,21 +308,38 @@ class MAC:
             for mpdu in sent_mpdus:
                 if mpdu not in lost_mpdus:
                     self.del_mpdu_from_queue(mpdu)
-                    self.pkts_tx += 1
+
+            self.node.tx_stats.add_to_tx_queue_history(self.env.now, len(self.tx_queue.items))
 
             self.tx_ampdu = None
             self.retries = 0
 
     def transmit(self, data_unit: DataUnit):
         self.set_state(MACState.TX)
+
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Sending {data_unit.type} from MAC to PHY..."
         )
+
+        self.node.tx_stats.data_units_tx += 1
+        self.node.tx_stats.tx_mac_bytes += data_unit.size_bytes
+
         self.node.phy_layer.occupy_channels()
+        start_tx_time_us = self.env.now
         yield self.env.process(self.node.phy_layer.transmit(data_unit))
+        self.node.tx_stats.airtime_us += self.env.now - start_tx_time_us
         self.node.phy_layer.release_channels()
 
     def receive(self, data_unit: DataUnit):
+
+        if self.is_first_rx:
+            self.node.rx_stats.first_rx_time_us = self.env.now
+            self.is_first_rx = False
+        else:
+            self.node.rx_stats.last_rx_time_us = self.env.now
+
+        self.node.rx_stats.data_units_rx += 1
+        self.node.rx_stats.rx_mac_bytes += data_unit.size_bytes
 
         if data_unit.dst_id != self.node.id:
             self.logger.warning(
@@ -303,21 +354,45 @@ class MAC:
         )
 
         if data_unit.type == "AMPDU":
+            
             back = BACK(data_unit, self.node.id, data_unit.src_id, self.env.now)
 
             for mpdu in data_unit.mpdus:
-                back.add_lost_mpdus(mpdu) if mpdu.is_corrupted else False
+                self.node.rx_stats.pkts_rx += 1
+
+                if mpdu.is_corrupted:
+                    self.node.rx_stats.pkts_fail += 1
+                    back.add_lost_mpdus(mpdu)
+                else:
+                    self.node.rx_stats.pkts_success += 1
+                    self.node.rx_stats.rx_app_bytes += mpdu.packet.size_bytes
+                    self.node.app_layer.packet_from_mac(mpdu.packet)
+            
+            self.node.tx_stats.backs_tx += 1
 
             self.env.process(self.send_response(back))
-            # TODO: put received packets to APP or sink, compute rx stats and also at the end of sim tx stats (coll. probability)
 
         elif data_unit.type == "RTS":
+            self.node.rx_stats.rts_rx += 1
+
             if self.state == MACState.IDLE:
                 cts = CTS(data_unit.dst_id, data_unit.src_id, self.env.now)
+                
                 self.env.process(self.send_response(cts))
 
+                self.node.tx_stats.cts_tx += 1
+            else:
+                self.logger.warning(
+                    f"{self.node.type} {self.node.id} -> Ignoring RTS received from {data_unit.src_id} (busy) "
+                )
+
         elif data_unit.type == "CTS":
+            self.node.rx_stats.cts_rx += 1
+
             if self.cts_event and not self.cts_event.triggered:
+                if ENABLE_RTS_CTS:
+                    self.node.tx_stats.tx_successes += 1
+
                 self.cts_event.succeed()  # Trigger CTS event
             else:
                 self.logger.warning(
@@ -325,9 +400,15 @@ class MAC:
                 )
 
         elif data_unit.type == "BACK":
+            self.node.rx_stats.backs_rx += 1
+
             if self.back_event and not self.back_event.triggered:
                 self.rx_back = data_unit  # Store received BACK frame
+                if not ENABLE_RTS_CTS:
+                    self.node.tx_stats.tx_successes += 1
+
                 self.back_event.succeed()  # Trigger BACK event
+
                 self.set_state(MACState.IDLE)
             else:
                 self.logger.warning(
@@ -343,9 +424,12 @@ class MAC:
         """Updates the MAC state."""
         if self.state != new_state:
             self.state = new_state
+
             state_name = [
                 name for name, value in vars(MACState).items() if value == self.state
             ][0]
+
+            self.mac_state_stats.add_to_mac_state_history(self.env.now, state_name)
 
             self.logger.info(
                 f"{self.node.type} {self.node.id} -> MAC state: {self.state} ({state_name})"

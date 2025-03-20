@@ -146,6 +146,8 @@ class PHY:
 
         ppdu = PPDU(data_unit, self.env.now)
 
+        self.node.tx_stats.tx_phy_bytes += ppdu.size_bytes
+
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Sending {ppdu.type} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, self.channels_ids))}..."
         )
@@ -158,6 +160,8 @@ class PHY:
         )
 
         ppdu.reception_time_us = self.env.now
+
+        self.node.rx_stats.rx_phy_bytes += ppdu.size_bytes
 
         data_unit = ppdu.data_unit
 

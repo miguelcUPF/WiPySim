@@ -3,6 +3,7 @@ import math
 import simpy
 
 from src.utils.event_logger import get_logger
+from src.utils.statistics import TransmissionStats, ReceptionStats, NetworkStats
 
 
 class Node:
@@ -30,6 +31,9 @@ class Node:
         self.app_layer = APP(env, self)
         self.mac_layer = MAC(env, self)
         self.phy_layer = PHY(env, self)
+
+        self.tx_stats = TransmissionStats()
+        self.rx_stats = ReceptionStats()
 
         self.traffic_flows = []
 
@@ -105,6 +109,8 @@ class Network:
         self.nodes = {}
 
         self.medium = MEDIUM(env, self)
+
+        self.stats = NetworkStats(self)
 
         self.name = "NETWORK"
         self.logger = get_logger(self.name, env)

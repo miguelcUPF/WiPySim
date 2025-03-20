@@ -22,6 +22,8 @@ class DataUnit:
         self.creation_time_us = creation_time_us
         self.reception_time_us = None
 
+        self.retries = 0
+
         self.is_mgmt_ctrl_frame = False
 
         self.type = None
@@ -42,7 +44,6 @@ class Packet(DataUnit):
         super().__init__(creation_time_us, size_bytes, src_id, dst_id)
         self.id = id
         self.type = "DATA"
-        self.received = False
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self.id}, {super().__repr__()})"
@@ -61,7 +62,6 @@ class MPDU(DataUnit):
             packet.dst_id,
         )
         self.packet = packet
-        self.retries = 0
         self.is_corrupted = False
 
         self.type = "MPDU"
@@ -80,7 +80,6 @@ class AMPDU(DataUnit):
         )
         self.id = id
         self.mpdus = mpdus
-        self.retries = 0
 
         self.type = "AMPDU"
         self.is_mgmt_ctrl_frame = False

@@ -171,5 +171,5 @@ def update_logger_env(env):
         for handler in logger.handlers:
             if isinstance(handler.formatter, ConsoleFormatter):
                 handler.formatter.env = env
-            elif isinstance(handler.formatter, FileFormatter):
-                handler.formatter.env = env
+            elif isinstance(handler, JSONFileHandler):
+                handler.env = env

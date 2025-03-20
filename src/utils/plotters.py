@@ -53,7 +53,7 @@ class BasePlotter:
 
         filepath = os.path.join(save_folder, f"{save_name}.{save_format}")
         fig.savefig(filepath)
-        self.logger.debug(f"Saved plot: {filepath}")
+        self.logger.info(f"Plot saved to {filepath}")
 
 
 class NetworkPlotter(BasePlotter):

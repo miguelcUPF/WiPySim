@@ -1,7 +1,9 @@
 from src.components.network import Node
 from src.traffic.recorder import TrafficRecorder
+from src.utils.data_units import Packet
 
 import simpy
+import pandas as pd
 
 
 class APP:
@@ -12,7 +14,14 @@ class APP:
 
         self.recorder = TrafficRecorder(self.node.id)
 
-    def packet_to_mac(self, packet):
-        """Receive a packet and forwards it to MAC."""
+    def packet_to_mac(self, packet: Packet):
+        """Receives a packet from a traffic source and forwards it to MAC."""
         self.recorder.record_packet(packet)
-        self.node.mac_layer.tx_enqueue(packet)  # Send packet to MAC queue
+        self.node.mac_layer.tx_enqueue(packet)
+
+    def packet_from_mac(self, packet: Packet):
+        packet.reception_time_us = self.env.now
+
+        self.node.rx_stats.add_packet_to_history(packet)
+
+        

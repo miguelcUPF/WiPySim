@@ -1,5 +1,6 @@
 from src.utils.event_logger import get_logger
 from src.utils.data_units import PPDU
+from src.utils.statistics import ChannelStats, MediumStats
 from src.utils.mcs_table import calculate_data_rate_bps, get_min_sensitivity
 from src.components.network import Network, Node
 from src.sim_params import (
@@ -52,6 +53,10 @@ class Channel20MHz:
 
         self.collision_detected = False  # Flag to indicate if collision is detected
 
+        self.busy_start_time = None
+
+        self.stats = ChannelStats()
+
         self.name = "CHANNEL"
         self.logger = get_logger(self.name, env)
 
@@ -59,15 +64,18 @@ class Channel20MHz:
         self.logger.debug(f"Channel {self.id} -> Allocated to {node.type} {node.id}")
         self.nodes[node.id] = node
 
-    def is_idle(self, node: Node):
+    def is_idle(self, node: Node = None):
         """Returns True if the channel is idle, False if busy."""
-        if node.id in self.nav_nodes_ids:
+        if node is not None and node.id in self.nav_nodes_ids:
             return True
         return len(self.nodes_transmitting) == 0 and not self.nav_occupied
 
     def occupy(self, node: Node):
         """Marks the channel as busy by a node and checks for collisions."""
         self.logger.debug(f"Channel {self.id} -> Occupied by {node.type} {node.id}")
+
+        if self.busy_start_time is None:
+            self.busy_start_time = self.env.now
 
         if node.id in self.nav_nodes_ids:
             return
@@ -102,6 +110,8 @@ class Channel20MHz:
         self.logger.debug(f"Channel {self.id} -> Released by {node.type} {node.id}")
         self.nodes_transmitting.pop(node.id, None)
         if len(self.nodes_transmitting) == 0:
+            self.stats.airtime_us += self.env.now - self.busy_start_time
+            self.busy_start_time = None
             self.collision_detected = False
 
     def handle_collision(self):
@@ -118,6 +128,10 @@ class MEDIUM:
 
         self.channels = {ch: Channel20MHz(env, ch) for ch in range(1, NUM_CHANNELS + 1)}
 
+        self.stats = MediumStats()
+
+        self.busy_start_time = None
+
         self.name = "MEDIUM"
         self.logger = get_logger(self.name, env)
 
@@ -132,6 +146,9 @@ class MEDIUM:
             )
 
         return valid_channel_bonds
+    
+    def are_all_channels_idle(self):
+        return all(self.channels[ch_id].is_idle() for ch_id in self.channels)
 
     def are_channels_idle(self, node: Node, channels_ids: list[int]):
         """Checks if all selected channels are idle."""
@@ -142,12 +159,25 @@ class MEDIUM:
         return any(self.channels[ch_id].collision_detected for ch_id in channels_ids)
 
     def occupy_channels(self, node, channels_ids: list[int]):
+        if self.busy_start_time is None:
+            self.busy_start_time = self.env.now
+
+        collision_detected = False
         for ch_id in channels_ids:
             self.channels[ch_id].occupy(node)
+            if self.channels[ch_id].collision_detected:
+                collision_detected = True
+
+        if collision_detected:
+            self.stats.collisions += 1
 
     def release_channels(self, node, channels_ids: list[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].release(node)
+
+        if self.are_all_channels_idle():
+            self.stats.airtime_us += self.env.now - self.busy_start_time
+            self.busy_start_time = None
 
     def start_nav(self, src_id: int, dst_id: int, channels_ids: list[int]):
         for ch_id in channels_ids:
@@ -204,12 +234,19 @@ class MEDIUM:
                 collision_detected = True
             yield self.env.timeout(1)
 
+        self.stats.ppdus_tx += 1
+
         if not collision_detected:
             self.receive(ppdu, channels_ids, mcs_index)
+
+            self.stats.ppdus_success += 1
+
         else:
             self.logger.warning(
                 f"Collision detected while transmitting {ppdu.type} from {ppdu.src_id} to {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}"
             )
+
+            self.stats.ppdus_fail += 1
 
     def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
         def _calculate_path_loss(distance_m: float):
