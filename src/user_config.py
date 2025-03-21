@@ -44,9 +44,32 @@ class UserConfig:
     ENABLE_STATS_COLLECTION = False  # Enable/disable collecting statistics
     STATS_SAVE_PATH = "data/statistics"
 
-    # --- Network Configuration (Basic Service Sets - BSSs) --- #
+    # --- Network Configuration --- #
     NETWORK_BOUNDS_m = (10, 10, 2)  # spatial limits of the network in meters (x, y, z)
-    # Defines the BSSs in the network and their associated nodes.
+
+    ## --- Network Configuration (Basic) --- ##
+    # Basic:
+    # - A fixed number of Stations (STAs) per BSS.
+    # - A single traffic generation model applied to all STAs (using specified traffic load but other default parameters).
+    # - STAs and APs are randomly positioned within the network bounds.
+    
+    NUMBER_OF_BSSS = 1  # Number of Basic Service Sets (BSSs)
+    NUMBER_OF_STAS_PER_BSS = 1  # Number of STAs per BSS
+    TRAFFIC_MODEL = "Poisson" # "Poisson", "Bursty", or "VR"
+    TRAFFIC_LOAD_kbps = 100e3  # Traffic load in kbps
+
+    ## --- Network Configuration (Advanced) --- ##
+    # If ENABLE_ADVANCED_NETWORK_CONFIG is set to True, the user can fine-tune:
+    # - The number of BSSs, STAs, and their exact positions.
+    # - The specific traffic model for each STA, including loading traffic from a file.
+    # - Custom parameters like packet size, burst size, and frame rate for different traffic models.
+    
+    ENABLE_ADVANCED_NETWORK_CONFIG = False  # Enable/disable advanced network customizaiton
+
+    # Advanced:
+    # - Each BSS has an AP and a list of STAs.
+    # - The position of APs and STAs can be specified, or they will be placed randomly.
+    # - Traffic flows can be customized and specified either from a traffic trace file or a custom model.
     # Keys:
     # - "id": Unique BSS identifier (int).
     # - "ap": The Access Point (AP) of the BSS.
@@ -70,7 +93,8 @@ class UserConfig:
     #       - "burst_size_pkts" (optional, Bursty model only): Number of packets per burst (int). Defaults to 20.
     #       - "avg_inter_packet_time_us" (optional, Bursty and VR models only): Average inter-packet time (int, microseconds). Defaults to 6.
     #       - "fps" (optional, VR model only): Frame rate (int, frames per second). Defaults to 90 fps.
-    BSSs = [
+    
+    BSSs_Advanced = [
         {
             "id": 1,  # A BSS
             "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)

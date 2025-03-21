@@ -103,6 +103,9 @@ class NetworkPlotter(BasePlotter):
             self.logger.error("Network is empty. Nothing to plot.")
             return
 
+        if not self.cfg.ENABLE_FIGS_SAVING and not self.cfg.ENABLE_FIGS_DISPLAY:
+            return
+
         plt.ion()
 
         self.logger.header(f"Generating Network 3D plot...")
@@ -245,7 +248,7 @@ class NetworkPlotter(BasePlotter):
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
-        ax.set_title(f"3D Network Graph (t={network.env.now} ms)")
+        ax.set_title(f"3D Network Graph (t={network.env.now / 1000} ms)")
         ax.set_facecolor("white")
 
         plt.tight_layout()
@@ -254,6 +257,8 @@ class NetworkPlotter(BasePlotter):
             self.save_plot(fig, save_name, save_format)
         if self.cfg.ENABLE_FIGS_DISPLAY:
             plt.show()
+        else:
+            plt.close(fig)
 
 
 class TrafficPlotter(BasePlotter):
@@ -276,6 +281,9 @@ class TrafficPlotter(BasePlotter):
         """
         if not self.traffic_data:
             self.logger.error(f"No data to plot: {title}")
+            return
+
+        if not self.cfg.ENABLE_FIGS_SAVING and not self.cfg.ENABLE_FIGS_DISPLAY:
             return
 
         plt.ion()
@@ -328,6 +336,8 @@ class TrafficPlotter(BasePlotter):
 
         if self.cfg.ENABLE_FIGS_DISPLAY:
             plt.show()
+        else:
+            plt.close(fig)
 
     def plot_generation(self, **kwargs):
         """Plots packet creation times."""
@@ -383,6 +393,9 @@ class CollisionProbPlotter(BasePlotter):
         save_format="pdf",
     ):
         plt.ion()
+
+        if not self.cfg.ENABLE_FIGS_SAVING and not self.cfg.ENABLE_FIGS_DISPLAY:
+            return
 
         self.validate_data(data, m_list, cw_mins)
 
@@ -469,3 +482,5 @@ class CollisionProbPlotter(BasePlotter):
 
         if self.cfg.ENABLE_FIGS_DISPLAY:
             plt.show()
+        else:
+            plt.close(fig)

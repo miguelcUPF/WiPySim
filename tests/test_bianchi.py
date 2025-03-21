@@ -54,11 +54,18 @@ cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.ENABLE_STATS_COLLECTION = False
 
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
-
 cfg.ENABLE_FIGS_DISPLAY = True
 cfg.ENABLE_FIGS_SAVING = True
 cfg.FIGS_SAVE_PATH = "figs/tests"
+
+
+cfg.NETWORK_BOUNDS_m = (10, 10, 2)
+cfg.NUMBER_OF_BSSS = 1
+cfg.NUMBER_OF_STAS_PER_BSS = 1
+cfg.TRAFFIC_MODEL = "Poisson"
+cfg.TRAFFIC_LOAD_kbps = 100e3
+
+cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 
 N = [1, 2, 4, 8, 12, 16, 20]
@@ -76,7 +83,7 @@ def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> t
         BSSs = add_bss_automatically(BSSs, i - 1, i + j)
         j += 1
 
-    cfg.BSSs = BSSs
+    cfg.BSSs_Advanced = BSSs
 
     env = simpy.Environment()
 

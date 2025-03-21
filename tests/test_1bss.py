@@ -34,8 +34,9 @@ cfg.EXCLUDED_LOGS = {"LOAD": ["ALL"]}
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
+cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
-cfg.BSSs = [
+cfg.BSSs_Advanced = [
     {
         "id": 1,  # A BSS
         "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)

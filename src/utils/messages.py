@@ -1,6 +1,6 @@
 # Starting execution message
 STARTING_EXECUTION_MSG = (
-    "\033[93m" + "=" * 24 + "  STARTING EXECUTION  " + "=" * 24 + "\033[0m"
+    "\033[93m" + "=" * 22 + "  STARTING EXECUTION  " + "=" * 22 + "\033[0m"
 )
 
 # Starting simulation message
@@ -21,7 +21,7 @@ SIMULATION_TERMINATED_MSG = (
 
 # Execution terminated message
 EXECUTION_TERMINATED_MSG = (
-    "\033[93m" + "=" * 23 + "  EXECUTION TERMINATED  " + "=" * 23 + "\033[0m"
+    "\033[93m" + "=" * 21 + "  EXECUTION TERMINATED  " + "=" * 21 + "\033[0m"
 )
 
 # Press enter to exit message
