@@ -1,11 +1,10 @@
+from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams
+
+
 from src.utils.mcs_table import calculate_data_rate_bps
 from src.utils.event_logger import get_logger
 from src.utils.messages import STARTING_TEST_MSG, TEST_COMPLETED_MSG
-
-import importlib
-
-import src.user_config as cfg
-import src.utils.event_logger
 
 
 cfg.ENABLE_CONSOLE_LOGGING = True
@@ -13,8 +12,6 @@ cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
 
 cfg.EXCLUDED_LOGS = {}
-
-importlib.reload(src.utils.event_logger)
 
 # Each test case is a tuple: (mcs_index, channel_width, num_streams, guard_interval, expected_data_rate)
 TEST_CASES = [
@@ -29,7 +26,7 @@ TEST_CASES = [
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
-    logger = get_logger("TEST")
+    logger = get_logger("TEST", cfg, sparams)
 
     for (
         mcs_index,

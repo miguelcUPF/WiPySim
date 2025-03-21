@@ -1,4 +1,6 @@
-from src.user_config import ENABLE_STATS_COLLECTION, STATS_SAVE_PATH
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
+
 from src.utils.data_units import Packet
 from src.utils.event_logger import get_logger
 
@@ -118,9 +120,12 @@ class ReceptionStats:
                 }
             ]
         )
-        self.rx_packets_history = pd.concat(
-            [self.rx_packets_history, new_row], ignore_index=True
-        )
+        if self.rx_packets_history.empty:
+            self.rx_packets_history = new_row
+        else:
+            self.rx_packets_history = pd.concat(
+                [self.rx_packets_history, new_row], ignore_index=True
+            )
 
 
 class ChannelStats:
@@ -144,9 +149,11 @@ class MediumStats:
 
 
 class NetworkStats:
-
-    def __init__(self, network):
+    def __init__(self, cfg: cfg, sparams: sparams, network):
         from src.components.network import Network
+
+        self.cfg = cfg
+        self.sparams = sparams
 
         self.network = network
         self.network = cast(Network, self.network)
@@ -179,7 +186,7 @@ class NetworkStats:
         self.medium_stats = {}
 
         self.name = "STATS"
-        self.logger = get_logger(self.name, self.network.env)
+        self.logger = get_logger(self.name, cfg, sparams, self.network.env)
 
     def collect_stats(self):
         from src.components.network import Node
@@ -350,7 +357,7 @@ class NetworkStats:
             ),
         }
 
-        if ENABLE_STATS_COLLECTION:
+        if self.cfg.ENABLE_STATS_COLLECTION:
             self.save_stats()
 
     def save_stats(self):
@@ -374,9 +381,9 @@ class NetworkStats:
             "medium_stats": self.medium_stats,
         }
 
-        os.makedirs(STATS_SAVE_PATH, exist_ok=True)
+        os.makedirs(self.cfg.STATS_SAVE_PATH, exist_ok=True)
 
-        filepath = os.path.join(STATS_SAVE_PATH, "session_stats.json")
+        filepath = os.path.join(self.cfg.STATS_SAVE_PATH, "session_stats.json")
 
         with open(filepath, "w") as f:
             json.dump(stats_data, f, indent=4)

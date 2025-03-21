@@ -1,26 +1,16 @@
-import simpy
-import random
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
 
-from typing import cast
-
-from src.sim_params import (
-    COMMON_RETRY_LIMIT,
-    CW_MIN,
-    CW_MAX,
-    SLOT_TIME_us,
-    DIFS_us,
-    SIFS_us,
-    MAX_TX_QUEUE_SIZE_pkts,
-    MAX_AMPDU_SIZE_bytes,
-    BACK_TIMEOUT_us,
-    ENABLE_RTS_CTS,
-    RTS_THRESHOLD_bytes,
-    CTS_TIMEOUT_us,
-)
 from src.components.network import Node
 from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.utils.event_logger import get_logger
 from src.utils.statistics import MACStateStats
+
+
+from typing import cast
+
+import simpy
+import random
 
 
 class MACState:
@@ -36,7 +26,9 @@ class MAC:
     MAC layer receiver. Handles frame reception, ACK/BACK responses, and demultiplexing MPDUs.
     """
 
-    def __init__(self, env: simpy.Environment, node: Node):
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, node: Node):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
 
         self.node = node
@@ -44,7 +36,7 @@ class MAC:
         self.state = MACState.IDLE  # TODO: record and plot states
 
         self.tx_queue: simpy.Store[MPDU] = simpy.Store(
-            env, capacity=MAX_TX_QUEUE_SIZE_pkts
+            env, capacity=self.sparams.MAX_TX_QUEUE_SIZE_pkts
         )
 
         self.ampdu_counter = 0
@@ -64,15 +56,15 @@ class MAC:
         self.mac_state_stats = MACStateStats()
 
         self.name = "MAC"
-        self.logger = get_logger(self.name, env)
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
         self.env.process(self.run())
 
     def tx_enqueue(self, packet: Packet):
         """Enqueues a packet for transmission"""
-        if len(self.tx_queue.items) >= MAX_TX_QUEUE_SIZE_pkts:
+        if len(self.tx_queue.items) >= self.sparams.MAX_TX_QUEUE_SIZE_pkts:
             self.node.tx_stats.pkts_dropped_queue_lim += 1
-            
+
             self.logger.warning(
                 f"{self.node.type} {self.node.id} -> Packet {packet.id} dropped due to full tx queue"
             )
@@ -80,7 +72,9 @@ class MAC:
             mpdu = MPDU(packet, self.env.now)
             self.tx_queue.put(mpdu)
 
-            self.node.tx_stats.add_to_tx_queue_history(self.env.now, len(self.tx_queue.items))
+            self.node.tx_stats.add_to_tx_queue_history(
+                self.env.now, len(self.tx_queue.items)
+            )
 
             self.logger.debug(
                 f"{self.node.type} {self.node.id} -> Packet {packet.id} added to tx queue (Queue length: {len(self.tx_queue.items)}, In transmission: {len(self.tx_ampdu.mpdus) if self.tx_ampdu else 0})"
@@ -124,7 +118,7 @@ class MAC:
                 f"{self.node.type} {self.node.id} -> Backoff slots already set ({self.backoff_slots})"
             )
         else:
-            cw = min(CW_MIN * (2**self.retries), CW_MAX)
+            cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
             self.backoff_slots = random.randint(0, max(0, cw - 1))
             self.logger.info(
                 f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
@@ -134,7 +128,7 @@ class MAC:
             start_time = self.env.now
 
             # Wait for one slot time while continuously monitoring the channel
-            while self.env.now - start_time < SLOT_TIME_us:
+            while self.env.now - start_time < self.sparams.SLOT_TIME_us:
                 if not self.node.phy_layer.is_primary_channel_idle():
                     self.logger.debug(
                         f"{self.node.type} {self.node.id} -> Channel busy, pausing backoff ({self.backoff_slots})..."
@@ -161,7 +155,7 @@ class MAC:
     def ampdu_aggregation(self):
         """Aggregates MDPUS into an A-MPDU frame."""
         if self.tx_ampdu:
-            if self.tx_ampdu.retries >= COMMON_RETRY_LIMIT:
+            if self.tx_ampdu.retries >= self.sparams.COMMON_RETRY_LIMIT:
                 self.logger.info(
                     f"{self.node.type} {self.node.id} -> A-MPDU {self.tx_ampdu.id} dropped after max retries"
                 )
@@ -189,7 +183,7 @@ class MAC:
             if mpdu.dst_id != destination:
                 continue
 
-            if total_size + mpdu.size_bytes > MAX_AMPDU_SIZE_bytes:
+            if total_size + mpdu.size_bytes > self.sparams.MAX_AMPDU_SIZE_bytes:
                 break
 
             agg_mpdus.append(mpdu)
@@ -223,20 +217,20 @@ class MAC:
 
         self.cts_event = self.env.event()
 
-        yield self.env.timeout(CTS_TIMEOUT_us) | self.cts_event
+        yield self.env.timeout(self.sparams.CTS_TIMEOUT_us) | self.cts_event
 
         if not self.cts_event.triggered:
             self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
             self.cts_event = None
 
             self.retries += 1
-            if ENABLE_RTS_CTS:
+            if self.sparams.ENABLE_RTS_CTS:
                 self.node.tx_stats.tx_failures += 1
 
             return
         else:
             self.retries = 0
-            yield self.env.process(self.wait_for_idle(SIFS_us))
+            yield self.env.process(self.wait_for_idle(self.sparams.SIFS_us))
             yield self.env.process(self.transmit_ampdu())
 
     def transmit_ampdu(self):
@@ -252,9 +246,9 @@ class MAC:
         )
         self.back_event = self.env.event()
 
-        yield self.env.timeout(BACK_TIMEOUT_us) | self.back_event
+        yield self.env.timeout(self.sparams.BACK_TIMEOUT_us) | self.back_event
 
-        if ENABLE_RTS_CTS:
+        if self.sparams.ENABLE_RTS_CTS:
             self.node.phy_layer.end_nav()
 
         if not self.back_event.triggered:
@@ -264,7 +258,7 @@ class MAC:
             self.tx_ampdu.retries += 1
 
             self.retries += 1
-            if not ENABLE_RTS_CTS:
+            if not self.sparams.ENABLE_RTS_CTS:
                 self.node.tx_stats.tx_failures += 1
 
             return
@@ -296,7 +290,7 @@ class MAC:
             for mpdu in lost_mpdus:
                 mpdu.retries += 1
                 mpdu.is_corrupted = False
-                if mpdu.retries >= COMMON_RETRY_LIMIT:
+                if mpdu.retries >= self.sparams.COMMON_RETRY_LIMIT:
                     self.node.tx_stats.pkts_dropped_retry_lim += 1
 
                     self.del_mpdu_from_queue(mpdu)
@@ -309,7 +303,9 @@ class MAC:
                 if mpdu not in lost_mpdus:
                     self.del_mpdu_from_queue(mpdu)
 
-            self.node.tx_stats.add_to_tx_queue_history(self.env.now, len(self.tx_queue.items))
+            self.node.tx_stats.add_to_tx_queue_history(
+                self.env.now, len(self.tx_queue.items)
+            )
 
             self.tx_ampdu = None
             self.retries = 0
@@ -354,7 +350,7 @@ class MAC:
         )
 
         if data_unit.type == "AMPDU":
-            
+
             back = BACK(data_unit, self.node.id, data_unit.src_id, self.env.now)
 
             for mpdu in data_unit.mpdus:
@@ -367,7 +363,7 @@ class MAC:
                     self.node.rx_stats.pkts_success += 1
                     self.node.rx_stats.rx_app_bytes += mpdu.packet.size_bytes
                     self.node.app_layer.packet_from_mac(mpdu.packet)
-            
+
             self.node.tx_stats.backs_tx += 1
 
             self.env.process(self.send_response(back))
@@ -377,7 +373,7 @@ class MAC:
 
             if self.state == MACState.IDLE:
                 cts = CTS(data_unit.dst_id, data_unit.src_id, self.env.now)
-                
+
                 self.env.process(self.send_response(cts))
 
                 self.node.tx_stats.cts_tx += 1
@@ -390,7 +386,7 @@ class MAC:
             self.node.rx_stats.cts_rx += 1
 
             if self.cts_event and not self.cts_event.triggered:
-                if ENABLE_RTS_CTS:
+                if self.sparams.ENABLE_RTS_CTS:
                     self.node.tx_stats.tx_successes += 1
 
                 self.cts_event.succeed()  # Trigger CTS event
@@ -404,7 +400,7 @@ class MAC:
 
             if self.back_event and not self.back_event.triggered:
                 self.rx_back = data_unit  # Store received BACK frame
-                if not ENABLE_RTS_CTS:
+                if not self.sparams.ENABLE_RTS_CTS:
                     self.node.tx_stats.tx_successes += 1
 
                 self.back_event.succeed()  # Trigger BACK event
@@ -416,7 +412,7 @@ class MAC:
                 )
 
     def send_response(self, data_unit):
-        yield self.env.process(self.wait_for_idle(SIFS_us))
+        yield self.env.process(self.wait_for_idle(self.sparams.SIFS_us))
         yield self.env.process(self.transmit(data_unit))
         self.set_state(MACState.IDLE)
 
@@ -440,7 +436,7 @@ class MAC:
         while True:
             yield self.env.timeout(1)
             if len(self.tx_queue.items) > 0:
-                yield self.env.process(self.wait_for_idle(DIFS_us))
+                yield self.env.process(self.wait_for_idle(self.sparams.DIFS_us))
                 yield self.env.process(self.backoff())
 
                 if self.backoff_slots > 0:
@@ -448,11 +444,14 @@ class MAC:
 
                 self.ampdu_aggregation()
 
-                if ENABLE_RTS_CTS and self.tx_ampdu.size_bytes > RTS_THRESHOLD_bytes:
+                if (
+                    self.sparams.ENABLE_RTS_CTS
+                    and self.tx_ampdu.size_bytes > self.sparams.RTS_THRESHOLD_bytes
+                ):
                     yield self.env.process(self.rts_cts())
                 else:
-                    if self.tx_ampdu.size_bytes <= RTS_THRESHOLD_bytes:
+                    if self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes:
                         self.logger.info(
-                            f"{self.node.type} {self.node.id} -> No need to send RTS/CTS for AMPDU {self.tx_ampdu.id} (size={self.tx_ampdu.size_bytes} bytes < {RTS_THRESHOLD_bytes} bytes)"
+                            f"{self.node.type} {self.node.id} -> No need to send RTS/CTS for AMPDU {self.tx_ampdu.id} (size={self.tx_ampdu.size_bytes} bytes < {self.sparams.RTS_THRESHOLD_bytes} bytes)"
                         )
                     yield self.env.process(self.transmit_ampdu())

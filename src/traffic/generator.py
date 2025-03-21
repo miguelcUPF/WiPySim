@@ -1,3 +1,6 @@
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
+
 from src.utils.data_units import Packet
 from src.utils.event_logger import get_logger
 from src.components.network import Node
@@ -19,7 +22,17 @@ FPS = 90
 
 
 class TrafficGenerator:
-    def __init__(self, env: simpy.Environment, node: Node, dst_id: int, **kwargs):
+    def __init__(
+        self,
+        cfg: cfg,
+        sparams: sparams,
+        env: simpy.Environment,
+        node: Node,
+        dst_id: int,
+        **kwargs,
+    ):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
 
         self.node = node
@@ -30,19 +43,20 @@ class TrafficGenerator:
         self.traffic_model = kwargs.get("name", None)
         self.start_time_us = kwargs.get("start_time_us", 0)
         self.end_time_us = kwargs.get("end_time_us", None)
-        self.traffic_load_kbps = kwargs.get(
-            "traffic_load_kbps", traffic_load_kbps)
+        self.traffic_load_kbps = kwargs.get("traffic_load_kbps", traffic_load_kbps)
         self.max_packet_size_bytes = kwargs.get(
-            "max_packet_size_bytes", MAX_PACKET_SIZE_bytes)
+            "max_packet_size_bytes", MAX_PACKET_SIZE_bytes
+        )
         self.burst_size_pkts = kwargs.get("burst_size_pkts", BURST_SIZE_pkts)
         self.avg_inter_packet_time_us = kwargs.get(
-            "avg_inter_packet_time_us", AVG_INTER_PACKET_TIME_us)
+            "avg_inter_packet_time_us", AVG_INTER_PACKET_TIME_us
+        )
         self.fps = kwargs.get("fps", FPS)
 
         self.packet_id = 0
 
         self.name = "GEN"
-        self.logger = get_logger(self.name, self.env)
+        self.logger = get_logger(self.name, cfg, sparams, self.env)
 
         self.active_processes = []
 
@@ -63,7 +77,9 @@ class TrafficGenerator:
             if process.is_alive:
                 process.interrupt()
 
-        self.logger.debug(f"{self.node.type} {self.src_id} -> Traffic Generator stopped.")
+        self.logger.debug(
+            f"{self.node.type} {self.src_id} -> Traffic Generator stopped."
+        )
         self.active_processes.clear()
 
     def run(self):
@@ -72,34 +88,39 @@ class TrafficGenerator:
                 p = self.env.process(self.generate_poisson_traffic())
             case "Bursty":
                 p = self.env.process(self.generate_bursty_traffic())
-            case 'VR':
+            case "VR":
                 p = self.env.process(self.generate_vr_traffic())
             case _:
                 self.logger.error(
-                    f"{self.node.type} {self.src_id} -> Invalid traffic model specified (from node {self.src_id} to node {self.dst_id}): {self.traffic_model}")
+                    f"{self.node.type} {self.src_id} -> Invalid traffic model specified (from node {self.src_id} to node {self.dst_id}): {self.traffic_model}"
+                )
 
         self.active_processes.append(p)
 
     def generate_poisson_traffic(self):
         """Generates Poisson traffic"""
-        avg_inter_pkt_time_us = (self.max_packet_size_bytes * 8) / \
-            (self.traffic_load_kbps * 1000) * 1e6
+        avg_inter_pkt_time_us = (
+            (self.max_packet_size_bytes * 8) / (self.traffic_load_kbps * 1000) * 1e6
+        )
         try:
             while True:
-                inter_arrival_time_us = random.expovariate(
-                    1 / avg_inter_pkt_time_us)
+                inter_arrival_time_us = random.expovariate(1 / avg_inter_pkt_time_us)
                 yield self.env.timeout(int(math.ceil(inter_arrival_time_us)))
                 self._create_and_send_packet(self.max_packet_size_bytes)
         except simpy.Interrupt:
             pass
+
     def generate_bursty_traffic(self):
         """Generates bursts of packets"""
-        avg_inter_burst_time_us = (self.burst_size_pkts * (self.max_packet_size_bytes * 8) /
-                                   (self.traffic_load_kbps * 1000) * 1e6)
+        avg_inter_burst_time_us = (
+            self.burst_size_pkts
+            * (self.max_packet_size_bytes * 8)
+            / (self.traffic_load_kbps * 1000)
+            * 1e6
+        )
         try:
             while True:
-                inter_burst_time_us = random.expovariate(
-                    1 / avg_inter_burst_time_us)
+                inter_burst_time_us = random.expovariate(1 / avg_inter_burst_time_us)
                 yield self.env.timeout(int(math.ceil(inter_burst_time_us)))
 
                 self.env.process(self.send_burst(avg_inter_burst_time_us))
@@ -111,8 +132,10 @@ class TrafficGenerator:
             for _ in range(self.burst_size_pkts):
                 self._create_and_send_packet(self.max_packet_size_bytes)
 
-                inter_pkt_time_us = min(random.expovariate(
-                    1 / self.avg_inter_packet_time_us), avg_inter_burst_time_us / self.burst_size_pkts)
+                inter_pkt_time_us = min(
+                    random.expovariate(1 / self.avg_inter_packet_time_us),
+                    avg_inter_burst_time_us / self.burst_size_pkts,
+                )
 
                 yield self.env.timeout(int(math.ceil(inter_pkt_time_us)))
         except simpy.Interrupt:
@@ -123,16 +146,19 @@ class TrafficGenerator:
         avg_inter_frame_time_us = 1 / self.fps * 1e6
         bits_per_frame = (self.traffic_load_kbps * 1000) / self.fps
         packets_per_frame = math.floor(
-            bits_per_frame / (self.max_packet_size_bytes * 8))
-        remainder_bytes = bits_per_frame % (
-            self.max_packet_size_bytes * 8) // 8
+            bits_per_frame / (self.max_packet_size_bytes * 8)
+        )
+        remainder_bytes = bits_per_frame % (self.max_packet_size_bytes * 8) // 8
 
         try:
             while True:
                 yield self.env.timeout(int(math.ceil(avg_inter_frame_time_us)))
 
-                self.env.process(self.send_frame(
-                    avg_inter_frame_time_us, packets_per_frame, remainder_bytes))
+                self.env.process(
+                    self.send_frame(
+                        avg_inter_frame_time_us, packets_per_frame, remainder_bytes
+                    )
+                )
         except simpy.Interrupt:
             pass
 
@@ -140,12 +166,12 @@ class TrafficGenerator:
         remaining_frame_time_us = avg_inter_frame_time_us
 
         try:
-            for i in range(packets_per_frame-1):
+            for i in range(packets_per_frame - 1):
                 self._create_and_send_packet(self.max_packet_size_bytes)
 
                 inter_pkt_time_us = min(
                     random.expovariate(1 / self.avg_inter_packet_time_us),
-                    remaining_frame_time_us / (packets_per_frame - i)
+                    remaining_frame_time_us / (packets_per_frame - i),
                 )
                 yield self.env.timeout(int(math.ceil(inter_pkt_time_us)))
                 remaining_frame_time_us -= inter_pkt_time_us
@@ -163,7 +189,7 @@ class TrafficGenerator:
             size_bytes=packet_size,
             src_id=self.src_id,
             dst_id=self.dst_id,
-            creation_time_us=self.env.now
+            creation_time_us=self.env.now,
         )
         self.logger.debug(f"{self.node.type} {self.src_id} -> Created {packet}")
         self.node.app_layer.packet_to_mac(packet)

@@ -49,7 +49,7 @@ def bianchi_transmission_probability(n: int, m: int, cw_min: int) -> float:
         tau_old = tau
         numerator = 2 * (1 - 2 * p)
         denominator = (1 - 2 * p) * (w + 1) + p * w * (1 - (2 * p) ** m)
-        tau = numerator / denominator
+        tau = numerator / denominator if denominator != 0 else 0
         p = bianchi_collision_probability(n, tau)
         if abs(tau - tau_old) < 1e-9:  # Convergence check
             break

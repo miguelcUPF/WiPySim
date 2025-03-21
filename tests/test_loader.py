@@ -1,8 +1,15 @@
+from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams
+
 from src.utils.data_units import MPDU, Packet
 from src.utils.plotters import TrafficPlotter
 from src.utils.event_logger import get_logger
-from src.components.network import Network
-from src.utils.support import initialize_network
+from src.utils.support import (
+    initialize_network,
+    validate_params,
+    validate_config,
+    warn_overwriting_enabled_paths,
+)
 from src.utils.messages import (
     STARTING_TEST_MSG,
     TEST_COMPLETED_MSG,
@@ -11,13 +18,12 @@ from src.utils.messages import (
     SIMULATION_TERMINATED_MSG,
 )
 
-import simpy
-import importlib
 import matplotlib.pyplot as plt
+import simpy
 
-import src.user_config as cfg
-import src.utils.event_logger
-import src.utils.plotters
+
+cfg.SIMULATION_TIME_us = 2e6
+cfg.SEED = 1
 
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True
@@ -29,14 +35,9 @@ cfg.ENABLE_FIGS_SAVING = False
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
-cfg.NETWORK_BOUNDS_m = (10, 10, 2) 
+cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
-importlib.reload(src.utils.event_logger)
-importlib.reload(src.utils.plotters)
-
-SIMULATION_TIME_us = 2e6
-
-BSSs = [
+cfg.BSSs = [
     {
         "id": 1,  # A BSS
         "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
@@ -69,12 +70,14 @@ BSSs = [
 
 
 class DummyMAC:
-    def __init__(self, env):
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
 
         self.load_bits = 0
 
-        self.plotter = TrafficPlotter(env)
+        self.plotter = TrafficPlotter(cfg, sparams, env)
 
     def tx_enqueue(self, packet: Packet):
         mpdu = MPDU(packet, self.env.now)
@@ -86,27 +89,30 @@ class DummyMAC:
 
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
+
+    logger = get_logger("TEST", cfg, sparams)
+
+    validate_params(sparams, logger)
+    validate_config(cfg, logger)
+    warn_overwriting_enabled_paths(cfg, logger)
+
     print(STARTING_SIMULATION_MSG)
 
     env = simpy.Environment()
 
-    logger = get_logger("TEST", env)
-
-    network = Network(env)
-
-    initialize_network(env, BSSs, cfg.NETWORK_BOUNDS_m, network)
+    network = initialize_network(cfg, sparams, env)
 
     for node in network.get_nodes():
-        node.mac_layer = DummyMAC(env)
+        node.mac_layer = DummyMAC(cfg, sparams, env)
 
-    env.run(until=SIMULATION_TIME_us)
+    env.run(until=cfg.SIMULATION_TIME_us)
 
     for ap in network.get_aps():
         logger.info(
-            f"AP {ap.id} -> DL Load: {ap.mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(ap.mac_layer.load_bits*1e-6) / (SIMULATION_TIME_us*1e-6):.2f} Mbps"
+            f"AP {ap.id} -> DL Load: {ap.mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(ap.mac_layer.load_bits*1e-6) / (cfg.SIMULATION_TIME_us*1e-6):.2f} Mbps"
         )
 
-        ap.mac_layer.plotter.show_generation(title=f"Traffic AP {ap.id}")
+        ap.mac_layer.plotter.plot_generation(title=f"Traffic AP {ap.id}")
 
     print(SIMULATION_TERMINATED_MSG)
 

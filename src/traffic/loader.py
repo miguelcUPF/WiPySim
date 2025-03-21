@@ -1,14 +1,28 @@
-import os
-import simpy
-import pandas as pd
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
+
 from src.utils.event_logger import get_logger
 from src.utils.data_units import Packet
 from src.components.network import Node
+
+import os
+import simpy
 import chardet
+import pandas as pd
 
 
 class TrafficLoader:
-    def __init__(self, env: simpy.Environment, node: Node, dst_id: int, **kwargs):
+    def __init__(
+        self,
+        cfg: cfg,
+        sparams: sparams,
+        env: simpy.Environment,
+        node: Node,
+        dst_id: int,
+        **kwargs,
+    ):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
 
         self.node = node
@@ -24,7 +38,7 @@ class TrafficLoader:
         self.traffic_data = self._load_traffic_data(self.filepath)
 
         self.name = "LOAD"
-        self.logger = get_logger(self.name, self.env)
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
         self.active_processes = []
 
@@ -50,8 +64,8 @@ class TrafficLoader:
         self.logger.debug(f"{self.node.type} {self.src_id} -> Traffic Loader stopped.")
         self.active_processes.clear()
 
-    def _detect_encoding(self, filepath, sample_size=4096*2):
-        with open(filepath, 'rb') as f:
+    def _detect_encoding(self, filepath, sample_size=4096 * 2):
+        with open(filepath, "rb") as f:
             rawdata = f.read(sample_size)
         return chardet.detect(rawdata)["encoding"]
 
@@ -60,15 +74,22 @@ class TrafficLoader:
         Loads a traffic file and normalizes column names.
         """
         if not os.path.exists(filepath):
-            self.logger.error(
-                f"Traffic file not found: {filepath}")
+            self.logger.error(f"Traffic file not found: {filepath}")
             return None
         try:
             encoding = self._detect_encoding(filepath)
-            df = pd.read_csv(filepath, sep=None, engine="python", encoding=encoding, usecols=["frame.time_relative", "frame.len"], dtype={
-                "frame.time_relative": float, "frame.len": int})
+            df = pd.read_csv(
+                filepath,
+                sep=None,
+                engine="python",
+                encoding=encoding,
+                usecols=["frame.time_relative", "frame.len"],
+                dtype={"frame.time_relative": float, "frame.len": int},
+            )
         except Exception as e:
-            self.logger.error(f"{self.node.type} {self.src_id} -> Error reading traffic file {filepath}: {e}")
+            self.logger.error(
+                f"{self.node.type} {self.src_id} -> Error reading traffic file {filepath}: {e}"
+            )
             return None
 
         column_mapping = {
@@ -78,8 +99,10 @@ class TrafficLoader:
         df.rename(columns=column_mapping, inplace=True)
 
         if "timestamp_s" not in df or "size_bytes" not in df:
-           self.logger.error(f"{self.node.type} {self.src_id} -> File {filepath} is missing required columns: timestamp_s, size_bytes")
-           return None
+            self.logger.error(
+                f"{self.node.type} {self.src_id} -> File {filepath} is missing required columns: timestamp_s, size_bytes"
+            )
+            return None
 
         # Convert timestamps to microseconds
         df["timestamp_us"] = (df["timestamp_s"] * 1e6).astype(int)
@@ -87,8 +110,7 @@ class TrafficLoader:
         df["inter_arrival_us"] = df["timestamp_us"].diff().fillna(0).astype(int)
 
         if df.empty:
-            self.logger.error(
-                f"Traffic file is empty: {filepath}")
+            self.logger.error(f"Traffic file is empty: {filepath}")
 
         return df.sort_values(by="timestamp_us")
 
@@ -108,7 +130,9 @@ class TrafficLoader:
             size_bytes=packet_size,
             src_id=self.src_id,
             dst_id=self.dst_id,
-            creation_time_us=self.env.now
+            creation_time_us=self.env.now,
         )
-        self.logger.debug(f"{self.node.type} {self.src_id} -> Created {packet} from {self.filepath}")
+        self.logger.debug(
+            f"{self.node.type} {self.src_id} -> Created {packet} from {self.filepath}"
+        )
         self.node.app_layer.packet_to_mac(packet)

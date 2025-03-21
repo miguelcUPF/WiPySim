@@ -1,22 +1,11 @@
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
+
 from src.utils.event_logger import get_logger
+from src.components.network import Network, Node
 from src.utils.data_units import PPDU
 from src.utils.statistics import ChannelStats, MediumStats
 from src.utils.mcs_table import calculate_data_rate_bps, get_min_sensitivity
-from src.components.network import Network, Node
-from src.sim_params import (
-    MPDU_ERROR_PROBABILITY,
-    NUM_CHANNELS,
-    SPATIAL_STREAMS,
-    GUARD_INTERVAL_us,
-    TX_POWER_dBm,
-    TX_GAIN_dB,
-    RX_GAIN_dB,
-    PATH_LOSS_EXPONENT,
-    ENABLE_SHADOWING,
-    SHADOWING_STD_dB,
-    FREQUENCY_MHz,
-    ENABLE_RTS_CTS,
-)
 
 import simpy
 import random
@@ -38,8 +27,11 @@ VALID_BONDS = {
 class Channel20MHz:
     """Represents a single 20 MHz wireless channel."""
 
-    def __init__(self, env: simpy.Environment, id: int):
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, id: int):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
+
         self.id = id
 
         self.nodes = {}  # Nodes using the channel
@@ -58,7 +50,7 @@ class Channel20MHz:
         self.stats = ChannelStats()
 
         self.name = "CHANNEL"
-        self.logger = get_logger(self.name, env)
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
     def add_node(self, node: Node):
         self.logger.debug(f"Channel {self.id} -> Allocated to {node.type} {node.id}")
@@ -121,19 +113,25 @@ class Channel20MHz:
 
 
 class MEDIUM:
-    def __init__(self, env, network: Network):
+    def __init__(
+        self, cfg: cfg, sparams: sparams, env: simpy.Environment, network: Network
+    ):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
 
         self.network = network
 
-        self.channels = {ch: Channel20MHz(env, ch) for ch in range(1, NUM_CHANNELS + 1)}
+        self.channels = {
+            ch: Channel20MHz(cfg, sparams, env, ch) for ch in range(1, self.sparams.NUM_CHANNELS + 1)
+        }
 
         self.stats = MediumStats()
 
         self.busy_start_time = None
 
         self.name = "MEDIUM"
-        self.logger = get_logger(self.name, env)
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
     def get_valid_channels(self) -> list:
         available_channels = set(self.channels.keys())  # Extract available channel IDs
@@ -146,7 +144,7 @@ class MEDIUM:
             )
 
         return valid_channel_bonds
-    
+
     def are_all_channels_idle(self):
         return all(self.channels[ch_id].is_idle() for ch_id in self.channels)
 
@@ -212,7 +210,10 @@ class MEDIUM:
             """Computes transmission time based on bandwidth and MCS."""
 
             data_rate_bps = calculate_data_rate_bps(
-                mcs_index, channel_width, SPATIAL_STREAMS, GUARD_INTERVAL_us
+                mcs_index,
+                channel_width,
+                self.sparams.SPATIAL_STREAMS,
+                self.sparams.GUARD_INTERVAL_us,
             )
 
             tx_duration_us = size_bytes * 8 / data_rate_bps * 1e6
@@ -251,22 +252,28 @@ class MEDIUM:
     def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
         def _calculate_path_loss(distance_m: float):
             path_loss_1m_dB = (
-                20 * math.log10(1) + 20 * math.log10(FREQUENCY_MHz) - 147.55
+                20 * math.log10(1)
+                + 20 * math.log10(self.sparams.FREQUENCY_MHz)
+                - 147.55
             )  # Assuming free space path loss
 
-            path_loss = path_loss_1m_dB + 10 * PATH_LOSS_EXPONENT * math.log10(
-                distance_m / 1
+            path_loss = (
+                path_loss_1m_dB
+                + 10 * self.sparams.PATH_LOSS_EXPONENT * math.log10(distance_m / 1)
             )
 
-            if ENABLE_SHADOWING:
-                path_loss += random.gauss(0, SHADOWING_STD_dB)
+            if self.sparams.ENABLE_SHADOWING:
+                path_loss += random.gauss(0, self.sparams.SHADOWING_STD_dB)
 
             return path_loss
 
         distance_m = self.network.get_distance_between_nodes(ppdu.src_id, ppdu.dst_id)
 
         rssi_dbm = (
-            TX_POWER_dBm + TX_GAIN_dB + RX_GAIN_dB - _calculate_path_loss(distance_m)
+            self.sparams.TX_POWER_dBm
+            + self.sparams.TX_GAIN_dB
+            + self.sparams.RX_GAIN_dB
+            - _calculate_path_loss(distance_m)
         )
 
         min_sensitivity_dbm = get_min_sensitivity(mcs_index, len(channels_ids) * 20)
@@ -279,10 +286,12 @@ class MEDIUM:
         if ppdu.data_unit.type == "AMPDU":
             for mpdu in ppdu.data_unit.mpdus:
                 mpdu.is_corrupted = (
-                    True if MPDU_ERROR_PROBABILITY > random.random() else False
+                    True
+                    if self.sparams.MPDU_ERROR_PROBABILITY > random.random()
+                    else False
                 )
 
-        if ENABLE_RTS_CTS:
+        if self.sparams.ENABLE_RTS_CTS:
             if ppdu.data_unit.type == "RTS":
                 self.start_nav(ppdu.src_id, ppdu.dst_id, channels_ids)
 

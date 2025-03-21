@@ -16,7 +16,7 @@ TEST_COMPLETED_MSG = "\033[93m" + "=" * 23 + "  TEST COMPLETED  " + "=" * 23 + "
 
 # Simulation terminated message
 SIMULATION_TERMINATED_MSG = (
-    "\033[93m" + "=" * 21 + "  SIMULATION TERMINATED  " + "=" * 21 + "\033[0m"
+    "\033[93m" + "=" * 20 + "  SIMULATION TERMINATED  " + "=" * 20 + "\033[0m"
 )
 
 # Execution terminated message
@@ -35,5 +35,5 @@ PRESS_TO_EXIT_MSG = (
 
 # Press enter to continue message
 PRESS_TO_CONTINUE_MSG = (
-    "\033[93m" + "=" * 21 + "   Press Enter to continue  " + "=" * 21 + "\033[0m"
+    "\033[93m" + "=" * 19 + "  Press Enter to continue  " + "=" * 19 + "\033[0m"
 )

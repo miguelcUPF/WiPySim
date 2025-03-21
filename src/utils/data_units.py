@@ -1,13 +1,4 @@
-from src.sim_params import (
-    MDPU_DELIMITER_SIZE_bytes,
-    MPDU_PADDING_SIZE_bytes,
-    MAC_HEADER_SIZE_bytes,
-    PHY_HEADER_SIZE_bytes,
-    FCS_SIZE_bytes,
-    BACK_SIZE_PER_MPDU_bytes,
-    RTS_SIZE_bytes,
-    CTS_SIZE_bytes,
-)
+from src.sim_params import SimParams as sparams
 
 
 class DataUnit:
@@ -53,11 +44,11 @@ class MPDU(DataUnit):
     def __init__(self, packet: Packet, creation_time_us: float):
         super().__init__(
             creation_time_us,
-            MAC_HEADER_SIZE_bytes
+            sparams.MAC_HEADER_SIZE_bytes
             + packet.size_bytes
-            + FCS_SIZE_bytes
-            + MDPU_DELIMITER_SIZE_bytes
-            + MPDU_PADDING_SIZE_bytes,
+            + sparams.FCS_SIZE_bytes
+            + sparams.MDPU_DELIMITER_SIZE_bytes
+            + sparams.MPDU_PADDING_SIZE_bytes,
             packet.src_id,
             packet.dst_id,
         )
@@ -90,7 +81,7 @@ class AMPDU(DataUnit):
 
 class RTS(DataUnit):
     def __init__(self, src_id: int, dst_id: int, creation_time_us: float):
-        super().__init__(creation_time_us, RTS_SIZE_bytes, src_id, dst_id)
+        super().__init__(creation_time_us, sparams.RTS_SIZE_bytes, src_id, dst_id)
 
         self.type = "RTS"
         self.is_mgmt_ctrl_frame = True
@@ -101,7 +92,7 @@ class RTS(DataUnit):
 
 class CTS(DataUnit):
     def __init__(self, src_id: int, dst_id: int, creation_time_us: float):
-        super().__init__(creation_time_us, CTS_SIZE_bytes, src_id, dst_id)
+        super().__init__(creation_time_us, sparams.CTS_SIZE_bytes, src_id, dst_id)
 
         self.type = "CTS"
         self.is_mgmt_ctrl_frame = True
@@ -114,7 +105,7 @@ class BACK(DataUnit):
     def __init__(self, ampdu: AMPDU, src_id: int, dst_id: int, creation_time_us: float):
         super().__init__(
             creation_time_us,
-            BACK_SIZE_PER_MPDU_bytes * len(ampdu.mpdus),
+            sparams.BACK_SIZE_PER_MPDU_bytes * len(ampdu.mpdus),
             src_id,
             dst_id,
         )
@@ -137,7 +128,7 @@ class PPDU(DataUnit):
     def __init__(self, data_unit: DataUnit, creation_time_us: float):
         super().__init__(
             creation_time_us,
-            data_unit.size_bytes + PHY_HEADER_SIZE_bytes,
+            data_unit.size_bytes + sparams.PHY_HEADER_SIZE_bytes,
             data_unit.src_id,
             data_unit.dst_id,
         )

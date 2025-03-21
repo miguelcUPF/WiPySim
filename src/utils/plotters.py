@@ -1,14 +1,17 @@
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
+
+from src.utils.file_manager import get_project_root
+from src.utils.event_logger import get_logger
+from src.components.network import AP, STA, Network
+
 from matplotlib import rcParams
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import proj3d
 from collections import deque
 
-from src.utils.file_manager import get_project_root
-from src.utils.event_logger import get_logger
-from src.user_config import ENABLE_FIGS_DISPLAY, ENABLE_FIGS_SAVING, FIGS_SAVE_PATH
-from src.components.network import AP, STA, Network
-
 import os
+import math
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -38,17 +41,20 @@ class Arrow3D(FancyArrowPatch):
 class BasePlotter:
     """Base class for all plotters, handling saving and displaying plots."""
 
-    def __init__(self, env=None):
-        self.name = "PLOTTER"
+    def __init__(self, cfg: cfg, sparams: sparams, env=None):
+        self.cfg = cfg
+        self.sparams = sparams
+        self.env = env
 
-        self.logger = get_logger(self.name, env)
+        self.name = "PLOTTER"
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
     def save_plot(self, fig, save_name="plot", save_format="pdf"):
         """Saves the plot with a unique filename."""
         if not save_name or not save_format:
             return
 
-        save_folder = os.path.join(get_project_root(), FIGS_SAVE_PATH)
+        save_folder = os.path.join(get_project_root(), self.cfg.FIGS_SAVE_PATH)
         os.makedirs(save_folder, exist_ok=True)
 
         filepath = os.path.join(save_folder, f"{save_name}.{save_format}")
@@ -59,8 +65,8 @@ class BasePlotter:
 class NetworkPlotter(BasePlotter):
     """Handles plotting a network graph."""
 
-    def __init__(self, env=None):
-        super().__init__(env)
+    def __init__(self, cfg: cfg, sparams: sparams, env=None):
+        super().__init__(cfg, sparams, env)
 
     def plot_network(
         self,
@@ -94,7 +100,7 @@ class NetworkPlotter(BasePlotter):
         None
         """
         if network is None or nx.is_empty(network.graph):
-            self.logger.warning("Network is empty. Nothing to plot.")
+            self.logger.error("Network is empty. Nothing to plot.")
             return
 
         plt.ion()
@@ -203,7 +209,7 @@ class NetworkPlotter(BasePlotter):
             mlines.Line2D([0], [0], color=bss_colors[bss], lw=4, label=f"BSS: {bss}")
             for bss in unique_bss
         ]
-        legend_elements = [
+        legend_elements_nodes = [
             mlines.Line2D(
                 [],
                 [],
@@ -229,7 +235,7 @@ class NetworkPlotter(BasePlotter):
         ]
 
         ax.legend(
-            handles=legend_elements_bss + legend_elements,
+            handles=legend_elements_bss + legend_elements_nodes,
             loc="best",
             fontsize="small",
             frameon=False,
@@ -244,17 +250,17 @@ class NetworkPlotter(BasePlotter):
 
         plt.tight_layout()
 
-        if ENABLE_FIGS_SAVING:
+        if self.cfg.ENABLE_FIGS_SAVING:
             self.save_plot(fig, save_name, save_format)
-        if ENABLE_FIGS_DISPLAY:
+        if self.cfg.ENABLE_FIGS_DISPLAY:
             plt.show()
 
 
 class TrafficPlotter(BasePlotter):
     """Handles plotting generated traffic data."""
 
-    def __init__(self, env=None, max_data_units=500):
-        super().__init__(env)
+    def __init__(self, cfg: cfg, sparams: sparams, env=None, max_data_units=500):
+        super().__init__(cfg, sparams, env)
         self.traffic_data = deque(maxlen=max_data_units)
 
     def add_data_unit(self, data_unit):
@@ -269,7 +275,7 @@ class TrafficPlotter(BasePlotter):
         `time_attr` can be 'creation_time_us' or 'reception_time_us'.
         """
         if not self.traffic_data:
-            self.logger.warning(f"No data to plot: {title}")
+            self.logger.error(f"No data to plot: {title}")
             return
 
         plt.ion()
@@ -317,16 +323,149 @@ class TrafficPlotter(BasePlotter):
 
         plt.tight_layout()
 
-        if ENABLE_FIGS_SAVING and save_name is not None:
+        if self.cfg.ENABLE_FIGS_SAVING and save_name is not None:
             self.save_plot(fig, save_name, save_format)
 
-        if ENABLE_FIGS_DISPLAY:
+        if self.cfg.ENABLE_FIGS_DISPLAY:
             plt.show()
 
-    def show_generation(self, **kwargs):
+    def plot_generation(self, **kwargs):
         """Plots packet creation times."""
         self._plot_traffic(time_attr="creation_time_us", **kwargs)
 
-    def show_reception(self, **kwargs):
+    def plot_reception(self, **kwargs):
         """Plots packet reception times."""
         self._plot_traffic(time_attr="reception_time_us", **kwargs)
+
+
+class CollisionProbPlotter(BasePlotter):
+    def __init__(self, cfg: cfg, sparams: sparams, env=None):
+        super().__init__(cfg, sparams, env)
+
+    def validate_data(self, data, m_list, cw_mins):
+        """Logs errors for missing or incorrect data but continues plotting."""
+        for cw_min in cw_mins:
+            if cw_min not in data:
+                self.logger.error(f"Missing CW_MIN={cw_min} in data.")
+                continue
+
+            for m in m_list:
+                if m not in data[cw_min]:
+                    self.logger.error(f"Missing m={m} for CW_MIN={cw_min}")
+                    continue
+
+                for n, values in data[cw_min][m].items():
+                    if not isinstance(n, int):
+                        self.logger.error(
+                            f"Invalid n={n} (should be int) for CW_MIN={cw_min}, m={m}"
+                        )
+                    if (
+                        not isinstance(values, dict)
+                        or "simulated" not in values
+                        or "theoretical" not in values
+                    ):
+                        self.logger.error(
+                            f"Missing required keys in data[{cw_min}][{m}][{n}]"
+                        )
+                    if not (0 <= values.get("simulated", 0) <= 1) or not (
+                        0 <= values.get("theoretical", 0) <= 1
+                    ):
+                        self.logger.error(
+                            f"Invalid collision probability in data[{cw_min}][{m}][{n}] (should be between 0 and 1)"
+                        )
+
+    def plot_prob(
+        self,
+        data: dict,
+        m_list: list,
+        cw_mins: list,
+        save_name="collision_prob",
+        save_format="pdf",
+    ):
+        plt.ion()
+
+        self.validate_data(data, m_list, cw_mins)
+
+        num_subplots = len(cw_mins)
+        num_cols = 3
+        num_rows = math.ceil(num_subplots / num_cols)  # Auto-adjust row count
+
+        fig, axes = plt.subplots(num_rows, num_cols, figsize=(10, 6), squeeze=False)
+        axes = axes.flatten()  # Convert to 1D for easier iteration
+
+        tableau_colors = list(mcolors.TABLEAU_COLORS.values())  # Use Tableau colors
+        markers = {"simulated": "o--", "theoretical": "s-"}  # Line styles with markers
+
+        for idx, (cw_min, ax) in enumerate(zip(cw_mins, axes)):
+            ax.set_title(f"Collision Probability (CW_MIN={cw_min})", fontsize=10)
+            ax.set_ylabel("Collision Probability")
+            ax.set_xlabel("Number of STAs")
+            ax.set_ylim(0, 1)
+
+            legend_elements = []  # Custom legend elements
+
+            for i, m in enumerate(m_list):
+                color = tableau_colors[i % len(tableau_colors)]  # Cycle through colors
+
+                n_values = sorted(data[cw_min][m].keys())
+                sim_values = [data[cw_min][m][n]["simulated"] for n in n_values]
+                theo_values = [data[cw_min][m][n]["theoretical"] for n in n_values]
+
+                ax.plot(
+                    n_values,
+                    sim_values,
+                    markers["simulated"],
+                    color=color,
+                    markerfacecolor="none",
+                )
+                ax.plot(
+                    n_values,
+                    theo_values,
+                    markers["theoretical"],
+                    color=color,
+                    markerfacecolor="none",
+                )
+
+                # Add rectangle legend entry for m value
+                legend_elements.append(
+                    plt.Rectangle((0, 0), 1, 1, color=color, label=f"m={m}")
+                )
+
+            legend_elements.append(
+                mlines.Line2D(
+                    [],
+                    [],
+                    color="black",
+                    linestyle="--",
+                    marker="o",
+                    markerfacecolor="none",
+                    label="Simulated",
+                )
+            )
+            legend_elements.append(
+                mlines.Line2D(
+                    [],
+                    [],
+                    color="black",
+                    linestyle="-",
+                    marker="s",
+                    markerfacecolor="none",
+                    label="Theoretical",
+                )
+            )
+
+            ax.legend(
+                handles=legend_elements, loc="best", fontsize="small", frameon=False
+            )
+
+        # Hide unused subplots if cw_mins < num_rows * num_cols
+        for idx in range(len(cw_mins), len(axes)):
+            fig.delaxes(axes[idx])
+
+        plt.tight_layout()
+
+        if self.cfg.ENABLE_FIGS_SAVING and save_name is not None:
+            self.save_plot(fig, save_name, save_format)
+
+        if self.cfg.ENABLE_FIGS_DISPLAY:
+            plt.show()

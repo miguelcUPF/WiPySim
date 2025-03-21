@@ -1,3 +1,6 @@
+from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams
+
 from src.utils.event_logger import get_logger
 from src.components.network import Network, Node
 from src.utils.plotters import NetworkPlotter
@@ -11,13 +14,8 @@ from src.utils.messages import (
 )
 
 import simpy
-
-import importlib
 import matplotlib.pyplot as plt
 
-import src.user_config as cfg
-import src.utils.event_logger
-import src.utils.plotters
 
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True
@@ -30,24 +28,7 @@ cfg.FIGS_SAVE_PATH = "figs/tests"
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
-importlib.reload(src.utils.event_logger)
-importlib.reload(src.utils.plotters)
-
-
-class DummyTrafficSource:
-    def __init__(self, env: simpy.Environment, node: Node, src_id: int, dst_id: int):
-        self.env = env
-
-        self.node = node
-
-        self.src_id = src_id
-        self.dst_id = dst_id
-
-    def stop(self):
-        return
-
-
-BSSs = [
+cfg.BSSs = [
     {
         "id": 1,  # A BSS
         "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
@@ -72,16 +53,40 @@ BSSs = [
     },
 ]
 
+
+class DummyTrafficSource:
+    def __init__(
+        self,
+        cfg: cfg,
+        sparams: sparams,
+        env: simpy.Environment,
+        node: Node,
+        src_id: int,
+        dst_id: int,
+    ):
+        self.cfg = cfg
+        self.sparams = sparams
+        self.env = env
+
+        self.node = node
+
+        self.src_id = src_id
+        self.dst_id = dst_id
+
+    def stop(self):
+        return
+
+
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
+
+    logger = get_logger("TEST", cfg, sparams)
+
     print(STARTING_SIMULATION_MSG)
 
     env = simpy.Environment()
 
-    logger = get_logger("TEST", env)
-
-    network = Network(env)
-
+    network = Network(cfg, sparams, env)
     # Test creating BSSs
     logger.header(f"Creating BSSs...")
     logger.info(f"APs in Network (before): {list(ap.id for ap in network.get_aps())}")
@@ -89,7 +94,7 @@ if __name__ == "__main__":
         f"STAs in Network (before): {list(sta.id for sta in network.get_stas())}"
     )
 
-    initialize_network(env, BSSs, cfg.NETWORK_BOUNDS_m, network)
+    network = initialize_network(cfg, sparams, env)
 
     logger.info(f"APs in Network (after): {list(ap.id for ap in network.get_aps())}")
     logger.info(
@@ -145,15 +150,15 @@ if __name__ == "__main__":
     logger.header(f"Adding Traffic Sources...")
 
     ap1 = network.get_node(1)
-    ap1.add_traffic_flow(DummyTrafficSource(env, ap1, 1, 2))
-    ap1.add_traffic_flow(DummyTrafficSource(env, ap1, 1, 3))
+    ap1.add_traffic_flow(DummyTrafficSource(cfg, sparams, env, ap1, 1, 2))
+    ap1.add_traffic_flow(DummyTrafficSource(cfg, sparams, env, ap1, 1, 3))
 
     ap4 = network.get_node(4)
-    ap4.add_traffic_flow(DummyTrafficSource(env, ap4, 4, 5))
+    ap4.add_traffic_flow(DummyTrafficSource(cfg, sparams, env, ap4, 4, 5))
 
     # Test network plot
     logger.header(f"Plotting Network...")
-    plotter = NetworkPlotter(env)
+    plotter = NetworkPlotter(cfg, sparams, env)
     plotter.plot_network(network)
 
     # Test clearing network

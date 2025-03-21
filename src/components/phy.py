@@ -1,15 +1,21 @@
-from typing import cast
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
 
 from src.components.network import Node, AP
 from src.utils.event_logger import get_logger
 from src.utils.data_units import DataUnit, PPDU
+
+
+from typing import cast
 
 import random
 import simpy
 
 
 class PHY:
-    def __init__(self, env: simpy.Environment, node: Node):
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, node: Node):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
 
         self.node = node
@@ -20,7 +26,7 @@ class PHY:
         self.mcs_index = None
 
         self.name = "PHY"
-        self.logger = get_logger(self.name, env)
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
         self.env.process(self.run())
 

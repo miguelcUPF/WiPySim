@@ -1,18 +1,24 @@
+from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg
+
 from src.components.network import Node
 from src.traffic.recorder import TrafficRecorder
 from src.utils.data_units import Packet
 
 import simpy
-import pandas as pd
 
 
 class APP:
-    def __init__(self, env: simpy.Environment, node: Node):
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, node: Node):
+        self.cfg = cfg
+        self.sparams = sparams
         self.env = env
-        self.name = "APP"
+
         self.node = node
 
-        self.recorder = TrafficRecorder(self.node.id)
+        self.recorder = TrafficRecorder(cfg, sparams, self.node.id)
+
+        self.name = "APP"
 
     def packet_to_mac(self, packet: Packet):
         """Receives a packet from a traffic source and forwards it to MAC."""

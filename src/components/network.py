@@ -1,14 +1,20 @@
-import networkx as nx
-import math
-import simpy
+from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams
 
 from src.utils.event_logger import get_logger
 from src.utils.statistics import TransmissionStats, ReceptionStats, NetworkStats
 
 
+import networkx as nx
+import math
+import simpy
+
+
 class Node:
     def __init__(
         self,
+        cfg: cfg,
+        sparams: sparams,
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
@@ -28,9 +34,9 @@ class Node:
 
         self.medium: MEDIUM = medium
 
-        self.app_layer = APP(env, self)
-        self.mac_layer = MAC(env, self)
-        self.phy_layer = PHY(env, self)
+        self.app_layer = APP(cfg, sparams, env, self)
+        self.mac_layer = MAC(cfg, sparams, env, self)
+        self.phy_layer = PHY(cfg, sparams, env, self)
 
         self.tx_stats = TransmissionStats()
         self.rx_stats = ReceptionStats()
@@ -38,7 +44,7 @@ class Node:
         self.traffic_flows = []
 
         self.name = "NODE"
-        self.logger = get_logger(self.name, env)
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
     def add_traffic_flow(self, traffic_flow):
         self.traffic_flows.append(traffic_flow)
@@ -53,6 +59,8 @@ class Node:
 class AP(Node):
     def __init__(
         self,
+        cfg: cfg,
+        sparams: sparams,
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
@@ -60,7 +68,7 @@ class AP(Node):
         medium,
     ):
         """Access Point (AP) node."""
-        super().__init__(env, id, position, "AP", medium)
+        super().__init__(cfg, sparams, env, id, position, "AP", medium)
         self.bss_id = bss_id
 
         self.associated_stas = []
@@ -79,6 +87,8 @@ class AP(Node):
 class STA(Node):
     def __init__(
         self,
+        cfg: cfg,
+        sparams: sparams,
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
@@ -87,7 +97,7 @@ class STA(Node):
         medium,
     ):
         """Station (STA) node, associated with an AP and BSS."""
-        super().__init__(env, id, position, "STA", medium)
+        super().__init__(cfg, sparams, env, id, position, "STA", medium)
         self.bss_id = bss_id
         self.ap = ap
         ap.add_sta(self)  # Automatically associate with the AP
@@ -99,21 +109,24 @@ class STA(Node):
 
 
 class Network:
-    def __init__(self, env: simpy.Environment = None):
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment):
         from src.components.medium import MEDIUM
 
         self.env = env
+
+        self.cfg = cfg
+        self.sparams = sparams
 
         self.graph = nx.Graph()
 
         self.nodes = {}
 
-        self.medium = MEDIUM(env, self)
+        self.medium = MEDIUM(cfg, sparams, env, self)
 
-        self.stats = NetworkStats(self)
+        self.stats = NetworkStats(cfg, sparams, self)
 
         self.name = "NETWORK"
-        self.logger = get_logger(self.name, env)
+        self.logger = get_logger(self.name, cfg, sparams, env)
 
     @staticmethod
     def _calculate_distance(
@@ -142,7 +155,7 @@ class Network:
                 return None
 
         self.logger.debug(f"Adding AP {ap_id} to BSS {bss_id} at position {position}")
-        ap = AP(self.env, ap_id, position, bss_id, self.medium)
+        ap = AP(self.cfg, self.sparams, self.env, ap_id, position, bss_id, self.medium)
         self.nodes[ap_id] = ap
         self.graph.add_node(ap_id, pos=position, type="AP", bss_id=bss_id)
         return ap
@@ -167,7 +180,9 @@ class Network:
         self.logger.debug(
             f"Adding STA {sta_id} to BSS {bss_id} at position {position}, connected to AP {ap.id}"
         )
-        sta = STA(self.env, sta_id, position, bss_id, ap, self.medium)
+        sta = STA(
+            self.cfg, self.sparams, self.env, sta_id, position, bss_id, ap, self.medium
+        )
         self.nodes[sta_id] = sta
         self.graph.add_node(sta_id, pos=position, type="STA", bss_id=bss_id)
         self.graph.add_edge(ap.id, sta_id)
@@ -222,7 +237,7 @@ class Network:
 
     def get_distance_between_nodes(
         self, node1_id: int, node2_id: int, digits=0
-    ) -> float:  # TODO
+    ) -> float:
         node1 = self.get_node(node1_id)
         node2 = self.get_node(node2_id)
 
