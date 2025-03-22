@@ -33,9 +33,6 @@ class PHY:
     def set_channels(self, channels_ids: list[int]):
         self.channels_ids = channels_ids
 
-        for ch_id in self.channels_ids:
-            self.node.medium.channels[ch_id].add_node(self.node)
-
     def stop(self):
         pass
 
@@ -118,17 +115,8 @@ class PHY:
             f"{self.node.type} {self.node.id} -> Updated PHY settings (mcs_index: {self.mcs_index})"
         )
 
-    def are_channels_idle(self):
-        return self.node.medium.are_channels_idle(self.node, self.channels_ids)
-
     def is_primary_channel_idle(self):
         return self.node.medium.are_channels_idle(self.node, [self.primary_channel_id])
-
-    def occupy_channels(self):
-        self.node.medium.occupy_channels(self.node, self.channels_ids)
-
-    def release_channels(self):
-        self.node.medium.release_channels(self.node, self.channels_ids)
 
     def end_nav(self):
         self.node.medium.end_nav(self.node.id, self.channels_ids)

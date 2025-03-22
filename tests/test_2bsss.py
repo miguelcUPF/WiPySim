@@ -23,9 +23,12 @@ sparams.MAX_TX_QUEUE_SIZE_pkts = 100
 sparams.ENABLE_RTS_CTS = True
 sparams.MPDU_ERROR_PROBABILITY = 0.1
 
+sparams.CW_MIN = 4
+sparams.CW_MAX = 2**0*sparams.CW_MIN
+
 sparams.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e4
+cfg.SIMULATION_TIME_us = 2e5
 cfg.SEED = 1
 
 cfg.ENABLE_CONSOLE_LOGGING = True

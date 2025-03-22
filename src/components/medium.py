@@ -34,7 +34,6 @@ class Channel20MHz:
 
         self.id = id
 
-        self.nodes = {}  # Nodes using the channel
         self.nodes_transmitting = {}  # Nodes currently transmitting
 
         self.nav_occupied = (
@@ -45,6 +44,7 @@ class Channel20MHz:
 
         self.collision_detected = False  # Flag to indicate if collision is detected
 
+        self.idle_start_time = self.env.now
         self.busy_start_time = None
 
         self.stats = ChannelStats()
@@ -52,19 +52,17 @@ class Channel20MHz:
         self.name = "CHANNEL"
         self.logger = get_logger(self.name, cfg, sparams, env)
 
-    def add_node(self, node: Node):
-        self.logger.debug(f"Channel {self.id} -> Allocated to {node.type} {node.id}")
-        self.nodes[node.id] = node
-
     def is_idle(self, node: Node = None):
         """Returns True if the channel is idle, False if busy."""
         if node is not None and node.id in self.nav_nodes_ids:
             return True
-        return len(self.nodes_transmitting) == 0 and not self.nav_occupied
+        return self.idle_start_time is not None
 
     def occupy(self, node: Node):
         """Marks the channel as busy by a node and checks for collisions."""
         self.logger.debug(f"Channel {self.id} -> Occupied by {node.type} {node.id}")
+
+        self.idle_start_time = None
 
         if self.busy_start_time is None:
             self.busy_start_time = self.env.now
@@ -94,6 +92,7 @@ class Channel20MHz:
             self.nav_occupied = False
             self.nav_master_id = None
             self.nav_nodes_ids = set()
+            self.idle_start_time = self.env.now
 
     def release(self, node: Node):
         """Removes a node from the channel."""
@@ -105,6 +104,10 @@ class Channel20MHz:
             self.stats.airtime_us += self.env.now - self.busy_start_time
             self.busy_start_time = None
             self.collision_detected = False
+
+            if not self.nav_occupied:
+                self.idle_start_time = self.env.now
+
 
     def handle_collision(self):
         """Handles collision."""
@@ -144,10 +147,10 @@ class MEDIUM:
             )
 
         return valid_channel_bonds
-
+    
     def are_all_channels_idle(self):
         return all(self.channels[ch_id].is_idle() for ch_id in self.channels)
-
+    
     def are_channels_idle(self, node: Node, channels_ids: list[int]):
         """Checks if all selected channels are idle."""
         return all(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
@@ -218,22 +221,21 @@ class MEDIUM:
 
             tx_duration_us = size_bytes * 8 / data_rate_bps * 1e6
 
-            return tx_duration_us
+            return math.ceil(tx_duration_us) if tx_duration_us % 1 != 0 else tx_duration_us
 
         self.logger.header(
             f"Transmitting {ppdu.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
         )
 
+        self.occupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
+
         tx_duration_us = _calculate_tx_time(
             mcs_index, len(channels_ids) * 20, ppdu.size_bytes
         )
 
-        collision_detected = False
-        start_time = self.env.now
-        while self.env.now - start_time < tx_duration_us:
-            if self.any_collision_detected(channels_ids):
-                collision_detected = True
-            yield self.env.timeout(1)
+        yield self.env.timeout(tx_duration_us)
+
+        collision_detected = self.any_collision_detected(channels_ids)
 
         self.stats.ppdus_tx += 1
 
@@ -248,6 +250,8 @@ class MEDIUM:
             )
 
             self.stats.ppdus_fail += 1
+        
+        self.release_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
     def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
         def _calculate_path_loss(distance_m: float):
@@ -259,7 +263,7 @@ class MEDIUM:
 
             path_loss = (
                 path_loss_1m_dB
-                + 10 * self.sparams.PATH_LOSS_EXPONENT * math.log10(distance_m / 1)
+                + 10 * self.sparams.PATH_LOSS_EXPONENT * math.log10(max(distance_m, 0.1) / 1)
             )
 
             if self.sparams.ENABLE_SHADOWING:

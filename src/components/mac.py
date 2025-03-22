@@ -33,7 +33,7 @@ class MAC:
 
         self.node = node
 
-        self.state = MACState.IDLE  # TODO: record and plot states
+        self.state = MACState.IDLE
 
         self.tx_queue: simpy.Store[MPDU] = simpy.Store(
             env, capacity=self.sparams.MAX_TX_QUEUE_SIZE_pkts
@@ -47,6 +47,7 @@ class MAC:
         self.tx_ampdu: AMPDU = None
         self.rx_back: BACK = None
 
+        self.tx_queue_event = None
         self.cts_event = None
         self.back_event = None
 
@@ -72,6 +73,9 @@ class MAC:
             mpdu = MPDU(packet, self.env.now)
             self.tx_queue.put(mpdu)
 
+            self.tx_queue_event.succeed() if self.tx_queue_event else None
+            self.tx_queue_event = None
+
             self.node.tx_stats.add_to_tx_queue_history(
                 self.env.now, len(self.tx_queue.items)
             )
@@ -88,11 +92,11 @@ class MAC:
                 return item
         return None
 
-    def wait_for_idle(self, duration: float):
+    def wait_for_idle(self, duration_us: float):
         """Check if all the used channels have been idle for the given duration."""
         self.set_state(MACState.CONTEND)
         self.logger.header(
-            f"{self.node.type} {self.node.id} -> Contending for primary channel {self.node.phy_layer.primary_channel_id} during {duration} μs ..."
+            f"{self.node.type} {self.node.id} -> Contending for primary channel {self.node.phy_layer.primary_channel_id} during {duration_us} μs ..."
         )
 
         start_time = None
@@ -101,14 +105,15 @@ class MAC:
             if self.node.phy_layer.is_primary_channel_idle():
                 if start_time is None:
                     start_time = self.env.now
-                elif self.env.now - start_time >= duration:
+                elif self.env.now - start_time >= duration_us:
                     self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} has been idle for {duration} μs"
+                        f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} has been idle for {duration_us} μs"
                     )
                     return
             else:
                 start_time = None  # Reset the timer if the channel becomes busy
             yield self.env.timeout(1)
+
 
     def backoff(self):
         self.logger.header(f"{self.node.type} {self.node.id} -> Starting Backoff...")
@@ -320,11 +325,9 @@ class MAC:
         self.node.tx_stats.data_units_tx += 1
         self.node.tx_stats.tx_mac_bytes += data_unit.size_bytes
 
-        self.node.phy_layer.occupy_channels()
         start_tx_time_us = self.env.now
         yield self.env.process(self.node.phy_layer.transmit(data_unit))
         self.node.tx_stats.airtime_us += self.env.now - start_tx_time_us
-        self.node.phy_layer.release_channels()
 
     def receive(self, data_unit: DataUnit):
 
@@ -434,7 +437,6 @@ class MAC:
     def run(self):
         """Handles channel access, contention, and transmission"""
         while True:
-            yield self.env.timeout(1)
             if len(self.tx_queue.items) > 0:
                 yield self.env.process(self.wait_for_idle(self.sparams.DIFS_us))
                 yield self.env.process(self.backoff())
@@ -455,3 +457,6 @@ class MAC:
                             f"{self.node.type} {self.node.id} -> No need to send RTS/CTS for AMPDU {self.tx_ampdu.id} (size={self.tx_ampdu.size_bytes} bytes < {self.sparams.RTS_THRESHOLD_bytes} bytes)"
                         )
                     yield self.env.process(self.transmit_ampdu())
+            else:
+                self.tx_queue_event = self.env.event()
+                yield self.tx_queue_event

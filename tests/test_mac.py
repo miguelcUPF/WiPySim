@@ -103,17 +103,8 @@ class DummyPHY:
     def receive_mcs_info(self, mcs_index: int):
         pass
 
-    def are_channels_idle(self):
-        return self.node.medium.are_channels_idle(self.channels_ids)
-
     def is_primary_channel_idle(self):
         return self.node.medium.are_channels_idle([self.primary_channel_id])
-
-    def occupy_channels(self):
-        pass
-
-    def release_channels(self):
-        pass
 
     def end_nav(self):
         pass

@@ -18,10 +18,13 @@ from src.utils.messages import (
     PRESS_TO_EXIT_MSG,
 )
 
+from tqdm import tqdm
+
 import matplotlib.pyplot as plt
 import numpy as np
 import concurrent.futures
 import simpy
+import copy
 import os
 
 
@@ -31,7 +34,7 @@ sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e6
+cfg.SIMULATION_TIME_us = 2e5
 cfg.SEED = 1
 
 cfg.ENABLE_CONSOLE_LOGGING = False
@@ -61,7 +64,7 @@ cfg.FIGS_SAVE_PATH = "figs/tests"
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 cfg.TRAFFIC_MODEL = "Poisson"
-cfg.TRAFFIC_LOAD_kbps = 200e3
+cfg.TRAFFIC_LOAD_kbps = 100e3
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
@@ -92,9 +95,7 @@ def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> t
         stas_simulated_p.append(
             node_stats["tx"]["tx_failures"] / node_stats["tx"]["tx_attempts"]
         )
-    
     simulated_p = np.mean(stas_simulated_p) if stas_simulated_p else 0
-    #simulated_p = network.stats.total_tx_failures / network.stats.total_tx_attempts
     theoretical_p = compute_collision_probability(n, m, cw_min)
 
     return n, m, cw_min, simulated_p, theoretical_p
@@ -118,13 +119,13 @@ if __name__ == "__main__":
         max_workers=os.cpu_count() // 2
     ) as executor:
         future_to_params = {
-            executor.submit(run_simulation, cfg, sparams, n, m, cw_min): (n, m, cw_min)
+            executor.submit(run_simulation, cfg(), sparams(), n, m, cw_min): (n, m, cw_min)
             for n in N
             for m in M
             for cw_min in CW_MIN
         }
 
-        for future in concurrent.futures.as_completed(future_to_params):
+        for future in tqdm(concurrent.futures.as_completed(future_to_params), total=len(future_to_params)):
             n, m, cw_min = future_to_params[future]
 
             n, m, cw_min, simulated_p, theoretical_p = future.result()
