@@ -7,7 +7,6 @@ from src.utils.support import (
     validate_params,
     validate_config,
     warn_overwriting_enabled_paths,
-    add_bss_automatically,
 )
 from src.utils.theoretical import compute_collision_probability
 from src.utils.plotters import CollisionProbPlotter
@@ -20,6 +19,7 @@ from src.utils.messages import (
 )
 
 import matplotlib.pyplot as plt
+import numpy as np
 import concurrent.futures
 import simpy
 import os
@@ -31,10 +31,10 @@ sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e5
+cfg.SIMULATION_TIME_us = 2e6
 cfg.SEED = 1
 
-cfg.ENABLE_CONSOLE_LOGGING = True
+cfg.ENABLE_CONSOLE_LOGGING = False
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
 cfg.EXCLUDED_LOGS = {
@@ -60,10 +60,8 @@ cfg.FIGS_SAVE_PATH = "figs/tests"
 
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
-cfg.NUMBER_OF_BSSS = 1
-cfg.NUMBER_OF_STAS_PER_BSS = 1
 cfg.TRAFFIC_MODEL = "Poisson"
-cfg.TRAFFIC_LOAD_kbps = 100e3
+cfg.TRAFFIC_LOAD_kbps = 200e3
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
@@ -74,16 +72,10 @@ CW_MIN = [4, 8, 16, 32, 64, 128]
 
 
 def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> tuple:
-    sparams.COMMON_RETRY_LIMIT = m
     sparams.CW_MIN = cw_min
+    sparams.CW_MAX = 2**m * cw_min
 
-    BSSs = []
-    j = 0
-    for i in range(n):
-        BSSs = add_bss_automatically(BSSs, i - 1, i + j)
-        j += 1
-
-    cfg.BSSs_Advanced = BSSs
+    cfg.NUMBER_OF_BSSS = n
 
     env = simpy.Environment()
 
@@ -93,7 +85,16 @@ def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> t
 
     network.stats.collect_stats()
 
-    simulated_p = network.stats.total_tx_failures / network.stats.total_tx_attempts
+    stas_simulated_p = []
+    for node_stats in network.stats.per_node_stats.values():
+        if node_stats["tx"]["tx_attempts"] == 0:
+            continue
+        stas_simulated_p.append(
+            node_stats["tx"]["tx_failures"] / node_stats["tx"]["tx_attempts"]
+        )
+    
+    simulated_p = np.mean(stas_simulated_p) if stas_simulated_p else 0
+    #simulated_p = network.stats.total_tx_failures / network.stats.total_tx_attempts
     theoretical_p = compute_collision_probability(n, m, cw_min)
 
     return n, m, cw_min, simulated_p, theoretical_p
@@ -125,25 +126,18 @@ if __name__ == "__main__":
 
         for future in concurrent.futures.as_completed(future_to_params):
             n, m, cw_min = future_to_params[future]
-            try:
-                n, m, cw_min, simulated_p, theoretical_p = future.result()
-                col_prob_results[cw_min][m][n] = {
-                    "simulated": simulated_p,
-                    "theoretical": theoretical_p,
-                }
 
-                logger.info(f"n: {n}, m: {m}, cw_min: {cw_min}")
-                logger.info(
-                    f"Simulation Collision Probability: {simulated_p * 100:.2f}%"
-                )
-                logger.info(
-                    f"Theoretical Collision Probability: {theoretical_p * 100:.2f}%"
-                )
+            n, m, cw_min, simulated_p, theoretical_p = future.result()
+            col_prob_results[cw_min][m][n] = {
+                "simulated": simulated_p,
+                "theoretical": theoretical_p,
+            }
 
-            except Exception as e:
-                logger.error(
-                    f"Error in simulation (n={n}, m={m}, cw_min={cw_min}): {e}"
-                )
+            logger.info(f"n: {n}, m: {m}, cw_min: {cw_min}")
+            logger.info(f"Simulation Collision Probability: {simulated_p * 100:.2f}%")
+            logger.info(
+                f"Theoretical Collision Probability: {theoretical_p * 100:.2f}%"
+            )
 
     CollisionProbPlotter(cfg, sparams).plot_prob(col_prob_results, M, CW_MIN)
 

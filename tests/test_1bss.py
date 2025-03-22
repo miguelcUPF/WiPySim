@@ -23,32 +23,24 @@ sparams.MAX_TX_QUEUE_SIZE_pkts = 100  # Test: 10, 50, 100
 sparams.ENABLE_RTS_CTS = True  # Test: False and True
 sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
 
+sparams.NUM_CHANNELS = 1
+
 cfg.SIMULATION_TIME_us = 2e4
 cfg.SEED = 1
 
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"LOAD": ["ALL"]}
+cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
+cfg.NUMBER_OF_BSSS = 1
+cfg.TRAFFIC_MODEL = "Poisson"
+cfg.TRAFFIC_LOAD_kbps = 100e3
 
-cfg.BSSs_Advanced = [
-    {
-        "id": 1,  # A BSS
-        "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
-        "stas": [{"id": 2, "pos": (3, 4, 0)}],
-        "traffic_flows": [
-            {
-                "destination": 2,
-                "model": {"name": "Poisson"},
-            },
-        ],
-    }
-]
+cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 
 if __name__ == "__main__":

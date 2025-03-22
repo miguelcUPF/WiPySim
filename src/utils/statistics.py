@@ -213,7 +213,7 @@ class NetworkStats:
 
             self.pkt_loss_ratio = (
                 self.total_pkts_tx - self.total_pkts_rx
-            ) / self.total_pkts_tx
+            ) / self.total_pkts_tx if self.total_pkts_tx > 0 else 0
 
             if not tx_stats.tx_queue_len_history.empty:
                 mean_queue_len = tx_stats.tx_queue_len_history["queue_len"].mean()

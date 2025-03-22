@@ -75,8 +75,6 @@ class ConfigFilter(logging.Filter):
         self.sparams = sparams
 
     def filter(self, record):
-        if not self.cfg.ENABLE_CONSOLE_LOGGING:
-            return False
         if record.levelname in self.cfg.EXCLUDED_LOGS.get(
             record.name, []
         ) or "ALL" in self.cfg.EXCLUDED_LOGS.get(record.name, []):
@@ -148,7 +146,11 @@ def get_logger(module_name: str, cfg: cfg, sparams: sparams, env=None) -> loggin
 
     logger.setLevel(HEADER_LEVEL)
 
-    if cfg.ENABLE_CONSOLE_LOGGING:
+    if not cfg.ENABLE_CONSOLE_LOGGING and not cfg.ENABLE_LOGS_RECORDING and module_name not in ["MAIN", "TEST"]:
+        logger.addHandler(logging.NullHandler())
+        return logger
+
+    if cfg.ENABLE_CONSOLE_LOGGING or module_name in ["MAIN", "TEST"]:
         console_handler = logging.StreamHandler()
         console_formatter = ConsoleFormatter(cfg, sparams, env)
         console_handler.setFormatter(console_formatter)

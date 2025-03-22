@@ -5,15 +5,13 @@ class UserConfig:
     SEED = 1  # Set to None for random behavior
 
     # --- Logging Configuration --- #
-    # Enable/disable displaying logs in the console (useful for debugging)
-    ENABLE_CONSOLE_LOGGING = True
+    ENABLE_CONSOLE_LOGGING = True # Enable/disable displaying logs in the console (useful for debugging, may affect performance)
     USE_COLORS_IN_LOGS = True  # Enable/disable colored logs
 
-    # Enable/disable recording logs (may affect performance)
-    ENABLE_LOGS_RECORDING = True
+    ENABLE_LOGS_RECORDING = True # Enable/disable recording logs (may affect performance)
     LOGS_RECORDING_PATH = "data/events"
 
-    # Logging exclusions
+    # Logging exclusions (if ENABLE_CONSOLE_LOGGING or ENABLE_LOGS_RECORDING is enabled)
     # Format: { "<module_name>": ["<excluded_log_level_1>", "<excluded_log_level_2>", ...] }
     # <module_name>: Module name (e.g., "NETWORK", "NODE", "GEN", "LOAD", "APP", "MAC", "PHY", "MEDIUM", "CHANNEL", "STATS")
     # <excluded_log_level>: Log levels to exclude (e.g., "HEADER","DEBUG", "INFO", "WARNING", "ALL")
@@ -49,12 +47,11 @@ class UserConfig:
 
     ## --- Network Configuration (Basic) --- ##
     # Basic:
-    # - A fixed number of Stations (STAs) per BSS.
+    # - A single STA per BSS.
     # - A single traffic generation model applied to all STAs (using specified traffic load but other default parameters).
     # - STAs and APs are randomly positioned within the network bounds.
     
     NUMBER_OF_BSSS = 1  # Number of Basic Service Sets (BSSs)
-    NUMBER_OF_STAS_PER_BSS = 1  # Number of STAs per BSS
     TRAFFIC_MODEL = "Poisson" # "Poisson", "Bursty", or "VR"
     TRAFFIC_LOAD_kbps = 100e3  # Traffic load in kbps
 

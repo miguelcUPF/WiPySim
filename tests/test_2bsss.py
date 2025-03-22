@@ -36,33 +36,11 @@ cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
+cfg.NUMBER_OF_BSSS = 2
+cfg.TRAFFIC_MODEL = "Poisson"
+cfg.TRAFFIC_LOAD_kbps = 100e3
 
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
-
-cfg.BSSs_Advanced = [
-    {
-        "id": 1,  # A BSS
-        "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
-        "stas": [{"id": 2, "pos": (3, 4, 0)}],
-        "traffic_flows": [
-            {
-                "destination": 2,
-                "model": {"name": "Poisson"},
-            },
-        ],
-    },
-    {
-        "id": 2,  # Another BSS
-        "ap": {"id": 4, "pos": (5, 5, 1)},  # BSS Access Point (AP)
-        "stas": [{"id": 5, "pos": (1, 2, 1)}],
-        "traffic_flows": [
-            {
-                "destination": 5,
-                "model": {"name": "Poisson"},
-            },
-        ],
-    },
-]
+cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 
 if __name__ == "__main__":

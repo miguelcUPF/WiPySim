@@ -194,14 +194,6 @@ def validate_config(cfg: cfg, logger: logging.Logger):
             logger.critical(
                 f"Invalid NUMBER_OF_BSSS: {cfg.NUMBER_OF_BSSS}. It must be at least 1."
             )
-        if not isinstance(cfg.NUMBER_OF_STAS_PER_BSS, int):
-            logger.critical(
-                f"Invalid NUMBER_OF_STAS_PER_BSS: {cfg.NUMBER_OF_STAS_PER_BSS}. It must be an integer."
-            )
-        if cfg.NUMBER_OF_STAS_PER_BSS < 1:
-            logger.critical(
-                f"Invalid NUMBER_OF_STAS_PER_BSS: {cfg.NUMBER_OF_STAS_PER_BSS}. It must be at least 1."
-            )
         if not isinstance(cfg.TRAFFIC_MODEL, str):
             logger.critical(
                 f"Invalid TRAFFIC_MODEL: {cfg.TRAFFIC_MODEL}. It must be a string."
@@ -473,22 +465,21 @@ def initialize_network(
             ap = network.add_ap(ap_id, ap_pos, bss_index + 1)
 
             # Create associated STAs
-            for _ in range(cfg.NUMBER_OF_STAS_PER_BSS):
-                last_id += 1
-                sta_id = last_id
-                sta_pos = _get_unique_position(bounds, used_positions)
-                network.add_sta(sta_id, sta_pos, bss_index + 1, ap)
+            last_id += 1
+            sta_id = last_id
+            sta_pos = _get_unique_position(bounds, used_positions)
+            network.add_sta(sta_id, sta_pos, bss_index + 1, ap)
 
-                traffic_generator = TrafficGenerator(
-                    cfg,
-                    sparams,
-                    env,
-                    ap,
-                    sta_id,
-                    name=cfg.TRAFFIC_MODEL,
-                    traffic_load_kbps=cfg.TRAFFIC_LOAD_kbps,
-                )
-                ap.add_traffic_flow(traffic_generator)
+            traffic_generator = TrafficGenerator(
+                cfg,
+                sparams,
+                env,
+                ap,
+                sta_id,
+                name=cfg.TRAFFIC_MODEL,
+                traffic_load_kbps=cfg.TRAFFIC_LOAD_kbps,
+            )
+            ap.add_traffic_flow(traffic_generator)
     else:
         bsss_config = cfg.BSSs_Advanced
 
