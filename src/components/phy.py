@@ -33,11 +33,23 @@ class PHY:
     def set_channels(self, channels_ids: list[int]):
         self.channels_ids = channels_ids
 
+    def set_primary_channel(self, id: int):
+        (
+            self.node.medium.release_as_primary_channel(
+                self.node, self.primary_channel_id
+            )
+            if self.primary_channel_id
+            else None
+        )
+
+        self.primary_channel_id = id
+        self.node.medium.assign_as_primary_channel(self.node, id)
+
     def stop(self):
         pass
 
     def select_channels(self):
-        # TODO: implement channels selection
+        # TODO: implement channel selection
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Selecting channels at random..."
         )
@@ -55,7 +67,7 @@ class PHY:
             f"{self.node.type} {self.node.id} -> Selecting primary channel at random..."
         )
 
-        self.primary_channel_id = random.choice(self.channels_ids)
+        self.set_primary_channel(random.choice(self.channels_ids))
 
         self.logger.info(
             f"{self.node.type} {self.node.id} -> Selected primary channel: {self.primary_channel_id}"
@@ -102,7 +114,7 @@ class PHY:
 
     def receive_channel_info(self, channels_ids: list[int], primary_channel_id: int):
         self.set_channels(channels_ids)
-        self.primary_channel_id = primary_channel_id
+        self.set_primary_channel(primary_channel_id)
 
         self.logger.info(
             f"{self.node.type} {self.node.id} -> Updated PHY settings (channels_ids: {', '.join(map(str, self.channels_ids))}, primary_channel_id: {self.primary_channel_id})"
@@ -117,6 +129,12 @@ class PHY:
 
     def is_primary_channel_idle(self):
         return self.node.medium.are_channels_idle(self.node, [self.primary_channel_id])
+
+    def set_primary_busy(self):
+        self.node.mac_layer.set_primary_busy()
+
+    def set_primary_idle(self):
+        self.node.mac_layer.set_primary_idle()
 
     def end_nav(self):
         self.node.medium.end_nav(self.node.id, self.channels_ids)

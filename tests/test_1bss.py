@@ -25,7 +25,7 @@ sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
 
 sparams.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e4
+cfg.SIMULATION_TIME_us = 1e4
 cfg.SEED = 1
 
 cfg.ENABLE_CONSOLE_LOGGING = True
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     for ap in network.get_aps():
         logger.info(
-            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}"
+            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}"
         )
 
     print(SIMULATION_TERMINATED_MSG)

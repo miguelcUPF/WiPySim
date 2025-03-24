@@ -126,6 +126,12 @@ class DummyMedium:
 
         self.channels = {1: DummyChannel20MHz(env, 1)}
 
+    def assign_as_primary_channel(self, node: Node, channel_id: int):
+        pass
+
+    def release_as_primary_channel(self, node: Node, channel_id: int):
+        pass
+
     def are_channels_idle(self, channels_ids: list[int]):
         return True if random.random() < IDLE_CHANNEL_PROBABILITY else False
 
@@ -183,7 +189,7 @@ if __name__ == "__main__":
 
     for ap in network.get_aps():
         logger.info(
-            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}"
+            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, , Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}"
         )
 
     print(SIMULATION_TERMINATED_MSG)

@@ -34,7 +34,10 @@ class Channel20MHz:
 
         self.id = id
 
-        self.nodes_transmitting = {}  # Nodes currently transmitting
+        self.primary_channel_nodes: dict[int, Node] = (
+            {}
+        )  # Nodes using the channel as primary
+        self.nodes_transmitting: dict[int, Node] = {}  # Nodes currently transmitting
 
         self.nav_occupied = (
             False  # Flag to indicate if the channel is occupied due to NAV
@@ -52,6 +55,12 @@ class Channel20MHz:
         self.name = "CHANNEL"
         self.logger = get_logger(self.name, cfg, sparams, env)
 
+    def assign_as_primary_channel(self, node: Node):
+        self.primary_channel_nodes[node.id] = node
+
+    def release_as_primary_channel(self, node: Node):
+        self.primary_channel_nodes.pop(node.id, None)
+
     def is_idle(self, node: Node = None):
         """Returns True if the channel is idle, False if busy."""
         if node is not None and node.id in self.nav_nodes_ids:
@@ -67,8 +76,9 @@ class Channel20MHz:
         if self.busy_start_time is None:
             self.busy_start_time = self.env.now
 
-        if node.id in self.nav_nodes_ids:
-            return
+        for node_id, p_node in self.primary_channel_nodes.items():
+            if node_id not in self.nav_nodes_ids:
+                p_node.phy_layer.set_primary_busy()
 
         self.nodes_transmitting[node.id] = node
 
@@ -93,6 +103,8 @@ class Channel20MHz:
             self.nav_master_id = None
             self.nav_nodes_ids = set()
             self.idle_start_time = self.env.now
+            for node_id, p_node in self.primary_channel_nodes.items():
+                p_node.phy_layer.set_primary_idle()
 
     def release(self, node: Node):
         """Removes a node from the channel."""
@@ -107,7 +119,8 @@ class Channel20MHz:
 
             if not self.nav_occupied:
                 self.idle_start_time = self.env.now
-
+                for node_id, p_node in self.primary_channel_nodes.items():
+                    p_node.phy_layer.set_primary_idle()
 
     def handle_collision(self):
         """Handles collision."""
@@ -126,7 +139,8 @@ class MEDIUM:
         self.network = network
 
         self.channels = {
-            ch: Channel20MHz(cfg, sparams, env, ch) for ch in range(1, self.sparams.NUM_CHANNELS + 1)
+            ch: Channel20MHz(cfg, sparams, env, ch)
+            for ch in range(1, self.sparams.NUM_CHANNELS + 1)
         }
 
         self.stats = MediumStats()
@@ -147,10 +161,10 @@ class MEDIUM:
             )
 
         return valid_channel_bonds
-    
+
     def are_all_channels_idle(self):
         return all(self.channels[ch_id].is_idle() for ch_id in self.channels)
-    
+
     def are_channels_idle(self, node: Node, channels_ids: list[int]):
         """Checks if all selected channels are idle."""
         return all(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
@@ -158,6 +172,12 @@ class MEDIUM:
     def any_collision_detected(self, channels_ids: list[int]):
         """Checks if any of the selected channels has a collision."""
         return any(self.channels[ch_id].collision_detected for ch_id in channels_ids)
+
+    def assign_as_primary_channel(self, node: Node, channel_id: int):
+        self.channels[channel_id].assign_as_primary_channel(node)
+
+    def release_as_primary_channel(self, node: Node, channel_id: int):
+        self.channels[channel_id].release_as_primary_channel(node)
 
     def occupy_channels(self, node, channels_ids: list[int]):
         if self.busy_start_time is None:
@@ -221,7 +241,9 @@ class MEDIUM:
 
             tx_duration_us = size_bytes * 8 / data_rate_bps * 1e6
 
-            return math.ceil(tx_duration_us) if tx_duration_us % 1 != 0 else tx_duration_us
+            return (
+                math.ceil(tx_duration_us) if tx_duration_us % 1 != 0 else tx_duration_us
+            )
 
         self.logger.header(
             f"Transmitting {ppdu.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
@@ -250,7 +272,7 @@ class MEDIUM:
             )
 
             self.stats.ppdus_fail += 1
-        
+
         self.release_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
     def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
@@ -263,7 +285,9 @@ class MEDIUM:
 
             path_loss = (
                 path_loss_1m_dB
-                + 10 * self.sparams.PATH_LOSS_EXPONENT * math.log10(max(distance_m, 0.1) / 1)
+                + 10
+                * self.sparams.PATH_LOSS_EXPONENT
+                * math.log10(max(distance_m, 0.1) / 1)
             )
 
             if self.sparams.ENABLE_SHADOWING:

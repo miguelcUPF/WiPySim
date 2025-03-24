@@ -48,6 +48,8 @@ class MAC:
         self.rx_back: BACK = None
 
         self.tx_queue_event = None
+        self.primary_busy_event = None
+        self.primary_idle_event = None
         self.cts_event = None
         self.back_event = None
 
@@ -92,6 +94,20 @@ class MAC:
                 return item
         return None
 
+    def set_primary_busy(self):
+        (
+            self.primary_busy_event.succeed()
+            if self.primary_busy_event and not self.primary_busy_event.triggered
+            else None
+        )
+
+    def set_primary_idle(self):
+        (
+            self.primary_idle_event.succeed()
+            if self.primary_idle_event and not self.primary_idle_event.triggered
+            else None
+        )
+
     def wait_for_idle(self, duration_us: float):
         """Check if all the used channels have been idle for the given duration."""
         self.set_state(MACState.CONTEND)
@@ -99,21 +115,43 @@ class MAC:
             f"{self.node.type} {self.node.id} -> Contending for primary channel {self.node.phy_layer.primary_channel_id} during {duration_us} μs ..."
         )
 
-        start_time = None
+        self.primary_idle_event = self.env.event()
+
+        if not self.node.phy_layer.is_primary_channel_idle():
+            yield self.primary_idle_event
+            self.primary_idle_event = None
+
+        idle_start_time = self.env.now
 
         while True:
-            if self.node.phy_layer.is_primary_channel_idle():
-                if start_time is None:
-                    start_time = self.env.now
-                elif self.env.now - start_time >= duration_us:
-                    self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} has been idle for {duration_us} μs"
-                    )
-                    return
-            else:
-                start_time = None  # Reset the timer if the channel becomes busy
-            yield self.env.timeout(1)
+            remaining_time = duration_us - (self.env.now - idle_start_time)
 
+            self.primary_busy_event = self.env.event()
+
+            # Wait until either the timeout completes or the channel becomes busy
+            yield self.env.timeout(remaining_time) | self.primary_busy_event
+
+            if self.primary_busy_event.triggered:
+                self.primary_busy_event = None
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} is busy"
+                )
+
+                self.primary_idle_event = self.env.event()
+
+                # Reset timer and wait for the channel to become idle again
+                yield self.primary_idle_event
+
+                self.primary_idle_event = None
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} is idle"
+                )
+                idle_start_time = self.env.now  # Restart idle tracking
+            else:
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} has been idle for {duration_us} μs"
+                )
+                return
 
     def backoff(self):
         self.logger.header(f"{self.node.type} {self.node.id} -> Starting Backoff...")
@@ -130,17 +168,24 @@ class MAC:
             )
 
         while self.backoff_slots > 0:
-            start_time = self.env.now
+            self.primary_busy_event = self.env.event()
 
-            # Wait for one slot time while continuously monitoring the channel
-            while self.env.now - start_time < self.sparams.SLOT_TIME_us:
-                if not self.node.phy_layer.is_primary_channel_idle():
-                    self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> Channel busy, pausing backoff ({self.backoff_slots})..."
-                    )
-                    return
+            slot_start_time = self.env.now
 
-                yield self.env.timeout(1)
+            event_result = (
+                yield self.env.timeout(self.sparams.SLOT_TIME_us)
+                | self.primary_busy_event
+            )
+
+            if (
+                self.primary_busy_event in event_result
+                and self.env.now < slot_start_time + self.sparams.SLOT_TIME_us
+            ):
+                self.primary_busy_event = None
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Channel busy, pausing backoff ({self.backoff_slots})..."
+                )
+                return
 
             self.backoff_slots -= 1
             self.logger.debug(
