@@ -46,9 +46,12 @@ class Channel20MHz:
         self.nav_nodes_ids = set()
 
         self.collision_detected = False  # Flag to indicate if collision is detected
+        self.last_collision_time = 0
+        self.current_collisions = 0
 
         self.idle_start_time = self.env.now
         self.busy_start_time = None
+
 
         self.stats = ChannelStats()
 
@@ -116,7 +119,7 @@ class Channel20MHz:
             self.stats.airtime_us += self.env.now - self.busy_start_time
             self.busy_start_time = None
             self.collision_detected = False
-
+            self.current_collisions = 0
             if not self.nav_occupied:
                 self.idle_start_time = self.env.now
                 for node_id, p_node in self.primary_channel_nodes.items():
@@ -126,7 +129,8 @@ class Channel20MHz:
         """Handles collision."""
         self.logger.warning(f"Channel {self.id} -> Collision detected!")
         self.collision_detected = True
-
+        self.current_collisions += 1
+        self.last_collision_time = self.env.now
 
 class MEDIUM:
     def __init__(
@@ -169,9 +173,9 @@ class MEDIUM:
         """Checks if all selected channels are idle."""
         return all(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
 
-    def any_collision_detected(self, channels_ids: list[int]):
+    def any_collision_detected(self, channels_ids: list[int], start_time_us: int):
         """Checks if any of the selected channels has a collision."""
-        return any(self.channels[ch_id].collision_detected for ch_id in channels_ids)
+        return any(self.channels[ch_id].last_collision_time >= start_time_us for ch_id in channels_ids)
 
     def assign_as_primary_channel(self, node: Node, channel_id: int):
         self.channels[channel_id].assign_as_primary_channel(node)
@@ -183,13 +187,13 @@ class MEDIUM:
         if self.busy_start_time is None:
             self.busy_start_time = self.env.now
 
-        collision_detected = False
+        collision_already_counted = False
         for ch_id in channels_ids:
             self.channels[ch_id].occupy(node)
-            if self.channels[ch_id].collision_detected:
-                collision_detected = True
+            if self.channels[ch_id].current_collisions > 0 and node.id in self.channels[ch_id].nav_nodes_ids:
+                collision_already_counted = True
 
-        if collision_detected:
+        if not collision_already_counted:
             self.stats.collisions += 1
 
     def release_channels(self, node, channels_ids: list[int]):
@@ -255,15 +259,16 @@ class MEDIUM:
             mcs_index, len(channels_ids) * 20, ppdu.size_bytes
         )
 
+        tx_start = self.env.now
+
         yield self.env.timeout(tx_duration_us)
 
-        collision_detected = self.any_collision_detected(channels_ids)
+        collision_detected = self.any_collision_detected(channels_ids, tx_start)
 
         self.stats.ppdus_tx += 1
 
         if not collision_detected:
             self.receive(ppdu, channels_ids, mcs_index)
-
             self.stats.ppdus_success += 1
 
         else:

@@ -70,8 +70,8 @@ cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 
 N = [1, 2, 4, 8, 12, 16, 20]
-M = [0, 1, 3, 7]
-CW_MIN = [4, 8, 16, 32, 64, 128]
+M = [0, 1, 2, 3, 4]
+CW_MIN = [4, 8, 16, 32, 64]
 
 
 def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> tuple:
