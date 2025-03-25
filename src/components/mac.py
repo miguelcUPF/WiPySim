@@ -206,7 +206,7 @@ class MAC:
             )
         else:
             cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
-            self.backoff_slots = random.randint(0, max(0, cw - 1))
+            self.backoff_slots = random.randint(0, max(0, cw - 1)) + 1
             self.logger.info(
                 f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
             )
