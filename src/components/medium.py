@@ -37,6 +37,7 @@ class Channel20MHz:
         self.primary_channel_nodes: dict[int, Node] = (
             {}
         )  # Nodes using the channel as primary
+        self.nodes: dict[int, Node] = {}  # Nodes using the channel
         self.nodes_transmitting: dict[int, Node] = {}  # Nodes currently transmitting
 
         self.nav_occupied = (
@@ -47,16 +48,20 @@ class Channel20MHz:
 
         self.collision_detected = False  # Flag to indicate if collision is detected
         self.last_collision_time = 0
-        self.current_collisions = 0
 
         self.idle_start_time = self.env.now
         self.busy_start_time = None
-
 
         self.stats = ChannelStats()
 
         self.name = "CHANNEL"
         self.logger = get_logger(self.name, cfg, sparams, env)
+
+    def assign(self, node: Node):
+        self.nodes[node.id] = node
+
+    def release(self, node: Node):
+        self.nodes.pop(node.id, None)
 
     def assign_as_primary_channel(self, node: Node):
         self.primary_channel_nodes[node.id] = node
@@ -109,17 +114,16 @@ class Channel20MHz:
             for node_id, p_node in self.primary_channel_nodes.items():
                 p_node.phy_layer.set_primary_idle()
 
-    def release(self, node: Node):
+    def unoccupy(self, node: Node):
         """Removes a node from the channel."""
         if node.id not in self.nodes_transmitting:
             return
-        self.logger.debug(f"Channel {self.id} -> Released by {node.type} {node.id}")
+        self.logger.debug(f"Channel {self.id} -> Unoccupied by {node.type} {node.id}")
         self.nodes_transmitting.pop(node.id, None)
         if len(self.nodes_transmitting) == 0:
             self.stats.airtime_us += self.env.now - self.busy_start_time
             self.busy_start_time = None
             self.collision_detected = False
-            self.current_collisions = 0
             if not self.nav_occupied:
                 self.idle_start_time = self.env.now
                 for node_id, p_node in self.primary_channel_nodes.items():
@@ -127,10 +131,21 @@ class Channel20MHz:
 
     def handle_collision(self):
         """Handles collision."""
-        self.logger.warning(f"Channel {self.id} -> Collision detected!")
         self.collision_detected = True
-        self.current_collisions += 1
         self.last_collision_time = self.env.now
+
+    def rts_collision_detected(self):
+        for node_id, node in self.nodes.items():
+            node.phy_layer.rts_collision_detected()
+
+    def ampdu_collision_detected(self):
+        for node_id, node in self.nodes.items():
+            node.phy_layer.ampdu_collision_detected()
+
+    def successful_transmission_detected(self):
+        for node_id, node in self.nodes.items():
+            node.phy_layer.successful_transmission_detected()
+
 
 class MEDIUM:
     def __init__(
@@ -175,7 +190,18 @@ class MEDIUM:
 
     def any_collision_detected(self, channels_ids: list[int], start_time_us: int):
         """Checks if any of the selected channels has a collision."""
-        return any(self.channels[ch_id].last_collision_time >= start_time_us for ch_id in channels_ids)
+        return any(
+            self.channels[ch_id].last_collision_time >= start_time_us
+            for ch_id in channels_ids
+        )
+
+    def assign_channels(self, node: Node, channels_ids: list[int]):
+        for ch_id in channels_ids:
+            self.channels[ch_id].assign(node)
+
+    def release_channels(self, node: Node, channels_ids: list[int]):
+        for ch_id in channels_ids:
+            self.channels[ch_id].release(node)
 
     def assign_as_primary_channel(self, node: Node, channel_id: int):
         self.channels[channel_id].assign_as_primary_channel(node)
@@ -187,18 +213,12 @@ class MEDIUM:
         if self.busy_start_time is None:
             self.busy_start_time = self.env.now
 
-        collision_already_counted = False
         for ch_id in channels_ids:
             self.channels[ch_id].occupy(node)
-            if self.channels[ch_id].current_collisions > 0 and node.id in self.channels[ch_id].nav_nodes_ids:
-                collision_already_counted = True
 
-        if not collision_already_counted:
-            self.stats.collisions += 1
-
-    def release_channels(self, node, channels_ids: list[int]):
+    def unoccupy_channels(self, node, channels_ids: list[int]):
         for ch_id in channels_ids:
-            self.channels[ch_id].release(node)
+            self.channels[ch_id].unoccupy(node)
 
         if self.are_all_channels_idle():
             self.stats.airtime_us += self.env.now - self.busy_start_time
@@ -232,31 +252,46 @@ class MEDIUM:
 
         dst_node.phy_layer.receive_mcs_info(mcs_index)
 
+    def rts_collision_detected(self, channels_ids: list[int]):
+        for ch_id in channels_ids:
+            self.channels[ch_id].rts_collision_detected()
+
+    def ampdu_collision_detected(self, channels_ids: list[int]):
+        for ch_id in channels_ids:
+            self.channels[ch_id].ampdu_collision_detected()
+
+    def successful_transmission_detected(self, channels_ids: list[int]):
+        for ch_id in channels_ids:
+            self.channels[ch_id].successful_transmission_detected()
+
     def transmit(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
-        def _calculate_tx_time(mcs_index, channel_width, size_bytes):
+        def _calculate_tx_time(
+            mcs_index, channel_width, size_bytes, is_mgmt_ctrl_frame=False
+        ):
             """Computes transmission time based on bandwidth and MCS."""
 
             data_rate_bps = calculate_data_rate_bps(
                 mcs_index,
                 channel_width,
-                self.sparams.SPATIAL_STREAMS,
+                self.sparams.SPATIAL_STREAMS if not is_mgmt_ctrl_frame else 1,
                 self.sparams.GUARD_INTERVAL_us,
             )
 
             tx_duration_us = size_bytes * 8 / data_rate_bps * 1e6
 
-            return (
-                math.ceil(tx_duration_us) if tx_duration_us % 1 != 0 else tx_duration_us
-            )
+            return round(tx_duration_us)
 
         self.logger.header(
-            f"Transmitting {ppdu.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
+            f"Transmitting {ppdu.data_unit.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
         )
 
         self.occupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
         tx_duration_us = _calculate_tx_time(
-            mcs_index, len(channels_ids) * 20, ppdu.size_bytes
+            mcs_index,
+            len(channels_ids) * 20,
+            ppdu.size_bytes,
+            ppdu.data_unit.is_mgmt_ctrl_frame,
         )
 
         tx_start = self.env.now
@@ -268,17 +303,22 @@ class MEDIUM:
         self.stats.ppdus_tx += 1
 
         if not collision_detected:
+            self.successful_transmission_detected(channels_ids)
             self.receive(ppdu, channels_ids, mcs_index)
             self.stats.ppdus_success += 1
-
         else:
             self.logger.warning(
-                f"Collision detected while transmitting {ppdu.type} from {ppdu.src_id} to {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}"
+                f"{ppdu.type} ({ppdu.data_unit.type}) from {ppdu.src_id} to {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))} collided!"
             )
 
             self.stats.ppdus_fail += 1
 
-        self.release_channels(self.network.get_node(ppdu.src_id), channels_ids)
+            if ppdu.data_unit.type == "RTS":
+                self.rts_collision_detected(channels_ids)
+            else:
+                self.ampdu_collision_detected(channels_ids)
+
+        self.unoccupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
     def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
         def _calculate_path_loss(distance_m: float):

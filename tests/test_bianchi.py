@@ -64,7 +64,7 @@ cfg.FIGS_SAVE_PATH = "figs/tests"
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 cfg.TRAFFIC_MODEL = "Poisson"
-cfg.TRAFFIC_LOAD_kbps = 100e3
+cfg.TRAFFIC_LOAD_kbps = 300e3
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 

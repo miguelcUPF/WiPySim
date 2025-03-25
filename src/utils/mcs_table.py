@@ -59,8 +59,6 @@ N_SD = {
 T_DFT_us = 12.8
 
 # Function to calculate data rate based on MCS, channel width, number of spatial streams, and guard interval
-
-
 def calculate_data_rate_bps(mcs_index: int, channel_width: int, spatial_streams: int, guard_interval: int):
     if mcs_index not in MCS_MODULATION.keys():
         raise ValueError(f"Invalid MCS index: {mcs_index}")

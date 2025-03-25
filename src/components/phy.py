@@ -31,7 +31,10 @@ class PHY:
         self.env.process(self.run())
 
     def set_channels(self, channels_ids: list[int]):
+        self.node.medium.release_channels(self.node, self.channels_ids)
+
         self.channels_ids = channels_ids
+        self.node.medium.assign_channels(self.node, channels_ids)
 
     def set_primary_channel(self, id: int):
         (
@@ -165,6 +168,15 @@ class PHY:
         )
 
         yield self.env.process(self.node.medium.transmit(ppdu, tx_channels, mcs_index))
+
+    def rts_collision_detected(self):
+        self.node.mac_layer.rts_collision_detected()
+
+    def ampdu_collision_detected(self):
+        self.node.mac_layer.ampdu_collision_detected()
+
+    def successful_transmission_detected(self):
+        self.node.mac_layer.successful_transmission_detected()
 
     def receive(self, ppdu: PPDU):
         self.logger.info(

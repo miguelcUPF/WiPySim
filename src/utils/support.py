@@ -33,11 +33,9 @@ def validate_params(sparams: sparams, logger: logging.Logger):
         "MDPU_DELIMITER_SIZE_bytes": sparams.MDPU_DELIMITER_SIZE_bytes,
         "MPDU_PADDING_SIZE_bytes": sparams.MPDU_PADDING_SIZE_bytes,
         "BACK_SIZE_PER_MPDU_bytes": sparams.BACK_SIZE_PER_MPDU_bytes,
-        "BACK_TIMEOUT_us": sparams.BACK_TIMEOUT_us,
         "RTS_THRESHOLD_bytes": sparams.RTS_THRESHOLD_bytes,
         "RTS_SIZE_bytes": sparams.RTS_SIZE_bytes,
         "CTS_SIZE_bytes": sparams.CTS_SIZE_bytes,
-        "CTS_TIMEOUT_us": sparams.CTS_TIMEOUT_us,
         "PHY_HEADER_SIZE_bytes": sparams.PHY_HEADER_SIZE_bytes,
     }
 

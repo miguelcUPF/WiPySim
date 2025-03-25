@@ -143,8 +143,6 @@ class MediumStats:
         self.tx_bytes = 0
         self.tx_bytes_success = 0
 
-        self.collisions = 0
-
         self.airtime_us = 0  # Time the medium is actively used for transmission
 
 
@@ -348,7 +346,6 @@ class NetworkStats:
                 if self.network.env.now > 0
                 else 0
             ),
-            "collisions": medium_stats.collisions,
             "airtime_us": medium_stats.airtime_us,
             "utilization": (
                 medium_stats.airtime_us / self.network.env.now * 100
@@ -468,6 +465,5 @@ class NetworkStats:
             f"PPDUs TX (Success): {self.medium_stats['ppdus_success']}, "
             f"PPDUs TX (Fail): {self.medium_stats['ppdus_fail']}"
         )
-        print(f"  Collisions: {self.medium_stats['collisions']}")
         print(f"  Total Airtime: {self.medium_stats['airtime_us']} µs")
         print(f"  Utilization: {self.medium_stats['utilization']:.2f}%")

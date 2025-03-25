@@ -20,32 +20,30 @@ class SimParams:
     MPDU_PADDING_SIZE_bytes = 3
 
     BACK_SIZE_PER_MPDU_bytes = 2
-    BACK_TIMEOUT_us = 281
 
     ENABLE_RTS_CTS = True
     RTS_THRESHOLD_bytes = 2346
     RTS_SIZE_bytes = 20
     CTS_SIZE_bytes = 14
-    CTS_TIMEOUT_us = SIFS_us + SLOT_TIME_us + 20 # equals 46
 
     # --- PHY Layer Parameters --- #
-    PHY_HEADER_SIZE_bytes = 32
+    PHY_HEADER_SIZE_bytes = 24
 
-    SPATIAL_STREAMS = 2 # 1, 2, or 3
-    GUARD_INTERVAL_us = 0.8 # 0.8, 1.6, or 3.2
+    SPATIAL_STREAMS = 2  # 1, 2, or 3
+    GUARD_INTERVAL_us = 0.8  # 0.8, 1.6, or 3.2
 
     TX_POWER_dBm = 20
     TX_GAIN_dB = 0
-    RX_GAIN_dB = 0
+    RX_GAIN_dB = 0   
 
     # --- Channel Parameters --- #
     FREQUENCY_MHz = 5
 
-    NUM_CHANNELS = 8 # 1, 2, 4, or 8
+    NUM_CHANNELS = 8  # 1, 2, 4, or 8
 
-    PATH_LOSS_EXPONENT = 4 # 4 considering indoor NLOS environment
+    PATH_LOSS_EXPONENT = 4  # 4 considering indoor NLOS environment
 
     ENABLE_SHADOWING = False
-    SHADOWING_STD_dB = 6.8 # 6.8 considering indoor NLOS environment
+    SHADOWING_STD_dB = 6.8  # 6.8 considering indoor NLOS environment
 
     MPDU_ERROR_PROBABILITY = 0.1

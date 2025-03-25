@@ -5,12 +5,23 @@ from src.components.network import Node
 from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.utils.event_logger import get_logger
 from src.utils.statistics import MACStateStats
+from src.utils.mcs_table import calculate_data_rate_bps
 
 
 from typing import cast
+from simpy.events import AnyOf
 
 import simpy
 import random
+
+BACK_TIMEOUT_us = 281
+CTS_TX_us = round(
+    (sparams.CTS_SIZE_bytes + sparams.PHY_HEADER_SIZE_bytes)
+    * 8
+    / calculate_data_rate_bps(0, 20, 1, sparams.GUARD_INTERVAL_us)
+    * 1e6
+)
+CTS_TIMEOUT_us = sparams.SIFS_us + sparams.SLOT_TIME_us + CTS_TX_us
 
 
 class MACState:
@@ -48,10 +59,17 @@ class MAC:
         self.rx_back: BACK = None
 
         self.tx_queue_event = None
+
         self.primary_busy_event = None
         self.primary_idle_event = None
+
         self.cts_event = None
         self.back_event = None
+
+        self.rts_collision_event = self.env.event()
+        self.ampdu_collision_event = self.env.event()
+
+        self.last_collision_time_us = None
 
         self.is_first_tx = True
         self.is_first_rx = True
@@ -108,11 +126,11 @@ class MAC:
             else None
         )
 
-    def wait_for_idle(self, duration_us: float):
+    def wait_for_idle(self, duration_us: float, waited_time_us: float = 0):
         """Check if all the used channels have been idle for the given duration."""
         self.set_state(MACState.CONTEND)
         self.logger.header(
-            f"{self.node.type} {self.node.id} -> Contending for primary channel {self.node.phy_layer.primary_channel_id} during {duration_us} μs ..."
+            f"{self.node.type} {self.node.id} -> Contending for primary channel {self.node.phy_layer.primary_channel_id} for {duration_us} μs ..."
         )
 
         self.primary_idle_event = self.env.event()
@@ -120,22 +138,51 @@ class MAC:
         if not self.node.phy_layer.is_primary_channel_idle():
             yield self.primary_idle_event
             self.primary_idle_event = None
+            waited_time_us = 0
 
-        idle_start_time = self.env.now
+        idle_start_time = self.env.now - waited_time_us
 
         while True:
             remaining_time = duration_us - (self.env.now - idle_start_time)
 
             self.primary_busy_event = self.env.event()
 
-            # Wait until either the timeout completes or the channel becomes busy
-            yield self.env.timeout(remaining_time) | self.primary_busy_event
+            events = [self.env.timeout(remaining_time), self.primary_busy_event]
+
+            if self.rts_collision_event is not None:
+                events.append(self.rts_collision_event)
+            if self.ampdu_collision_event is not None:
+                events.append(self.ampdu_collision_event)
+
+            yield AnyOf(self.env, events)
+
+            
+            if (
+                self.ampdu_collision_event is not None
+                and self.ampdu_collision_event.triggered
+            ):
+                self.ampdu_collision_event = self.env.event()
+                self.rts_collision_event = self.env.event()
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> AMPDU collision detected, waiting for EIFS ({self.sparams.DIFS_us + BACK_TIMEOUT_us} us)"
+                )
+                yield from self.wait_for_idle(self.sparams.DIFS_us + BACK_TIMEOUT_us)
+                return
+            elif (
+                self.rts_collision_event is not None
+                and self.rts_collision_event.triggered
+            ):
+                self.ampdu_collision_event = self.env.event()
+                self.rts_collision_event = self.env.event()
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> RTS collision detected, waiting for EIFS ({self.sparams.DIFS_us + CTS_TIMEOUT_us} us)"
+                )
+                yield from self.wait_for_idle(self.sparams.DIFS_us + CTS_TIMEOUT_us)
+                return
+
 
             if self.primary_busy_event.triggered:
                 self.primary_busy_event = None
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} is busy"
-                )
 
                 self.primary_idle_event = self.env.event()
 
@@ -143,9 +190,6 @@ class MAC:
                 yield self.primary_idle_event
 
                 self.primary_idle_event = None
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} is idle"
-                )
                 idle_start_time = self.env.now  # Restart idle tracking
             else:
                 self.logger.debug(
@@ -216,7 +260,7 @@ class MAC:
                 return
             else:
                 self.logger.info(
-                    f"{self.node.type} {self.node.id} -> No need to aggregate, retransmitting A-MPDU {self.tx_ampdu.id} (retries={self.tx_ampdu.retries}) in next transmission..."
+                    f"{self.node.type} {self.node.id} -> No need to aggregate, retransmitting A-MPDU {self.tx_ampdu.id} (retries={self.tx_ampdu.retries})..."
                 )
                 return
 
@@ -267,12 +311,11 @@ class MAC:
 
         self.cts_event = self.env.event()
 
-        yield self.env.timeout(self.sparams.CTS_TIMEOUT_us) | self.cts_event
+        event_result = yield self.env.timeout(CTS_TIMEOUT_us) | self.cts_event
 
-        if not self.cts_event.triggered:
+        if not self.cts_event in event_result:
             self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
             self.cts_event = None
-
             self.retries += 1
             if self.sparams.ENABLE_RTS_CTS:
                 self.node.tx_stats.tx_failures += 1
@@ -296,7 +339,7 @@ class MAC:
         )
         self.back_event = self.env.event()
 
-        yield self.env.timeout(self.sparams.BACK_TIMEOUT_us) | self.back_event
+        yield self.env.timeout(BACK_TIMEOUT_us) | self.back_event
 
         if self.sparams.ENABLE_RTS_CTS:
             self.node.phy_layer.end_nav()
@@ -373,6 +416,26 @@ class MAC:
         start_tx_time_us = self.env.now
         yield self.env.process(self.node.phy_layer.transmit(data_unit))
         self.node.tx_stats.airtime_us += self.env.now - start_tx_time_us
+
+    def rts_collision_detected(self):
+        self.last_collision_time_us = self.env.now
+        (
+            self.rts_collision_event.succeed()
+            if self.rts_collision_event and not self.rts_collision_event.triggered
+            else None
+        )
+
+    def ampdu_collision_detected(self):
+        self.last_collision_time_us = self.env.now
+        (
+            self.ampdu_collision_event.succeed()
+            if self.rts_collision_event and not self.ampdu_collision_event.triggered
+            else None
+        )
+
+    def successful_transmission_detected(self):
+        self.rts_collision_event = self.env.event()
+        self.ampdu_collision_event = self.env.event()
 
     def receive(self, data_unit: DataUnit):
 
@@ -483,7 +546,20 @@ class MAC:
         """Handles channel access, contention, and transmission"""
         while True:
             if len(self.tx_queue.items) > 0:
-                yield self.env.process(self.wait_for_idle(self.sparams.DIFS_us))
+                self.rts_collision_event = self.env.event()
+                if self.ampdu_collision_event and self.ampdu_collision_event.triggered:
+                    self.ampdu_collision_event = self.env.event()
+                    self.logger.debug(
+                        f"{self.node.type} {self.node.id} -> AMPDU collision detected, waiting for EIFS ({self.sparams.DIFS_us + BACK_TIMEOUT_us} us), already waited {self.env.now - self.last_collision_time_us} us"
+                    )
+                    yield self.env.process(
+                        self.wait_for_idle(
+                            self.sparams.DIFS_us + BACK_TIMEOUT_us,
+                            waited_time_us=self.env.now - self.last_collision_time_us,
+                        )
+                    )
+                else:
+                    yield self.env.process(self.wait_for_idle(self.sparams.DIFS_us))
                 yield self.env.process(self.backoff())
 
                 if self.backoff_slots > 0:
