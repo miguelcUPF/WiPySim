@@ -2,12 +2,24 @@ import os, shutil
 
 def get_project_root() -> str:
     """Finds the root directory of the project."""
-    current_dir = os.path.abspath(os.path.dirname(__file__))
-    while True:
-        if os.path.exists(os.path.join(current_dir, 'setup.py')):
+    current_dir = os.getcwd() 
+
+    max_iterations = 1000
+    iterations = 0
+
+    while iterations < max_iterations:
+        if os.path.exists(os.path.join(current_dir, 'requirements.txt')):
             return current_dir
+        
         parent_dir = os.path.dirname(current_dir)
+
+        if parent_dir == current_dir:
+            break
+
         current_dir = parent_dir
+        iterations += 1
+
+    raise FileNotFoundError("Could not find 'requirements.txt' or reached root directory")
 
 def clean_folder(folder_path):
     """Deletes all files inside the folder if it exists."""

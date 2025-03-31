@@ -24,7 +24,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import concurrent.futures
 import simpy
-import copy
 import os
 
 
@@ -34,7 +33,7 @@ sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e5
+cfg.SIMULATION_TIME_us = 2e6
 cfg.SEED = 1
 
 cfg.ENABLE_CONSOLE_LOGGING = False
@@ -69,9 +68,9 @@ cfg.TRAFFIC_LOAD_kbps = 300e3
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 
-N = [1, 2, 4, 8, 12, 16, 20]
-M = [0, 1, 2, 3, 4]
-CW_MIN = [4, 8, 16, 32, 64]
+N = range(1, 21)
+M = [0]
+CW_MIN = [64] # test values
 
 
 def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> tuple:
@@ -88,14 +87,10 @@ def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> t
 
     network.stats.collect_stats()
 
-    stas_simulated_p = []
-    for node_stats in network.stats.per_node_stats.values():
-        if node_stats["tx"]["tx_attempts"] == 0:
-            continue
-        stas_simulated_p.append(
-            node_stats["tx"]["tx_failures"] / node_stats["tx"]["tx_attempts"]
-        )
-    simulated_p = np.mean(stas_simulated_p) if stas_simulated_p else 0
+    tx_attempts = np.array([s["tx"]["tx_attempts"] for s in network.stats.per_node_stats.values()])
+    tx_failures = np.array([s["tx"]["tx_failures"] for s in network.stats.per_node_stats.values()])
+    valid_mask = tx_attempts > 0
+    simulated_p = np.mean(tx_failures[valid_mask] / tx_attempts[valid_mask]) if np.any(valid_mask) else 0
     theoretical_p = compute_collision_probability(n, m, cw_min)
 
     return n, m, cw_min, simulated_p, theoretical_p
@@ -114,33 +109,24 @@ if __name__ == "__main__":
 
     col_prob_results = {cw_min: {m: {} for m in M} for cw_min in CW_MIN}
 
-    # Use ProcessPoolExecutor for parallel execution
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=os.cpu_count() // 2
-    ) as executor:
-        future_to_params = {
-            executor.submit(run_simulation, cfg(), sparams(), n, m, cw_min): (n, m, cw_min)
-            for n in N
-            for m in M
-            for cw_min in CW_MIN
-        }
-
-        for future in tqdm(concurrent.futures.as_completed(future_to_params), total=len(future_to_params)):
-            n, m, cw_min = future_to_params[future]
-
-            n, m, cw_min, simulated_p, theoretical_p = future.result()
-            col_prob_results[cw_min][m][n] = {
-                "simulated": simulated_p,
-                "theoretical": theoretical_p,
-            }
-
-            logger.info(f"n: {n}, m: {m}, cw_min: {cw_min}")
-            logger.info(f"Simulation Collision Probability: {simulated_p * 100:.2f}%")
-            logger.info(
-                f"Theoretical Collision Probability: {theoretical_p * 100:.2f}%"
-            )
-
-    CollisionProbPlotter(cfg, sparams).plot_prob(col_prob_results, M, CW_MIN)
+    params_list = [(cfg(), sparams(), n, m, cw_min) for n in N for m in M for cw_min in CW_MIN]
+    
+    batch_size = 5  # Adjust batch size based on available CPU cores
+    with concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count() // 2) as executor:
+        for i in tqdm(range(0, len(params_list), batch_size)):
+            batch = params_list[i : i + batch_size]
+            futures = [executor.submit(run_simulation, *params) for params in batch]
+            
+            for future in concurrent.futures.as_completed(futures):
+                n, m, cw_min, simulated_p, theoretical_p = future.result()
+                col_prob_results[cw_min][m][n] = {"simulated": simulated_p, "theoretical": theoretical_p}
+                
+                logger.info(f"n: {n}, m: {m}, cw_min: {cw_min}")
+                logger.info(f"Simulation Collision Probability: {simulated_p * 100:.2f}%")
+                logger.info(f"Theoretical Collision Probability: {theoretical_p * 100:.2f}%")
+    
+    save_name = f"collision_prob_cw_min_{CW_MIN[0]}" if len(CW_MIN) == 1 else "collision_prob"
+    CollisionProbPlotter(cfg, sparams).plot_prob(col_prob_results, M, CW_MIN, save_name=save_name)
 
     print(SIMULATION_TERMINATED_MSG)
 

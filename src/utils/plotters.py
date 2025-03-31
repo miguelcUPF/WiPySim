@@ -400,22 +400,59 @@ class CollisionProbPlotter(BasePlotter):
         self.validate_data(data, m_list, cw_mins)
 
         num_subplots = len(cw_mins)
-        num_cols = 3
-        num_rows = math.ceil(num_subplots / num_cols)  # Auto-adjust row count
+        
+        if len(cw_mins) == 1:
+            fig, axes = plt.subplots(1, 1, figsize=(6.4, 4.8))
 
-        fig, axes = plt.subplots(num_rows, num_cols, figsize=(10, 6), squeeze=False)
-        axes = axes.flatten()  # Convert to 1D for easier iteration
+        elif len(cw_mins) == 2:
+            fig, axes = plt.subplots(1, 2, figsize=(6.4*2, 4.8))
+        else:
+            num_cols = 3
+            num_rows = math.ceil(num_subplots / num_cols)  # Auto-adjust row count
+            fig, axes = plt.subplots(num_rows, num_cols, figsize=(6.4*3, 4.8*num_rows))
+        if len(cw_mins) == 1:
+            axes = np.array([axes])
+        axes = axes.flatten() 
 
         tableau_colors = list(mcolors.TABLEAU_COLORS.values())  # Use Tableau colors
         markers = {"simulated": "o--", "theoretical": "s-"}  # Line styles with markers
+        
+        legend_elements = []  # Custom legend elements
 
+        for i, m in enumerate(m_list):
+            color = tableau_colors[i % len(tableau_colors)]
+            # Add rectangle legend entry for m value
+            legend_elements.append(
+                plt.Rectangle((0, 0), 1, 1, color=color, label=f"m={m}")
+            )
+
+        legend_elements.append(
+                mlines.Line2D(
+                    [],
+                    [],
+                    color="black",
+                    linestyle="--",
+                    marker="o",
+                    markerfacecolor="none",
+                    label="Simulated",
+                )
+            )
+        legend_elements.append(
+                mlines.Line2D(
+                    [],
+                    [],
+                    color="black",
+                    linestyle="-",
+                    marker="s",
+                    markerfacecolor="none",
+                    label="Theoretical",
+                )
+            )
         for idx, (cw_min, ax) in enumerate(zip(cw_mins, axes)):
-            ax.set_title(f"Collision Probability (CW_MIN={cw_min})", fontsize=10)
+            ax.set_title(r"$\text{CW}_{\text{min}} = $" + f"{cw_min}", fontsize=10, loc='left')
             ax.set_ylabel("Collision Probability")
-            ax.set_xlabel("Number of STAs")
+            ax.set_xlabel("Number of BSSs")
             ax.set_ylim(0, 1)
-
-            legend_elements = []  # Custom legend elements
 
             for i, m in enumerate(m_list):
                 color = tableau_colors[i % len(tableau_colors)]  # Cycle through colors
@@ -430,6 +467,7 @@ class CollisionProbPlotter(BasePlotter):
                     markers["simulated"],
                     color=color,
                     markerfacecolor="none",
+                    markersize=3,
                 )
                 ax.plot(
                     n_values,
@@ -437,39 +475,15 @@ class CollisionProbPlotter(BasePlotter):
                     markers["theoretical"],
                     color=color,
                     markerfacecolor="none",
+                    markersize=3,
                 )
-
-                # Add rectangle legend entry for m value
-                legend_elements.append(
-                    plt.Rectangle((0, 0), 1, 1, color=color, label=f"m={m}")
-                )
-
-            legend_elements.append(
-                mlines.Line2D(
-                    [],
-                    [],
-                    color="black",
-                    linestyle="--",
-                    marker="o",
-                    markerfacecolor="none",
-                    label="Simulated",
-                )
-            )
-            legend_elements.append(
-                mlines.Line2D(
-                    [],
-                    [],
-                    color="black",
-                    linestyle="-",
-                    marker="s",
-                    markerfacecolor="none",
-                    label="Theoretical",
-                )
-            )
-
-            ax.legend(
-                handles=legend_elements, loc="best", fontsize="small", frameon=False
-            )
+            if idx == 0:
+                ax.legend(
+                        handles=legend_elements,
+                        loc="best",
+                        fontsize=8,
+                        frameon=False,
+                    )
 
         # Hide unused subplots if cw_mins < num_rows * num_cols
         for idx in range(len(cw_mins), len(axes)):

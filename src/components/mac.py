@@ -206,7 +206,9 @@ class MAC:
             )
         else:
             cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
-            self.backoff_slots = random.randint(0, max(0, cw - 1)) + 1
+            self.backoff_slots = random.randint(0, max(0, cw - 1))
+            if not self.is_first_tx:
+                self.backoff_slots += 1
             self.logger.info(
                 f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
             )
@@ -254,6 +256,8 @@ class MAC:
                     f"{self.node.type} {self.node.id} -> A-MPDU {self.tx_ampdu.id} dropped after max retries"
                 )
                 self.tx_ampdu = None
+                self.retries = 0
+                
             elif (
                 self.tx_ampdu.retries == 0
             ):  # If 0 it means that CTS timeout occurred, so no need to aggregate
