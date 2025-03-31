@@ -69,7 +69,7 @@ cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 
 N = range(1, 21)
-M = [0]
+M = [0, 1, 2, 3, 4]
 CW_MIN = [64] # test values
 
 
