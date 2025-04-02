@@ -1,37 +1,54 @@
-# 802.11ax MCS table (OFDM) https://semfionetworks.com/blog/mcs-table-updated-with-80211ax-data-rates/
-# Constants for MCS index, modulation, coding rate, etc.
+from src.utils.event_logger import COLORS
+
+
+"""
+802.11ax MCS Table (OFDM) - Modulation, Coding Rate, and Sensitivity Levels
+Reference: https://semfionetworks.com/blog/mcs-table-updated-with-80211ax-data-rates/
+"""
+
+# Mapping of MCS index to modulation type
 MCS_MODULATION = {
-    0: "BPSK", 1: "QPSK", 2: "QPSK", 3: "16-QAM", 4: "16-QAM",
-    5: "64-QAM", 6: "64-QAM", 7: "64-QAM",
-    8: "256-QAM", 9: "256-QAM", 10: "1024-QAM",
-    11: "1024-QAM"
+    0: "BPSK",
+    1: "QPSK",
+    2: "QPSK",
+    3: "16-QAM",
+    4: "16-QAM",
+    5: "64-QAM",
+    6: "64-QAM",
+    7: "64-QAM",
+    8: "256-QAM",
+    9: "256-QAM",
+    10: "1024-QAM",
+    11: "1024-QAM",
 }
 
+# Bits per subcarrier for each modulation scheme
 N_BPSCS = {
-    "BPSK": 1,        # 1 bit per subcarrier (BPSK)
-    "QPSK": 2,        # 2 bits per subcarrier (QPSK)
-    "16-QAM": 4,      # 4 bits per subcarrier (16-QAM)
-    "64-QAM": 6,      # 6 bits per subcarrier (64-QAM)
-    "256-QAM": 8,     # 8 bits per subcarrier (256-QAM)
-    "1024-QAM": 10    # 10 bits per subcarrier (1024-QAM)
+    "BPSK": 1,  # 1 bit per subcarrier (BPSK)
+    "QPSK": 2,  # 2 bits per subcarrier (QPSK)
+    "16-QAM": 4,  # 4 bits per subcarrier (16-QAM)
+    "64-QAM": 6,  # 6 bits per subcarrier (64-QAM)
+    "256-QAM": 8,  # 8 bits per subcarrier (256-QAM)
+    "1024-QAM": 10,  # 10 bits per subcarrier (1024-QAM)
 }
 
 # Coding rate for each MCS
 CODING_RATE_R = {
-    0: 1/2,
-    1: 1/2,
-    2: 3/4,
-    3: 1/2,
-    4: 3/4,
-    5: 2/3,
-    6: 3/4,
-    7: 5/6,
-    8: 3/4,
-    9: 5/6,
-    10: 3/4,
-    11: 5/6
+    0: 1 / 2,
+    1: 1 / 2,
+    2: 3 / 4,
+    3: 1 / 2,
+    4: 3 / 4,
+    5: 2 / 3,
+    6: 3 / 4,
+    7: 5 / 6,
+    8: 3 / 4,
+    9: 5 / 6,
+    10: 3 / 4,
+    11: 5 / 6,
 }
 
+# Minimum sensitivity levels for each MCS index (in dBm) based on channel width
 MCS_min_sensitivity = {
     0: {"20MHz": -82, "40MHz": -79, "80MHz": -76, "160MHz": -73},
     1: {"20MHz": -79, "40MHz": -76, "80MHz": -73, "160MHz": -70},
@@ -44,50 +61,84 @@ MCS_min_sensitivity = {
     8: {"20MHz": -59, "40MHz": -65, "80MHz": -53, "160MHz": -50},
     9: {"20MHz": -57, "40MHz": -54, "80MHz": -51, "160MHz": -48},
     10: {"20MHz": -54, "40MHz": -51, "80MHz": -48, "160MHz": -45},
-    11: {"20MHz": -52, "40MHz": -49, "80MHz": -46, "160MHz": -43}
+    11: {"20MHz": -52, "40MHz": -49, "80MHz": -46, "160MHz": -43},
 }
 
-# Subcarriers based on channel width (in MHz)
+# Number of subcarriers for each channel width (in MHz)
 N_SD = {
-    20: 234,   # 20 MHz => 234 subcarriers
-    40: 468,   # 40 MHz => 468 subcarriers
-    80: 980,   # 80 MHz => 980 subcarriers
-    160: 1960  # 160 MHz => 1960 subcarriers
+    20: 234,  # 20 MHz => 234 subcarriers
+    40: 468,  # 40 MHz => 468 subcarriers
+    80: 980,  # 80 MHz => 980 subcarriers
+    160: 1960,  # 160 MHz => 1960 subcarriers
 }
 
 # OFDM symbol duration in microseconds
 T_DFT_us = 12.8
 
+
 # Function to calculate data rate based on MCS, channel width, number of spatial streams, and guard interval
-def calculate_data_rate_bps(mcs_index: int, channel_width: int, spatial_streams: int, guard_interval: int):
-    if mcs_index not in MCS_MODULATION.keys():
+def calculate_data_rate(
+    mcs_index: int,
+    channel_width_mhz: int,
+    num_spatial_streams: int,
+    guard_interval_us: float,
+) -> float:
+    """
+    Calculate the data rate in bps based on MCS, channel width, number of spatial streams, and guard interval.
+
+    Args:
+        mcs_index (int): The Modulation and Coding Scheme index.
+        channel_width_mhz (int): The channel width in MHz.
+        num_spatial_streams (int): The number of spatial streams.
+        guard_interval_us (float): The guard interval in microseconds.
+
+    Returns:
+        float: The calculated data rate in bits per second (bps).
+    """
+
+    # Validate input parameters
+    if mcs_index not in MCS_MODULATION:
         raise ValueError(f"Invalid MCS index: {mcs_index}")
-    if channel_width not in N_SD.keys():
-        raise ValueError(f"Invalid channel width: {channel_width}")
-    if spatial_streams not in [1, 2, 3]:
-        raise ValueError(
-            f"Invalid number of spatial streams: {spatial_streams}")
-    if guard_interval not in [0.8, 1.6, 3.2]:
-        raise ValueError(f"Invalid guard interval: {guard_interval}")
+    if channel_width_mhz not in N_SD:
+        raise ValueError(f"Invalid channel width: {channel_width_mhz}")
+    if num_spatial_streams not in [1, 2, 3]:
+        raise ValueError(f"Invalid number of spatial streams: {num_spatial_streams}")
+    if guard_interval_us not in [0.8, 1.6, 3.2]:
+        raise ValueError(f"Invalid guard interval: {guard_interval_us}")
 
-    # Number of subcarriers for the given channel width
-    n_sd_val = N_SD[channel_width]
-    # Number of bits per subcarrier for the given modulation
-    n_bpscs_val = N_BPSCS[MCS_MODULATION[mcs_index]]
-    # Get coding rate based on MCS
-    coding_rate_r_val = CODING_RATE_R[mcs_index]
+    modulation = MCS_MODULATION[mcs_index]
+    num_subcarriers = N_SD[channel_width_mhz]
+    num_bits_per_subcarrier = N_BPSCS[modulation]
+    coding_rate = CODING_RATE_R[mcs_index]
 
-    # Calculate the data rate
-    data_rate = (n_sd_val * n_bpscs_val * coding_rate_r_val *
-                 spatial_streams) / (T_DFT_us + guard_interval)
+    data_rate_bps = (
+        (num_subcarriers * num_bits_per_subcarrier * coding_rate * num_spatial_streams)
+        / (T_DFT_us + guard_interval_us)
+        * 1e6
+    )
 
-    return round(data_rate, 1) * 1e6  # Convert to bps
+    return round(data_rate_bps, 1)
 
 
-def get_min_sensitivity(mcs_index: int, channel_width: int):
-    if mcs_index not in MCS_min_sensitivity.keys():
+def get_min_sensitivity(mcs_index: int, channel_width_mhz: int) -> float:
+    """
+    Retrieve the minimum sensitivity for the given MCS index and channel width.
+
+    Args:
+        mcs_index (int): The Modulation and Coding Scheme index.
+        channel_width_mhz (int): The channel width in MHz.
+
+    Returns:
+        float: The minimum sensitivity for the given MCS index and channel width.
+
+    Raises:
+        ValueError: If any of the input parameters are invalid.
+    """
+
+    if mcs_index not in MCS_min_sensitivity:
         raise ValueError(f"Invalid MCS index: {mcs_index}")
-    if channel_width not in N_SD.keys():
-        raise ValueError(f"Invalid channel width: {channel_width}")
 
-    return MCS_min_sensitivity[mcs_index][f"{channel_width}MHz"]
+    if channel_width_mhz not in N_SD:
+        raise ValueError(f"Invalid channel width: {channel_width_mhz}")
+
+    return MCS_min_sensitivity[mcs_index][f"{channel_width_mhz}MHz"]
