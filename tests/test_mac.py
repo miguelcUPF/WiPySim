@@ -138,6 +138,12 @@ class DummyMedium:
     def get_valid_channels(self):
         return [(1,)]
 
+    def release_channels(self, node: Node, channels_ids: list[int]):
+        pass
+
+    def assign_channels(self, node: Node, channels_ids: list[int]):
+        pass
+
     def transmit(self, ppdu: PPDU):
         # Simulate transmission over the medium
         if (

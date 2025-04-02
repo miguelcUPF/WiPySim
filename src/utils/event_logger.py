@@ -81,8 +81,8 @@ def initialize_log_file(cfg: cfg, log_file: str) -> None:
         cfg (cfg): The UserConfig object.
         log_file (str): The path to the log file.
     """
-    if not os.path.exists(cfg.logs_recording_path):
-        os.makedirs(cfg.logs_recording_path, exist_ok=True)
+    if not os.path.exists(cfg.LOGS_RECORDING_PATH):
+        os.makedirs(cfg.LOGS_RECORDING_PATH, exist_ok=True)
 
     creation_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     log_data = {"creation_time": creation_time, "logs": []}

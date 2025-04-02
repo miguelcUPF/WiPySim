@@ -77,7 +77,7 @@ T_DFT_us = 12.8
 
 
 # Function to calculate data rate based on MCS, channel width, number of spatial streams, and guard interval
-def calculate_data_rate(
+def calculate_data_rate_bps(
     mcs_index: int,
     channel_width_mhz: int,
     num_spatial_streams: int,
