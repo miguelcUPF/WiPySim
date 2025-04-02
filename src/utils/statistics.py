@@ -198,6 +198,9 @@ class NetworkStats:
             rx_stats = node.rx_stats
 
             mac_state_stats = node.mac_layer.mac_state_stats
+            mac_state_stats.add_to_mac_state_history(
+                self.network.env.now, node.mac_layer.get_state_name()
+            )
 
             self.total_tx_attempts += tx_stats.tx_attempts
             self.total_tx_successes += tx_stats.tx_successes
@@ -210,8 +213,10 @@ class NetworkStats:
             self.total_bytes_rx += rx_stats.rx_phy_bytes
 
             self.pkt_loss_ratio = (
-                self.total_pkts_tx - self.total_pkts_rx
-            ) / self.total_pkts_tx if self.total_pkts_tx > 0 else 0
+                (self.total_pkts_tx - self.total_pkts_rx) / self.total_pkts_tx
+                if self.total_pkts_tx > 0
+                else 0
+            )
 
             if not tx_stats.tx_queue_len_history.empty:
                 mean_queue_len = tx_stats.tx_queue_len_history["queue_len"].mean()
@@ -307,6 +312,11 @@ class NetworkStats:
         # Per-Channel Statistics
         total_channel_airtime_us = 0
         for ch in self.network.medium.channels.values():
+            ch.stats.airtime_us += (
+                self.network.env.now - ch.busy_start_time
+                if ch.busy_start_time is not None
+                else 0
+            )
             self.per_channel_stats[ch.id] = {
                 "airtime_us": ch.stats.airtime_us,
                 "utilization": (
@@ -329,6 +339,11 @@ class NetworkStats:
         )
 
         # Medium Statistics
+        self.network.medium.stats.airtime_us += (
+            self.network.env.now - self.network.medium.busy_start_time
+            if self.network.medium.busy_start_time is not None
+            else 0
+        )
         medium_stats = self.network.medium.stats
         self.medium_stats = {
             "ppdus_tx": medium_stats.ppdus_tx,
@@ -404,7 +419,7 @@ class NetworkStats:
         print(f"Average Channel Airtime: {self.avg_channel_airtime_us:.2f} µs")
         print(f"Average Channel Utilization: {self.avg_channel_utilization:.2f}%")
 
-        print("\nPer-Node Stats:")
+        print("\033[93m" + "\nPer-Node Stats:" + "\033[0m")
         for node_id, stats in self.per_node_stats.items():
             print(f"  {self.network.get_node(node_id).type} {node_id}:")
             print(
@@ -453,13 +468,13 @@ class NetworkStats:
                 f"    RX Time: {stats['states']['rx_time_us']} µs ({stats['states']['rx_time_us'] / self.network.medium.env.now * 100:.2f}%)"
             )
 
-        print("\nPer-Channel Stats:")
+        print("\033[93m" + "\nPer-Channel Stats:" + "\033[0m")
         for ch_id, stats in self.per_channel_stats.items():
             print(f"  Channel {ch_id}:")
             print(f"    Airtime: {stats['airtime_us']} µs")
             print(f"    Utilization: {stats['utilization']:.2f}%")
 
-        print("\nMedium Stats:")
+        print("\033[93m" + "\nMedium Stats:" + "\033[0m")
         print(
             f"  PPDUs TX (Total): {self.medium_stats['ppdus_tx']}, "
             f"PPDUs TX (Success): {self.medium_stats['ppdus_success']}, "

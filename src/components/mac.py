@@ -531,14 +531,17 @@ class MAC:
         yield self.env.process(self.transmit(data_unit))
         self.set_state(MACState.IDLE)
 
+    def get_state_name(self):
+        return [
+            name for name, value in vars(MACState).items() if value == self.state
+        ][0]
+
     def set_state(self, new_state: MACState):
         """Updates the MAC state."""
         if self.state != new_state:
             self.state = new_state
 
-            state_name = [
-                name for name, value in vars(MACState).items() if value == self.state
-            ][0]
+            state_name = self.get_state_name()
 
             self.mac_state_stats.add_to_mac_state_history(self.env.now, state_name)
 
