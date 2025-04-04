@@ -4,6 +4,7 @@ from src.sim_params import SimParams as sparams
 from src.utils.event_logger import get_logger
 from src.utils.statistics import TransmissionStats, ReceptionStats, NetworkStats
 
+from typing import cast
 
 import networkx as nx
 import math
@@ -20,6 +21,7 @@ class Node:
         position: tuple[float, float, float],
         type: str,
         medium,
+        network,
     ):
         """Initializes an individual network node object."""
         from src.components.medium import MEDIUM
@@ -31,6 +33,8 @@ class Node:
         self.id = id
         self.position = position  # x, y, z
         self.type = type
+
+        self.network: Network = network
 
         self.medium: MEDIUM = medium
 
@@ -56,6 +60,31 @@ class Node:
         return f"{self.__class__.__name__}({self.id}, pos={self.position})"
 
 
+class STA(Node):
+    def __init__(
+        self,
+        cfg: cfg,
+        sparams: sparams,
+        env: simpy.Environment,
+        id: int,
+        position: tuple[float, float, float],
+        bss_id: int,
+        ap,
+        medium,
+        network,
+    ):
+        """Station (STA) node, associated with an AP and BSS."""
+        super().__init__(cfg, sparams, env, id, position, "STA", medium, network)
+        self.bss_id = bss_id
+        self.ap: AP = ap
+        self.ap.add_sta(self)  # Automatically associate with the AP
+
+    def __repr__(self):
+        return (
+            f"STA({self.id}, pos={self.position}, BSS={self.bss_id}, AP={self.ap.id})"
+        )
+
+
 class AP(Node):
     def __init__(
         self,
@@ -66,46 +95,23 @@ class AP(Node):
         position: tuple[float, float, float],
         bss_id: int,
         medium,
+        network,
     ):
         """Access Point (AP) node."""
-        super().__init__(cfg, sparams, env, id, position, "AP", medium)
+        super().__init__(cfg, sparams, env, id, position, "AP", medium, network)
         self.bss_id = bss_id
 
         self.associated_stas = []
 
-    def add_sta(self, sta):
+    def add_sta(self, sta: STA):
         """Associates a STA with this AP."""
         self.associated_stas.append(sta)
 
-    def get_stas(self):
+    def get_stas(self) -> list[STA]:
         return self.associated_stas
 
     def __repr__(self):
         return f"AP({self.id}, pos={self.position}, BSS={self.bss_id}, STAs={[sta.id for sta in self.associated_stas]})"
-
-
-class STA(Node):
-    def __init__(
-        self,
-        cfg: cfg,
-        sparams: sparams,
-        env: simpy.Environment,
-        id: int,
-        position: tuple[float, float, float],
-        bss_id: int,
-        ap: AP,
-        medium,
-    ):
-        """Station (STA) node, associated with an AP and BSS."""
-        super().__init__(cfg, sparams, env, id, position, "STA", medium)
-        self.bss_id = bss_id
-        self.ap = ap
-        ap.add_sta(self)  # Automatically associate with the AP
-
-    def __repr__(self):
-        return (
-            f"STA({self.id}, pos={self.position}, BSS={self.bss_id}, AP={self.ap.id})"
-        )
 
 
 class Network:
@@ -155,7 +161,9 @@ class Network:
                 return None
 
         self.logger.debug(f"Adding AP {ap_id} to BSS {bss_id} at position {position}")
-        ap = AP(self.cfg, self.sparams, self.env, ap_id, position, bss_id, self.medium)
+        ap = AP(
+            self.cfg, self.sparams, self.env, ap_id, position, bss_id, self.medium, self
+        )
         self.nodes[ap_id] = ap
         self.graph.add_node(ap_id, pos=position, type="AP", bss_id=bss_id)
         return ap
@@ -181,7 +189,15 @@ class Network:
             f"Adding STA {sta_id} to BSS {bss_id} at position {position}, connected to AP {ap.id}"
         )
         sta = STA(
-            self.cfg, self.sparams, self.env, sta_id, position, bss_id, ap, self.medium
+            self.cfg,
+            self.sparams,
+            self.env,
+            sta_id,
+            position,
+            bss_id,
+            ap,
+            self.medium,
+            self,
         )
         self.nodes[sta_id] = sta
         self.graph.add_node(sta_id, pos=position, type="STA", bss_id=bss_id)
@@ -229,9 +245,19 @@ class Network:
     ):
         node = self.get_node(node_id)
         if node:
-            self.logger.debug(f"Updating Node {node_id} position to {new_position}")
+            self.logger.debug(
+                f"Updating {node.type} {node_id} position to {new_position}"
+            )
             node.position = new_position
             self.graph.nodes[node_id]["pos"] = new_position
+
+            if isinstance(node, AP):
+                ap = cast(AP, node)
+                ap.phy_layer.select_mcs_indexes()
+            elif isinstance(node, STA):
+                sta = cast(STA, node)
+                sta.ap.phy_layer.select_mcs_index(sta.id)
+                
         else:
             self.logger.error(f"Node {node_id} not found. Cannot update position.")
 

@@ -4,6 +4,8 @@ from src.user_config import UserConfig as cfg
 from src.components.network import Node, AP
 from src.utils.event_logger import get_logger
 from src.utils.data_units import DataUnit, PPDU
+from src.utils.mcs_table import get_highest_mcs_index
+from src.utils.transmission import get_rssi_dbm
 
 
 from typing import cast
@@ -23,7 +25,7 @@ class PHY:
         self.channels_ids = []
         self.primary_channel_id = None
 
-        self.mcs_index = None
+        self.mcs_indexes = {}
 
         self.name = "PHY"
         self.logger = get_logger(self.name, cfg, sparams, env)
@@ -53,7 +55,7 @@ class PHY:
 
     def select_channels(self):
         # TODO: implement channel selection
-        self.logger.header(
+        self.logger.debug(
             f"{self.node.type} {self.node.id} -> Selecting channels at random..."
         )
         valid_channels = self.node.medium.get_valid_channels()
@@ -66,7 +68,7 @@ class PHY:
 
     def select_primary_channel_id(self):
         # TODO: implement primary channel selection
-        self.logger.header(
+        self.logger.debug(
             f"{self.node.type} {self.node.id} -> Selecting primary channel at random..."
         )
 
@@ -76,24 +78,54 @@ class PHY:
             f"{self.node.type} {self.node.id} -> Selected primary channel: {self.primary_channel_id}"
         )
 
-    def select_mcs_index(self) -> int:
-        # TODO: implement MCS selection
-        self.logger.header(f"Node {self.node.id} -> Selecting MCS...")
+    def select_mcs_index(self, sta_id: int):
+        self.logger.debug(f"Node {self.node.id} -> Selecting MCS for STA {sta_id}...")
 
-        self.mcs_index = 11
+        # Predict associated STA RSSI
+        distance_m = self.node.network.get_distance_between_nodes(self.node.id, sta_id)
+        rssi_dbm = get_rssi_dbm(self.sparams, distance_m)
 
-        self.logger.info(
-            f"{self.node.type} {self.node.id} -> Selected MCS: {self.mcs_index}"
+        # Get the highest MCS index that can be supported
+        mcs_index = get_highest_mcs_index(
+            rssi_dbm, len(self.channels_ids) * 20, self.node.id, sta_id
         )
 
-    def broadcast_channel_info(self):
-        """If the node is an AP, send the channel & MCS info to all associated STAs."""
-        if self.node.type != "AP":
+        # If no MCS index can be supported, select MCS 0
+        if mcs_index == -1:
+            self.logger.warning(
+                f"{self.node.type} {self.node.id} -> RSSI ({rssi_dbm:.2f} dBm) too low to support any MCS index for STA {sta_id}. Selecting MCS 0. Please reallocate AP {self.node.id} and STA {sta_id} close to each other."
+            )
+            mcs_index = 0
+
+        self.mcs_indexes[sta_id] = mcs_index
+
+        self.logger.info(
+            f"{self.node.type} {self.node.id} -> Selected MCS index for STA {sta_id}: {mcs_index}"
+        )
+        
+        self.broadcast_mcs_info(sta_id)
+
+    def select_mcs_indexes(self):
+        if not isinstance(self.node, AP):
             return
 
         ap = cast(AP, self.node)
 
-        self.logger.header(
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Selecting MCS indexes..."
+        )
+
+        for sta in ap.get_stas():
+            self.select_mcs_index(sta.id)
+
+    def broadcast_channel_info(self):
+        """If the node is an AP, send the channel & MCS info to all associated STAs."""
+        if not isinstance(self.node, AP):
+            return
+
+        ap = cast(AP, self.node)
+
+        self.logger.debug(
             f"{self.node.type} {self.node.id} -> Broadcasting channel info to associated STAs..."
         )
 
@@ -102,18 +134,17 @@ class PHY:
                 ap.id, sta.id, self.channels_ids, self.primary_channel_id
             )
 
-    def broadcast_mcs_info(self):
-        if self.node.type != "AP":
+    def broadcast_mcs_info(self, sta_id: int):
+        if not isinstance(self.node, AP):
             return
 
         ap = cast(AP, self.node)
 
-        self.logger.header(
-            f"{self.node.type} {self.node.id} -> Broadcasting MCS info to associated STAs..."
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Broadcasting MCS info to STA {sta_id}..."
         )
-
-        for sta in ap.get_stas():
-            self.node.medium.broadcast_mcs_info(ap.id, sta.id, self.mcs_index)
+        
+        self.node.medium.broadcast_mcs_info(ap.id, sta_id, self.mcs_indexes[sta_id])
 
     def receive_channel_info(self, channels_ids: list[int], primary_channel_id: int):
         self.set_channels(channels_ids)
@@ -157,7 +188,7 @@ class PHY:
             mcs_index = 0
         else:
             tx_channels = self.channels_ids
-            mcs_index = self.mcs_index
+            mcs_index = self.mcs_indexes[data_unit.dst_id]
 
         ppdu = PPDU(data_unit, self.env.now)
 
@@ -196,10 +227,9 @@ class PHY:
         self.node.mac_layer.receive(data_unit)
 
     def run(self):
-        if self.node.type == "AP":
+        if isinstance(self.node, AP):
             self.select_channels()
             self.select_primary_channel_id()
-            self.select_mcs_index()
+            self.select_mcs_indexes()
             self.broadcast_channel_info()
-            self.broadcast_mcs_info()
             yield self.env.timeout(0)

@@ -169,6 +169,12 @@ class DummyMedium:
     def broadcast_mcs_info(self, src_id, dst_id, mcs_index):
         pass
 
+    def release_channels(self, node: Node, channels_ids: list[int]):
+        pass
+
+    def assign_channels(self, node: Node, channels_ids: list[int]):
+        pass
+
 
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)

@@ -32,9 +32,7 @@ Reference: https://github.com/matplotlib/matplotlib/issues/21688
 
 
 class Arrow3D(FancyArrowPatch):
-    """
-    Custom 3D arrow class.
-    """
+    """Custom 3D arrow class."""
 
     def __init__(self, xs: np.ndarray, ys: np.ndarray, zs: np.ndarray, *args, **kwargs):
         """

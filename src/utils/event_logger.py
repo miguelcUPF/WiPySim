@@ -96,9 +96,7 @@ initialize_log_file(cfg, LOGS_RECORDING_FILE)
 
 
 class ConfigFilter(logging.Filter):
-    """
-    Filters log messages based on configuration settings.
-    """
+    """Filters log messages based on configuration settings."""
 
     def __init__(self, cfg: cfg, sparams: sparams):
         """
@@ -132,9 +130,7 @@ class ConfigFilter(logging.Filter):
 
 
 class ConsoleFormatter(logging.Formatter):
-    """ "
-    Custom formatter for console with optional color formatting.
-    """
+    """Custom formatter for console with optional color formatting."""
 
     def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment = None):
         """
@@ -186,9 +182,7 @@ class ConsoleFormatter(logging.Formatter):
 
 
 class JSONFileHandler(logging.Handler):
-    """
-    Custom handler for logging to a JSON file.
-    """
+    """Custom handler for logging to a JSON file."""
 
     def __init__(self, filename: str, env: simpy.Environment = None):
         """

@@ -5,11 +5,11 @@ from src.utils.event_logger import get_logger
 from src.components.network import Network, Node
 from src.utils.data_units import PPDU
 from src.utils.statistics import ChannelStats, MediumStats
-from src.utils.mcs_table import calculate_data_rate_bps, get_min_sensitivity
+from src.utils.mcs_table import get_min_sensitivity_dBm
+from src.utils.transmission import get_tx_duration_us, get_rssi_dbm
 
 import simpy
 import random
-import math
 
 VALID_20MHZ_BONDS = [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,)]
 VALID_40MHZ_BONDS = [(1, 2), (3, 4), (5, 6), (7, 8)]
@@ -265,29 +265,14 @@ class MEDIUM:
             self.channels[ch_id].successful_transmission_detected()
 
     def transmit(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
-        def _calculate_tx_time(
-            mcs_index, channel_width, size_bytes, is_mgmt_ctrl_frame=False
-        ):
-            """Computes transmission time based on bandwidth and MCS."""
-
-            data_rate_bps = calculate_data_rate_bps(
-                mcs_index,
-                channel_width,
-                self.sparams.SPATIAL_STREAMS if not is_mgmt_ctrl_frame else 1,
-                self.sparams.GUARD_INTERVAL_us,
-            )
-
-            tx_duration_us = size_bytes * 8 / data_rate_bps * 1e6
-
-            return round(tx_duration_us)
-
         self.logger.header(
             f"Transmitting {ppdu.data_unit.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
         )
 
         self.occupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
-        tx_duration_us = _calculate_tx_time(
+        tx_duration_us = get_tx_duration_us(
+            sparams,
             mcs_index,
             len(channels_ids) * 20,
             ppdu.size_bytes,
@@ -321,39 +306,17 @@ class MEDIUM:
         self.unoccupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
     def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
-        def _calculate_path_loss(distance_m: float):
-            path_loss_1m_dB = (
-                20 * math.log10(1)
-                + 20 * math.log10(self.sparams.FREQUENCY_MHz)
-                - 147.55
-            )  # Assuming free space path loss
-
-            path_loss = (
-                path_loss_1m_dB
-                + 10
-                * self.sparams.PATH_LOSS_EXPONENT
-                * math.log10(max(distance_m, 0.1) / 1)
-            )
-
-            if self.sparams.ENABLE_SHADOWING:
-                path_loss += random.gauss(0, self.sparams.SHADOWING_STD_dB)
-
-            return path_loss
-
         distance_m = self.network.get_distance_between_nodes(ppdu.src_id, ppdu.dst_id)
 
-        rssi_dbm = (
-            self.sparams.TX_POWER_dBm
-            + self.sparams.TX_GAIN_dB
-            + self.sparams.RX_GAIN_dB
-            - _calculate_path_loss(distance_m)
-        )
+        rssi_dbm = get_rssi_dbm(self.sparams, distance_m)
+        min_sensitivity_dbm = get_min_sensitivity_dBm(mcs_index, len(channels_ids) * 20)
 
-        min_sensitivity_dbm = get_min_sensitivity(mcs_index, len(channels_ids) * 20)
         if rssi_dbm < min_sensitivity_dbm:
             self.logger.warning(
                 f"Unreliable PPDU reception (from {ppdu.src_id} to {ppdu.dst_id}): RSSI ({rssi_dbm:.2f} dBm) below min. sensitivity threshold ({min_sensitivity_dbm:.2f} dBm)"
             )
+            node_src = self.network.get_node(ppdu.src_id)
+            node_src.phy_layer.select_mcs_index(ppdu.dst_id)
             return
 
         if ppdu.data_unit.type == "AMPDU":

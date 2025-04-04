@@ -8,7 +8,7 @@ from src.utils.support import (
     validate_config,
     warn_overwriting_enabled_paths,
 )
-from src.utils.theoretical import compute_collision_probability
+from src.utils.bianchis import compute_collision_probability
 from src.utils.plotters import CollisionProbPlotter
 from src.utils.messages import (
     STARTING_TEST_MSG,
@@ -70,7 +70,7 @@ cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 N = range(1, 21)
 M = [0, 1, 2, 3, 4]
-CW_MIN = [64] # test values
+CW_MIN = [4] # test values: 4, 8, 16, 32, 64
 
 
 def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> tuple:

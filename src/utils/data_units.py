@@ -219,7 +219,7 @@ class PPDU(DataUnit):
         """
         super().__init__(
             creation_time_us,
-            data_unit.size_bytes + sparams.PHY_HEADER_SIZE_bytes,
+            data_unit.size_bytes + sparams.PHY_HEADER_SIZE_bytes, # Add PHY header
             data_unit.src_id,
             data_unit.dst_id,
         )

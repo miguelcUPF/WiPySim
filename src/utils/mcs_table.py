@@ -120,9 +120,9 @@ def calculate_data_rate_bps(
     return round(data_rate_bps, 1)
 
 
-def get_min_sensitivity(mcs_index: int, channel_width_mhz: int) -> float:
+def get_min_sensitivity_dBm(mcs_index: int, channel_width_mhz: int) -> float:
     """
-    Retrieve the minimum sensitivity for the given MCS index and channel width.
+    Retrieve the minimum sensitivity (in dBm) for the given MCS index and channel width.
 
     Args:
         mcs_index (int): The Modulation and Coding Scheme index.
@@ -142,3 +142,33 @@ def get_min_sensitivity(mcs_index: int, channel_width_mhz: int) -> float:
         raise ValueError(f"Invalid channel width: {channel_width_mhz}")
 
     return MCS_min_sensitivity[mcs_index][f"{channel_width_mhz}MHz"]
+
+
+def get_highest_mcs_index(
+    rssi_dbm: float, channel_width_mhz: int, ap_id: int = None, sta_id: int = None
+) -> int:
+    """
+    Retrieve the highest MCS index that can be supported given the eceived signal strength indicator (RSSI) and channel width.
+
+    Args:
+        rssi_dbm (float): The received signal strength indicator (RSSI) in dBm.
+        channel_width_mhz (int): The channel width in MHz.
+
+    Returns:
+        int: The highest MCS index that can be supported. If no MCS index can be supported, returns -1.
+    """
+
+    if channel_width_mhz not in N_SD:
+        raise ValueError(f"Invalid channel width: {channel_width_mhz}")
+
+    if rssi_dbm < MCS_min_sensitivity[0][f"{channel_width_mhz}MHz"]:
+        return -1
+
+    highest_mcs_index = 0
+    for mcs_index, sensitivity_dbm in MCS_min_sensitivity.items():
+        if sensitivity_dbm[f"{channel_width_mhz}MHz"] <= rssi_dbm:
+            highest_mcs_index = mcs_index
+        else:
+            break
+
+    return highest_mcs_index

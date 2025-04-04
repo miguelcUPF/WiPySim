@@ -22,6 +22,9 @@ def validate_params(sparams: sparams, logger: logging.Logger):
         if not isinstance(value, bool):
             logger.critical(f"Invalid {name}: {value}. It must be a boolean.")
 
+    if sparams.ENABLE_SHADOWING: # TODO
+        logger.critical("Shadowing is not implemented yet. Please set ENABLE_SHADOWING to False.")
+
     positive_int_params = {
         "MAX_TX_QUEUE_SIZE_pkts": sparams.MAX_TX_QUEUE_SIZE_pkts,
         "SLOT_TIME_us": sparams.SLOT_TIME_us,
@@ -71,7 +74,7 @@ def validate_params(sparams: sparams, logger: logging.Logger):
         "TX_POWER_dBm": sparams.TX_POWER_dBm,
         "TX_GAIN_dB": sparams.TX_GAIN_dB,
         "RX_GAIN_dB": sparams.RX_GAIN_dB,
-        "FREQUENCY_MHz": sparams.FREQUENCY_MHz,
+        "FREQUENCY_MHz": sparams.FREQUENCY_GHz,
         "PATH_LOSS_EXPONENT": sparams.PATH_LOSS_EXPONENT,
         "SHADOWING_STD_dB": sparams.SHADOWING_STD_dB,
     }

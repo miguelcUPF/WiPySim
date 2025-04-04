@@ -37,7 +37,7 @@ class SimParams:
     RX_GAIN_dB = 0   
 
     # --- Channel Parameters --- #
-    FREQUENCY_MHz = 5
+    FREQUENCY_GHz = 5
 
     NUM_CHANNELS = 8  # 1, 2, 4, or 8
 
