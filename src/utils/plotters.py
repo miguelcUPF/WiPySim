@@ -16,6 +16,7 @@ import math
 import simpy
 import logging
 import numpy as np
+import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -443,26 +444,7 @@ class CollisionProbPlotter(BasePlotter):
         super().__init__(cfg, sparams, env)
 
     def validate_data(self, data: dict, m_values: list[int], cw_min_values: list[int]):
-        """
-        Logs errors for missing or incorrect data but continues plotting.
-        This function validates the data passed to the plot_prob method.
-        The data is expected to be structured as follows:
-            {
-                cw_min: {
-                    m: {
-                        n: {
-                            "simulated": float,
-                            "theoretical": float
-                        }
-                    }
-                }
-            }
-
-        Args:
-            data (dict): The data to validate.
-            m_values (list[int]): List of m values. (cw_max = 2^m * cw_min)
-            cw_min_values (list[int]): List of cw_min values.
-        """
+        """Validates the data passed to the plot method."""
         for cw_min in cw_min_values:
             cw_min_data = data.get(cw_min)
             if cw_min_data is None:
@@ -526,10 +508,10 @@ class CollisionProbPlotter(BasePlotter):
             save_name (str, optional): The name of the plot file. Defaults to "collision_prob".
             save_format (str, optional): The format of the plot file. Defaults to "pdf".
         """
-        plt.ion()
-
         if not self.cfg.ENABLE_FIGS_SAVING and not self.cfg.ENABLE_FIGS_DISPLAY:
             return
+
+        plt.ion()
 
         # Validate the input data
         self.validate_data(data, m_values, cw_mins)
@@ -638,6 +620,87 @@ class CollisionProbPlotter(BasePlotter):
             self.save_plot(fig, save_name, save_format)
 
         # Display the plot
+        if self.cfg.ENABLE_FIGS_DISPLAY:
+            plt.show()
+        else:
+            plt.close(fig)
+
+
+class DelayPerLoadPlotter(BasePlotter):
+    """Plotter for mean delay vs load."""
+
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment = None):
+        """
+        Initialize a DelayPerLoadPlotter object.
+
+        Args:
+            cfg (cfg): The UserConfig object.
+            sparams (sparams): The SimulationParams object.
+            env (simpy.Environment, optional): The simulation environment. Defaults to None.
+        """
+        super().__init__(cfg, sparams, env)
+
+    def validate_data(self, data: dict, load_values: list[float]):
+        """Validates the data passed to the plot method."""
+        for load in load_values:
+            if load not in data:
+                self.logger.error(f"Missing load={load} in data.")
+
+    def plot_mean_delay(
+        self,
+        data: dict[int, pd.DataFrame],
+        loads_kbps: list[float],
+        save_name: str = "mean_delay_vs_load",
+        save_format: str = "pdf",
+    ):
+        if not self.cfg.ENABLE_FIGS_SAVING and not self.cfg.ENABLE_FIGS_DISPLAY:
+            return
+
+        plt.ion()
+
+        self.validate_data(data, loads_kbps)
+
+        fig, ax = plt.subplots(figsize=(6.4, 4.8))
+        ax.set_xlabel("Traffic load (Mbps)")
+        ax.set_ylabel("Delay (μs)")
+
+        loads = np.array(sorted(loads_kbps))
+        mean_delays = []
+        perc_99_delays = []
+
+        for load in loads:
+            df = data[load]
+            delays = df["delay_us"]
+            if len(delays) == 0:
+                mean_delays.append(np.nan)
+                perc_99_delays.append(np.nan)
+                continue
+            mean_delays.append(delays.mean())
+            perc_99_delays.append(np.percentile(delays, 99))
+
+        ax.plot(
+            loads / 1e3,
+            mean_delays,
+            "o-",
+            label="mean",
+            markerfacecolor="none",
+            markersize=3,
+        )
+        ax.plot(
+            loads / 1e3,
+            perc_99_delays,
+            "s--",
+            label="99th",
+            markerfacecolor="none",
+            markersize=3,
+        )
+        ax.legend(fontsize=8, frameon=False)
+
+        plt.tight_layout()
+
+        if self.cfg.ENABLE_FIGS_SAVING:
+            self.save_plot(fig, save_name, save_format)
+
         if self.cfg.ENABLE_FIGS_DISPLAY:
             plt.show()
         else:

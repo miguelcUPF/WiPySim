@@ -9,7 +9,7 @@ from src.utils.mcs_table import calculate_data_rate_bps
 
 
 from typing import cast
-from simpy.events import AnyOf, AllOf
+from simpy.events import AnyOf
 
 import simpy
 import random
@@ -553,7 +553,6 @@ class MAC:
         )
 
         if data_unit.type == "AMPDU":
-
             back = BACK(data_unit, self.node.id, data_unit.src_id, self.env.now)
 
             for mpdu in data_unit.mpdus:
@@ -604,6 +603,8 @@ class MAC:
             if self.back_event and not self.back_event.triggered:
                 self.rx_back = data_unit  # Store received BACK frame
                 if not self.sparams.ENABLE_RTS_CTS:
+                    self.node.tx_stats.tx_successes += 1
+                elif data_unit.ampdu_id == self.tx_ampdu.id and self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes:
                     self.node.tx_stats.tx_successes += 1
 
                 self.back_event.succeed()  # Trigger BACK event
