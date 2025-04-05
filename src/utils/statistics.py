@@ -219,7 +219,7 @@ class NetworkStats:
             )
 
             if not tx_stats.tx_queue_len_history.empty:
-                mean_queue_len = tx_stats.tx_queue_len_history["queue_len"].mean()
+                mean_queue_len = tx_stats.tx_queue_len_history["queue_len"].mean() # TODO: not correct
                 total_queue_len += mean_queue_len
 
             self.per_node_stats[node.id] = {

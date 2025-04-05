@@ -9,7 +9,7 @@ from src.utils.mcs_table import calculate_data_rate_bps
 
 
 from typing import cast
-from simpy.events import AnyOf
+from simpy.events import AnyOf, AllOf
 
 import simpy
 import random
@@ -60,14 +60,11 @@ class MAC:
 
         self.tx_queue_event = None
 
-        self.primary_busy_event = None
-        self.primary_idle_event = None
+        self.any_channel_busy_event = None
+        self.all_channels_idle_event = None
 
         self.cts_event = None
         self.back_event = None
-
-        self.rts_collision_event = self.env.event()
-        self.ampdu_collision_event = self.env.event()
 
         self.last_collision_time_us = None
 
@@ -112,93 +109,161 @@ class MAC:
                 return item
         return None
 
-    def set_primary_busy(self):
+    def trigger_any_busy_event(self):
         (
-            self.primary_busy_event.succeed()
-            if self.primary_busy_event and not self.primary_busy_event.triggered
+            self.any_channel_busy_event.succeed()
+            if self.any_channel_busy_event and not self.any_channel_busy_event.triggered
             else None
         )
 
-    def set_primary_idle(self):
+    def trigger_all_idle_event(self):
         (
-            self.primary_idle_event.succeed()
-            if self.primary_idle_event and not self.primary_idle_event.triggered
+            self.all_channels_idle_event.succeed()
+            if self.all_channels_idle_event
+            and not self.all_channels_idle_event.triggered
             else None
         )
 
-    def wait_for_idle(self, duration_us: float, waited_time_us: float = 0):
-        """Check if all the used channels have been idle for the given duration."""
+    def _wait_until_channel_idle(
+        self, ch_id: int, duration_us: float, waited_time_us: float = 0
+    ):
+        wait_start_time = self.env.now - waited_time_us
+        while True:
+            self.node.phy_layer.reset_busy_event(ch_id)
+            self.node.phy_layer.reset_idle_event(ch_id)
+
+            # Wait for channel to become idle
+            if not self.node.phy_layer.is_channel_idle(ch_id):
+                channel_idle_event = self.node.phy_layer.get_idle_event(ch_id)
+                yield channel_idle_event
+                wait_start_time = self.env.now
+
+            remaining_time = duration_us - (self.env.now - wait_start_time)
+
+            # Channel is now idle, start timing
+            timeout = self.env.timeout(remaining_time)
+            busy_event = self.node.phy_layer.get_busy_event(ch_id)
+
+            # Use per-channel collision events
+            rts_event = self.node.phy_layer.get_rts_collision_event(ch_id)
+            ampdu_event = self.node.phy_layer.get_ampdu_collision_event(ch_id)
+
+            events = [timeout, busy_event, rts_event, ampdu_event]
+
+            event_result = yield AnyOf(self.env, events)
+
+            if ampdu_event in event_result:
+                eifs = self.sparams.DIFS_us + BACK_TIMEOUT_us
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> AMPDU collision on Channel {ch_id}, waiting EIFS ({eifs} μs)"
+                )
+                self.node.phy_layer.reset_ampdu_collision_event(ch_id)
+                # reset rts collision event since it might happen that both rts and ampdu collision occur on the same channel, and the ampdu collision EIFS should remain as it is longer
+                self.node.phy_layer.reset_rts_collision_event(ch_id)
+                yield from self._wait_until_channel_idle(ch_id, eifs)
+                return
+
+            if rts_event in event_result:
+                eifs = self.sparams.DIFS_us + CTS_TIMEOUT_us
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> RTS collision on Channel {ch_id}, waiting EIFS ({eifs} μs)"
+                )
+                self.node.phy_layer.reset_rts_collision_event(ch_id)
+                yield from self._wait_until_channel_idle(ch_id, eifs)
+                return
+
+            if timeout in event_result:
+                # Successfully stayed idle for duration
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Channel {ch_id} has been idle for {duration_us} μs"
+                )
+                return
+            # else: it became busy before the timer finished, retry
+
+    def wait_until_primary_idle(
+        self, ch_duration_us: dict | int, ch_waited_time_us: dict | int = 0
+    ):
+        self.set_state(MACState.CONTEND)
+
+        if len(self.node.phy_layer.sensing_channels_ids) > 1:
+            self.logger.critical(
+                f"{self.node.type} {self.node.id} -> Sensing channels does not contain only one channel when using CSMA_SENSING_MODE 0! (Channels: {', '.join(map(str, self.node.phy_layer.sensing_channels_ids))})"
+            )
+
+        primary_channel_id = next(iter(self.node.phy_layer.sensing_channels_ids))
+
+        duration_us = (
+            ch_duration_us
+            if isinstance(ch_duration_us, int)
+            else ch_duration_us[primary_channel_id]
+        )
+        waited_time_us = (
+            ch_waited_time_us
+            if isinstance(ch_waited_time_us, int)
+            else ch_waited_time_us[primary_channel_id]
+        )
+
+        self.logger.header(
+            f"{self.node.type} {self.node.id} -> Sensing if primary channel (Channel: {primary_channel_id}) is idle for {duration_us} μs..."
+        )
+
+        if not self.node.phy_layer.are_all_sensing_channels_idle():
+            self.all_channels_idle_event = self.env.event()
+            yield self.all_channels_idle_event
+            self.all_channels_idle_event = None
+            waited_time_us = 0
+        yield from self._wait_until_channel_idle(
+            primary_channel_id, duration_us, waited_time_us
+        )
+
+    def wait_until_any_idle(
+        self, ch_duration_us: dict | int, ch_waited_time_us: dict | int = 0
+    ):
         self.set_state(MACState.CONTEND)
         self.logger.header(
-            f"{self.node.type} {self.node.id} -> Contending for primary channel {self.node.phy_layer.primary_channel_id} for {duration_us} μs ..."
+            f"{self.node.type} {self.node.id} -> Sensing if any channel (Channels: {', '.join(map(str, self.node.phy_layer.sensing_channels_ids))}) are idle for {str(ch_duration_us) + 'μs' if isinstance(ch_duration_us, float) else ', '.join(map(str, ch_duration_us.values())) + 'μs respectively'}......"
         )
 
-        self.primary_idle_event = self.env.event()
-
-        if not self.node.phy_layer.is_primary_channel_idle():
-            yield self.primary_idle_event
-            self.primary_idle_event = None
-            waited_time_us = 0
-
-        idle_start_time = self.env.now - waited_time_us
-
-        while True:
-            remaining_time = duration_us - (self.env.now - idle_start_time)
-
-            self.primary_busy_event = self.env.event()
-
-            events = [self.env.timeout(remaining_time), self.primary_busy_event]
-
-            if self.rts_collision_event is not None:
-                events.append(self.rts_collision_event)
-            if self.ampdu_collision_event is not None:
-                events.append(self.ampdu_collision_event)
-
-            yield AnyOf(self.env, events)
-
-            
-            if (
-                self.ampdu_collision_event is not None
-                and self.ampdu_collision_event.triggered
-            ):
-                self.ampdu_collision_event = self.env.event()
-                self.rts_collision_event = self.env.event()
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> AMPDU collision detected, waiting for EIFS ({self.sparams.DIFS_us + BACK_TIMEOUT_us} us)"
+        sensing_channels = self.node.phy_layer.sensing_channels_ids
+        idle_channel_events = [
+            self.env.process(
+                self._wait_until_channel_idle(
+                    ch_id,
+                    (
+                        ch_duration_us
+                        if isinstance(ch_duration_us, int)
+                        else ch_duration_us[ch_id]
+                    ),
+                    (
+                        ch_waited_time_us
+                        if isinstance(ch_waited_time_us, int)
+                        else ch_waited_time_us[ch_id]
+                    ),
                 )
-                yield from self.wait_for_idle(self.sparams.DIFS_us + BACK_TIMEOUT_us)
-                return
-            elif (
-                self.rts_collision_event is not None
-                and self.rts_collision_event.triggered
-            ):
-                self.ampdu_collision_event = self.env.event()
-                self.rts_collision_event = self.env.event()
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> RTS collision detected, waiting for EIFS ({self.sparams.DIFS_us + CTS_TIMEOUT_us} us)"
-                )
-                yield from self.wait_for_idle(self.sparams.DIFS_us + CTS_TIMEOUT_us)
-                return
+            )
+            for ch_id in sensing_channels
+        ]
 
+        # Wait until at least one channel completes its idle time
+        event_result = yield AnyOf(self.env, idle_channel_events)
 
-            if self.primary_busy_event.triggered:
-                self.primary_busy_event = None
+        # Get list of channels that completed the idle period
+        idle_channels = [
+            sensing_channels[i]
+            for i, event in enumerate(idle_channel_events)
+            if event in event_result
+        ]
 
-                self.primary_idle_event = self.env.event()
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Channels {', '.join(map(str, idle_channels))} have been idle for {str(ch_duration_us) + 'μs' if isinstance(ch_duration_us, float) else ', '.join(map(str, [ch_duration_us[ch_id] for ch_id in idle_channels])) + 'μs respectively'}"
+        )
 
-                # Reset timer and wait for the channel to become idle again
-                yield self.primary_idle_event
+        return idle_channels
 
-                self.primary_idle_event = None
-                idle_start_time = self.env.now  # Restart idle tracking
-            else:
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> Primary channel {self.node.phy_layer.primary_channel_id} has been idle for {duration_us} μs"
-                )
-                return
-
-    def backoff(self):
-        self.logger.header(f"{self.node.type} {self.node.id} -> Starting Backoff...")
+    def backoff(self, channels_ids: set[int] = None):
+        self.logger.header(
+            f"{self.node.type} {self.node.id} -> Starting Backoff{'' if channels_ids is None else f' on channels'} {', '.join(map(str, self.node.phy_layer.sensing_channels_ids)) if channels_ids is not None else ''}..."
+        )
 
         if self.backoff_slots > 0:
             self.logger.debug(
@@ -213,36 +278,79 @@ class MAC:
                 f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
             )
 
+        bo_channels = set(channels_ids) if channels_ids else set()
+
+        slot_remaining_time = self.sparams.SLOT_TIME_us
+
         while self.backoff_slots > 0:
-            self.primary_busy_event = self.env.event()
+            if self.sparams.CSMA_SENSING_MODE == 0:
+                # legacy behavior
+                self.any_channel_busy_event = self.env.event()
+                event = self.any_channel_busy_event
 
-            slot_start_time = self.env.now
+                slot_start_time = self.env.now
 
-            event_result = (
-                yield self.env.timeout(self.sparams.SLOT_TIME_us)
-                | self.primary_busy_event
-            )
+                event_result = yield self.env.timeout(self.sparams.SLOT_TIME_us) | event
 
-            if (
-                self.primary_busy_event in event_result
-                and self.env.now < slot_start_time + self.sparams.SLOT_TIME_us
-            ):
-                self.primary_busy_event = None
+                if (
+                    event in event_result
+                    and self.env.now < slot_start_time + self.sparams.SLOT_TIME_us
+                ):
+                    self.any_channel_busy_event = None
+                    self.logger.debug(
+                        f"{self.node.type} {self.node.id} -> Channel busy, pausing backoff ({self.backoff_slots})..."
+                    )
+                    return
+
+                self.backoff_slots -= 1
                 self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> Channel busy, pausing backoff ({self.backoff_slots})..."
+                    f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
                 )
-                return
+            else:
+                # special mode
+                busy_events = {
+                    ch_id: self.node.phy_layer.get_busy_event(ch_id)
+                    for ch_id in bo_channels
+                }
+                event = self.env.any_of(list(busy_events.values()))
 
-            self.backoff_slots -= 1
-            self.logger.debug(
-                f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
-            )
+                slot_start_time = self.env.now
+                event_result = yield self.env.timeout(slot_remaining_time) | event
+
+                if (
+                    event in event_result
+                    and self.env.now < slot_start_time + slot_remaining_time
+                ):
+                    # Check which channels got busy
+                    busy_channels = {
+                        ch_id for ch_id, ev in busy_events.items() if ev.triggered
+                    }
+                    slot_remaining_time = self.env.now - slot_start_time
+                    if busy_channels:
+                        # Remove only the busy ones
+                        bo_channels -= busy_channels
+                        self.logger.debug(
+                            f"{self.node.type} {self.node.id} -> Channels {', '.join(map(str, busy_channels))} became busy. Remaining idle: {', '.join(map(str, bo_channels))}"
+                        )
+                        if not bo_channels:
+                            self.logger.debug(
+                                f"{self.node.type} {self.node.id} -> All channels are busy, pausing backoff ({self.backoff_slots})..."
+                            )
+                            return
+
+                self.backoff_slots -= 1
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
+                )
 
         if self.is_first_tx:
             self.node.tx_stats.first_tx_attempt_us = self.env.now
             self.is_first_tx = False
         else:
             self.node.tx_stats.last_tx_attempt_us = self.env.now
+
+        if self.sparams.CSMA_SENSING_MODE == 1:
+            self.node.phy_layer.set_transmitting_channels(bo_channels)
 
         self.node.tx_stats.tx_attempts += 1
 
@@ -257,7 +365,7 @@ class MAC:
                 )
                 self.tx_ampdu = None
                 self.retries = 0
-                
+
             elif (
                 self.tx_ampdu.retries == 0
             ):  # If 0 it means that CTS timeout occurred, so no need to aggregate
@@ -327,7 +435,7 @@ class MAC:
             return
         else:
             self.retries = 0
-            yield self.env.process(self.wait_for_idle(self.sparams.SIFS_us))
+            yield self.env.process(self.wait_until_primary_idle(self.sparams.SIFS_us))
             yield self.env.process(self.transmit_ampdu())
 
     def transmit_ampdu(self):
@@ -421,26 +529,6 @@ class MAC:
         yield self.env.process(self.node.phy_layer.transmit(data_unit))
         self.node.tx_stats.airtime_us += self.env.now - start_tx_time_us
 
-    def rts_collision_detected(self):
-        self.last_collision_time_us = self.env.now
-        (
-            self.rts_collision_event.succeed()
-            if self.rts_collision_event and not self.rts_collision_event.triggered
-            else None
-        )
-
-    def ampdu_collision_detected(self):
-        self.last_collision_time_us = self.env.now
-        (
-            self.ampdu_collision_event.succeed()
-            if self.rts_collision_event and not self.ampdu_collision_event.triggered
-            else None
-        )
-
-    def successful_transmission_detected(self):
-        self.rts_collision_event = self.env.event()
-        self.ampdu_collision_event = self.env.event()
-
     def receive(self, data_unit: DataUnit):
 
         if self.is_first_rx:
@@ -527,14 +615,14 @@ class MAC:
                 )
 
     def send_response(self, data_unit):
-        yield self.env.process(self.wait_for_idle(self.sparams.SIFS_us))
+        yield self.env.process(self.wait_until_primary_idle(self.sparams.SIFS_us))
         yield self.env.process(self.transmit(data_unit))
         self.set_state(MACState.IDLE)
 
     def get_state_name(self):
-        return [
-            name for name, value in vars(MACState).items() if value == self.state
-        ][0]
+        return [name for name, value in vars(MACState).items() if value == self.state][
+            0
+        ]
 
     def set_state(self, new_state: MACState):
         """Updates the MAC state."""
@@ -553,21 +641,44 @@ class MAC:
         """Handles channel access, contention, and transmission"""
         while True:
             if len(self.tx_queue.items) > 0:
-                self.rts_collision_event = self.env.event()
-                if self.ampdu_collision_event and self.ampdu_collision_event.triggered:
-                    self.ampdu_collision_event = self.env.event()
-                    self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> AMPDU collision detected, waiting for EIFS ({self.sparams.DIFS_us + BACK_TIMEOUT_us} us), already waited {self.env.now - self.last_collision_time_us} us"
+                ch_duration_us = {}
+                ch_waited_times = {}
+
+                for ch_id in self.node.phy_layer.sensing_channels_ids:
+                    ch_duration_us[ch_id] = self.sparams.DIFS_us
+                    ch_waited_times[ch_id] = 0
+
+                # If an AMDPU/RTS collision occured while not contending it should be sensed during EIFS
+                # This happens when an RTS and AMPDU (sent due to size smaller than RTS_THRESHOLD_SIZE) collide
+                # The RTS sender does not count the channel as idle during the time elapsed from the delivery of the AMPDU until its CTS timeout occurs.
+                for ch_id in self.node.phy_layer.get_ampdu_collisions_channels_ids():
+                    waited_time_us = (
+                        self.env.now
+                        - self.node.phy_layer.get_last_collision_time(ch_id)
                     )
-                    yield self.env.process(
-                        self.wait_for_idle(
-                            self.sparams.DIFS_us + BACK_TIMEOUT_us,
-                            waited_time_us=self.env.now - self.last_collision_time_us,
-                        )
+                    duration_us = self.sparams.DIFS_us + BACK_TIMEOUT_us
+                    ch_waited_times[ch_id] = waited_time_us
+                    ch_duration_us[ch_id] = duration_us
+                    self.logger.debug(
+                        f"{self.node.type} {self.node.id} -> AMPDU collision on ch {ch_id}, waiting EIFS ({duration_us} us), already waited {waited_time} us"
                     )
                 else:
-                    yield self.env.process(self.wait_for_idle(self.sparams.DIFS_us))
-                yield self.env.process(self.backoff())
+                    waited_time = 0
+                    duration_us = self.sparams.DIFS_us
+
+                self.node.phy_layer.reset_collision_events()
+
+                if self.sparams.CSMA_SENSING_MODE == 1:
+                    idle_channels = yield self.env.process(
+                        self.wait_until_any_idle(ch_duration_us, ch_waited_times)
+                    )
+                    yield self.env.process(self.backoff(idle_channels))
+                else:
+                    # legacy behavior
+                    yield self.env.process(
+                        self.wait_until_primary_idle(ch_duration_us, ch_waited_times)
+                    )
+                    yield self.env.process(self.backoff())
 
                 if self.backoff_slots > 0:
                     continue

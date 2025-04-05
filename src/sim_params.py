@@ -34,12 +34,20 @@ class SimParams:
 
     TX_POWER_dBm = 20
     TX_GAIN_dB = 0
-    RX_GAIN_dB = 0   
+    RX_GAIN_dB = 0
+
+    CSMA_SENSING_MODE = 0  # Defaults to 0
+    # 0: Sense only primary channel
+    # 1: Sense all channels, pause backoff only if all are busy, send on those available
+
+    ENABLE_NON_STANDARD_BONDS = False  # Defaults to True
+    # True: it is possible to use non-default contiguous channel bonds (e.g., {1, 2}; {2,3}; {3, 4}; {1, 2, 3}; {2, 3, 4})
+    # False: restricts to standard contiguous channel bonds (e.g., {1, 2}; {3, 4}; {1, 2, 3, 4}}).
 
     # --- Channel Parameters --- #
     FREQUENCY_GHz = 5
 
-    NUM_CHANNELS = 8  # 1, 2, 4, or 8
+    NUM_CHANNELS = 4  # 1, 2, 4, or 8
 
     PATH_LOSS_EXPONENT = 4  # 4 considering indoor NLOS environment
 

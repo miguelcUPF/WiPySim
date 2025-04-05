@@ -16,14 +16,17 @@ def validate_params(sparams: sparams, logger: logging.Logger):
     bool_params = {
         "ENABLE_RTS_CTS": sparams.ENABLE_RTS_CTS,
         "ENABLE_SHADOWING": sparams.ENABLE_SHADOWING,
+        "ENABLE_NON_STANDARD_BONDS": sparams.ENABLE_NON_STANDARD_BONDS,
     }
 
     for name, value in bool_params.items():
         if not isinstance(value, bool):
             logger.critical(f"Invalid {name}: {value}. It must be a boolean.")
 
-    if sparams.ENABLE_SHADOWING: # TODO
-        logger.critical("Shadowing is not implemented yet. Please set ENABLE_SHADOWING to False.")
+    if sparams.ENABLE_SHADOWING:  # TODO
+        logger.critical(
+            "Shadowing is not implemented yet. Please set ENABLE_SHADOWING to False."
+        )
 
     positive_int_params = {
         "MAX_TX_QUEUE_SIZE_pkts": sparams.MAX_TX_QUEUE_SIZE_pkts,
@@ -62,6 +65,7 @@ def validate_params(sparams: sparams, logger: logging.Logger):
         "SPATIAL_STREAMS": (sparams.SPATIAL_STREAMS, {1, 2, 3}),
         "GUARD_INTERVAL_us": (sparams.GUARD_INTERVAL_us, {0.8, 1.6, 3.2}),
         "NUM_CHANNELS": (sparams.NUM_CHANNELS, {1, 2, 4, 8}),
+        "CSMA_SENSING_MODE": (sparams.CSMA_SENSING_MODE, {0, 1}),
     }
 
     for name, (value, valid_values) in constrained_params.items():

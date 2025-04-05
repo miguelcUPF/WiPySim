@@ -24,7 +24,7 @@ class Node:
         network,
     ):
         """Initializes an individual network node object."""
-        from src.components.medium import MEDIUM
+        from src.components.medium import Medium
 
         from src.components.mac import MAC
         from src.components.phy import PHY
@@ -36,7 +36,7 @@ class Node:
 
         self.network: Network = network
 
-        self.medium: MEDIUM = medium
+        self.medium: Medium = medium
 
         self.app_layer = APP(cfg, sparams, env, self)
         self.mac_layer = MAC(cfg, sparams, env, self)
@@ -116,7 +116,7 @@ class AP(Node):
 
 class Network:
     def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment):
-        from src.components.medium import MEDIUM
+        from src.components.medium import Medium
 
         self.env = env
 
@@ -127,7 +127,7 @@ class Network:
 
         self.nodes = {}
 
-        self.medium = MEDIUM(cfg, sparams, env, self)
+        self.medium = Medium(cfg, sparams, env, self)
 
         self.stats = NetworkStats(cfg, sparams, self)
 
@@ -253,7 +253,7 @@ class Network:
 
             if isinstance(node, AP):
                 ap = cast(AP, node)
-                ap.phy_layer.select_mcs_indexes()
+                ap.phy_layer.select_all_mcs_indexs()
             elif isinstance(node, STA):
                 sta = cast(STA, node)
                 sta.ap.phy_layer.select_mcs_index(sta.id)

@@ -34,10 +34,10 @@ class Channel20MHz:
 
         self.id = id
 
-        self.primary_channel_nodes: dict[int, Node] = (
+        self.nodes: dict[int, Node] = {}  # Nodes assigned to the channel
+        self.nodes_sensing: dict[int, Node] = (
             {}
-        )  # Nodes using the channel as primary
-        self.nodes: dict[int, Node] = {}  # Nodes using the channel
+        )  # Nodes currently sensing the channel (idle/busy)
         self.nodes_transmitting: dict[int, Node] = {}  # Nodes currently transmitting
 
         self.nav_occupied = (
@@ -63,11 +63,11 @@ class Channel20MHz:
     def release(self, node: Node):
         self.nodes.pop(node.id, None)
 
-    def assign_as_primary_channel(self, node: Node):
-        self.primary_channel_nodes[node.id] = node
+    def add_sensing_node(self, node: Node):
+        self.nodes_sensing[node.id] = node
 
-    def release_as_primary_channel(self, node: Node):
-        self.primary_channel_nodes.pop(node.id, None)
+    def remove_sensing_node(self, node: Node):
+        self.nodes_sensing.pop(node.id, None)
 
     def is_idle(self, node: Node = None):
         """Returns True if the channel is idle, False if busy."""
@@ -84,9 +84,9 @@ class Channel20MHz:
         if self.busy_start_time is None:
             self.busy_start_time = self.env.now
 
-        for node_id, p_node in self.primary_channel_nodes.items():
+        for node_id, p_node in self.nodes_sensing.items():
             if node_id not in self.nav_nodes_ids:
-                p_node.phy_layer.set_primary_busy()
+                p_node.phy_layer.channel_is_busy(self.id)
 
         self.nodes_transmitting[node.id] = node
 
@@ -111,8 +111,8 @@ class Channel20MHz:
             self.nav_master_id = None
             self.nav_nodes_ids = set()
             self.idle_start_time = self.env.now
-            for node_id, p_node in self.primary_channel_nodes.items():
-                p_node.phy_layer.set_primary_idle()
+            for node_id, p_node in self.nodes_sensing.items():
+                p_node.phy_layer.channel_is_idle(self.id)
 
     def unoccupy(self, node: Node):
         """Removes a node from the channel."""
@@ -126,8 +126,8 @@ class Channel20MHz:
             self.collision_detected = False
             if not self.nav_occupied:
                 self.idle_start_time = self.env.now
-                for node_id, p_node in self.primary_channel_nodes.items():
-                    p_node.phy_layer.set_primary_idle()
+                for node_id, p_node in self.nodes_sensing.items():
+                    p_node.phy_layer.channel_is_idle(self.id)
 
     def handle_collision(self):
         """Handles collision."""
@@ -136,18 +136,18 @@ class Channel20MHz:
 
     def rts_collision_detected(self):
         for node_id, node in self.nodes.items():
-            node.phy_layer.rts_collision_detected()
+            node.phy_layer.rts_collision_detected(self.id)
 
     def ampdu_collision_detected(self):
         for node_id, node in self.nodes.items():
-            node.phy_layer.ampdu_collision_detected()
+            node.phy_layer.ampdu_collision_detected(self.id)
 
     def successful_transmission_detected(self):
         for node_id, node in self.nodes.items():
-            node.phy_layer.successful_transmission_detected()
+            node.phy_layer.successful_transmission_detected(self.id)
 
 
-class MEDIUM:
+class Medium:
     def __init__(
         self, cfg: cfg, sparams: sparams, env: simpy.Environment, network: Network
     ):
@@ -182,11 +182,15 @@ class MEDIUM:
         return valid_channel_bonds
 
     def are_all_channels_idle(self):
-        return all(self.channels[ch_id].is_idle() for ch_id in self.channels)
+        return all(ch.is_idle() for ch in self.channels.values())
 
-    def are_channels_idle(self, node: Node, channels_ids: list[int]):
+    def are_all_node_channels_idle(self, node: Node, channels_ids: list[int]):
         """Checks if all selected channels are idle."""
         return all(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
+
+    def is_any_node_channel_idle(self, node: Node, channels_ids: list[int]):
+        """Checks if all selected channels are idle."""
+        return any(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
 
     def any_collision_detected(self, channels_ids: list[int], start_time_us: int):
         """Checks if any of the selected channels has a collision."""
@@ -203,11 +207,13 @@ class MEDIUM:
         for ch_id in channels_ids:
             self.channels[ch_id].release(node)
 
-    def assign_as_primary_channel(self, node: Node, channel_id: int):
-        self.channels[channel_id].assign_as_primary_channel(node)
+    def add_sensing_channels(self, node: Node, channels_ids: list[int]):
+        for ch_id in channels_ids:
+            self.channels[ch_id].add_sensing_node(node)
 
-    def release_as_primary_channel(self, node: Node, channel_id: int):
-        self.channels[channel_id].release_as_primary_channel(node)
+    def remove_sensing_channels(self, node: Node, channels_ids: list[int]):
+        for ch_id in channels_ids:
+            self.channels[ch_id].remove_sensing_node(node)
 
     def occupy_channels(self, node, channels_ids: list[int]):
         if self.busy_start_time is None:
@@ -232,7 +238,7 @@ class MEDIUM:
         for ch_id in channels_ids:
             self.channels[ch_id].end_nav(src_id)
 
-    def broadcast_channel_info(self, src_id, dst_id, channels_ids, primary_channel):
+    def broadcast_channel_info(self, src_id, dst_id, channels_ids, sensing_channels_ids):
         src_node = self.network.get_node(src_id)
         dst_node = self.network.get_node(dst_id)
 
@@ -240,7 +246,7 @@ class MEDIUM:
             f"Broadcasting channel info from {src_node.type} {src_id} to {dst_node.type} {dst_id}..."
         )
 
-        dst_node.phy_layer.receive_channel_info(channels_ids, primary_channel)
+        dst_node.phy_layer.receive_channel_info(channels_ids, sensing_channels_ids)
 
     def broadcast_mcs_info(self, src_id, dst_id, mcs_index):
         src_node = self.network.get_node(src_id)
@@ -251,6 +257,16 @@ class MEDIUM:
         )
 
         dst_node.phy_layer.receive_mcs_info(mcs_index)
+
+    def broadcast_tx_channels_info(self, src_id, dst_id, channels_ids):
+        src_node = self.network.get_node(src_id)
+        dst_node = self.network.get_node(dst_id)
+
+        self.logger.header(
+            f"Broadcasting transmitting channels info from {src_node.type} {src_id} to {dst_node.type} {dst_id}..."
+        )
+
+        dst_node.phy_layer.receive_tx_channels_info(channels_ids)
 
     def rts_collision_detected(self, channels_ids: list[int]):
         for ch_id in channels_ids:
