@@ -46,6 +46,7 @@ class TransmissionStats:
         )
 
     def add_to_tx_queue_history(self, timestamp_us: int, queue_len: int):
+        # a packet is added every time a MPDU is enqueued or dequeued
         new_row = pd.DataFrame([{"timestamp_us": timestamp_us, "queue_len": queue_len}])
         self.tx_queue_len_history = pd.concat(
             [self.tx_queue_len_history, new_row], ignore_index=True
@@ -190,7 +191,7 @@ class NetworkStats:
         from src.components.network import Node
 
         """Aggregate statistics from all nodes and the network medium."""
-        total_queue_len = 0
+        nodes_mean_queue_len_sum = 0
 
         for node in self.network.get_nodes():
             node = cast(Node, node)
@@ -219,8 +220,17 @@ class NetworkStats:
             )
 
             if not tx_stats.tx_queue_len_history.empty:
-                mean_queue_len = tx_stats.tx_queue_len_history["queue_len"].mean() # TODO: not correct
-                total_queue_len += mean_queue_len
+                # time-weighted average queue length
+                df = tx_stats.tx_queue_len_history.copy()
+                df["duration_us"] = df["timestamp_us"].shift(-1) - df["timestamp_us"]
+                df = df[:-1]  # drop the last row, which has no duration
+                mean_queue_len = (
+                    (df["queue_len"] * df["duration_us"]).sum()
+                    / df["duration_us"].sum()
+                    if df["duration_us"].sum() > 0
+                    else 0
+                )
+                nodes_mean_queue_len_sum += mean_queue_len
 
             self.per_node_stats[node.id] = {
                 "tx": {
@@ -304,7 +314,7 @@ class NetworkStats:
             }
 
         self.avg_queue_len = (
-            total_queue_len / len(self.network.get_nodes())
+            nodes_mean_queue_len_sum / len(self.network.get_nodes())
             if len(self.network.get_nodes()) > 0
             else 0
         )
