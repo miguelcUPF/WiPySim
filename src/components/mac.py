@@ -284,7 +284,7 @@ class MAC:
 
         while self.backoff_slots > 0:
             if self.sparams.CSMA_SENSING_MODE == 0:
-                # legacy behavior
+                # standard behavior
                 self.any_channel_busy_event = self.env.event()
                 event = self.any_channel_busy_event
 
@@ -675,7 +675,7 @@ class MAC:
                     )
                     yield self.env.process(self.backoff(idle_channels))
                 else:
-                    # legacy behavior
+                    # standard behavior
                     yield self.env.process(
                         self.wait_until_primary_idle(ch_duration_us, ch_waited_times)
                     )

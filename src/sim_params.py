@@ -40,7 +40,7 @@ class SimParams:
     # 0: Sense only primary channel
     # 1: Sense all channels, pause backoff only if all are busy, send on those available
 
-    ENABLE_NON_STANDARD_BONDS = False  # Defaults to True
+    ENABLE_NON_STANDARD_BONDS = False  # Defaults to False TODO
     # True: it is possible to use non-default contiguous channel bonds (e.g., {1, 2}; {2,3}; {3, 4}; {1, 2, 3}; {2, 3, 4})
     # False: restricts to standard contiguous channel bonds (e.g., {1, 2}; {3, 4}; {1, 2, 3, 4}}).
 

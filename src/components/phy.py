@@ -141,12 +141,11 @@ class PHY:
         self.broadcast_channel_info()
 
     def select_primary_channel(self) -> int:
-        # TODO: implement primary channel selection
         self.logger.header(
-            f"{self.node.type} {self.node.id} -> Selecting primary channel at random..."
+            f"{self.node.type} {self.node.id} -> Selecting primary channel..."
         )
 
-        primary_channel_id = random.choice(self.channels_ids)
+        primary_channel_id = min(self.channels_ids)
 
         self.logger.info(
             f"{self.node.type} {self.node.id} -> Selected primary channel: {primary_channel_id}"
@@ -312,37 +311,56 @@ class PHY:
             or self.transmitting_channels_ids
             not in self.node.medium.get_valid_channels()
         ):
-            print(self.transmitting_channels_ids)
-            print(self.node.medium.get_valid_channels())
             self.logger.error(
                 f"{self.node.type} {self.node.id} -> Not associated to any valid channel, cannot transmit"
             )
             return
 
         if data_unit.is_mgmt_ctrl_frame:
+            # For management and control frames, use the primary channel (if MODE 0) and MCS index 0
             mcs_index = 0
+            tx_channels_ids = (
+                self.sensing_channels_ids
+                if self.cfg.CSMA_SENSING_MODE == 0
+                else self.transmitting_channels_ids
+            )
         else:
             mcs_index = self.mcs_indexes[data_unit.dst_id]
+            tx_channels_ids = self.transmitting_channels_ids
+
+        nav_channels_ids = (
+            self.transmitting_channels_ids if data_unit.type == "RTS" else []
+        )
 
         ppdu = PPDU(data_unit, self.env.now)
 
         self.node.tx_stats.tx_phy_bytes += ppdu.size_bytes
 
         self.logger.header(
-            f"{self.node.type} {self.node.id} -> Sending {ppdu.type} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, self.transmitting_channels_ids))}..."
+            f"{self.node.type} {self.node.id} -> Sending {ppdu.type} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, tx_channels_ids))}..."
         )
 
         yield self.env.process(
-            self.node.medium.transmit(ppdu, self.transmitting_channels_ids, mcs_index)
+            self.node.medium.transmit(
+                ppdu, tx_channels_ids, mcs_index, nav_channels_ids
+            )
         )
 
     def rts_collision_detected(self, ch_id: int):
         self.last_collision_times[ch_id] = self.env.now
-        self.rts_collision_events[ch_id].succeed() if not self.rts_collision_events[ch_id].triggered else None
+        (
+            self.rts_collision_events[ch_id].succeed()
+            if not self.rts_collision_events[ch_id].triggered
+            else None
+        )
 
     def ampdu_collision_detected(self, ch_id: int):
         self.last_collision_times[ch_id] = self.env.now
-        self.ampdu_collision_events[ch_id].succeed() if not self.ampdu_collision_events[ch_id].triggered else None
+        (
+            self.ampdu_collision_events[ch_id].succeed()
+            if not self.ampdu_collision_events[ch_id].triggered
+            else None
+        )
 
     def successful_transmission_detected(self, ch_id: int):
         self.reset_rts_collision_event(ch_id)

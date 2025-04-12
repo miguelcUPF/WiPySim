@@ -280,7 +280,7 @@ class Medium:
         for ch_id in channels_ids:
             self.channels[ch_id].successful_transmission_detected()
 
-    def transmit(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
+    def transmit(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int, nav_channels_ids: list[int] = []):
         self.logger.header(
             f"Transmitting {ppdu.data_unit.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
         )
@@ -305,7 +305,7 @@ class Medium:
 
         if not collision_detected:
             self.successful_transmission_detected(channels_ids)
-            self.receive(ppdu, channels_ids, mcs_index)
+            self.receive(ppdu, channels_ids, mcs_index, nav_channels_ids)
             self.stats.ppdus_success += 1
         else:
             self.logger.warning(
@@ -321,7 +321,7 @@ class Medium:
 
         self.unoccupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
-    def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int):
+    def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int, nav_channels_ids: list[int] = []):
         distance_m = self.network.get_distance_between_nodes(ppdu.src_id, ppdu.dst_id)
 
         rssi_dbm = get_rssi_dbm(self.sparams, distance_m)
@@ -345,7 +345,7 @@ class Medium:
 
         if self.sparams.ENABLE_RTS_CTS:
             if ppdu.data_unit.type == "RTS":
-                self.start_nav(ppdu.src_id, ppdu.dst_id, channels_ids)
+                self.start_nav(ppdu.src_id, ppdu.dst_id, nav_channels_ids)
 
         node_dst = self.network.get_node(ppdu.dst_id)
         node_dst.phy_layer.receive(ppdu)
