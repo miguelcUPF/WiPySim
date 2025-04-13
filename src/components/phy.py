@@ -22,13 +22,14 @@ class PHY:
 
         self.node = node
 
-        self.channels_ids = set()  # Channels selected
+        self.channels_ids = set()  # Allocated channels
         self.sensing_channels_ids = (
             set()
-        )  # if BONDING_MODE == 0 then only the primary channel is used; otherwise all channels are used
-        self.transmitting_channels_ids = (
-            set()
-        )  # if BONDING_MODE == 1 it can be a subset of sensing_channels_ids; otherwise all channels are used
+        )  # If BONDING_MODE is 0 or 1 sensing channels includes only the primary channel. Secondary channels are thus self.channels_ids - self.sensing_channels_ids
+        self.transmitting_channels_ids = set()
+        # if BONDING_MODE is 0 data transmission should occur on the entire bond (primary and secondary channels)
+        # if BONDING_MODE is 1 data transmission can occur in a subset of contiguous channels following IEEE 802.11 channelization
+        # if BONDING_MODE is 2 data transmission can occur in a subset of non-contiguous channels
 
         self.busy_channels_ids = set()
 
@@ -50,6 +51,8 @@ class PHY:
         pass
 
     def set_channels(self, channels_ids: set[int]):
+        if self.channels_ids == channels_ids:
+            return
         self.node.medium.release_channels(self.node, self.channels_ids)
 
         self.channels_ids = channels_ids
@@ -60,6 +63,8 @@ class PHY:
         self.set_transmitting_channels(channels_ids)
 
     def set_sensing_channels(self, channels_ids: set[int]):
+        if self.sensing_channels_ids == channels_ids:
+            return
         self.node.medium.remove_sensing_channels(self.node, self.sensing_channels_ids)
 
         self.sensing_channels_ids = channels_ids
@@ -79,12 +84,17 @@ class PHY:
             self.reset_ampdu_collision_event(ch_id)
 
     def set_transmitting_channels(self, channels_ids: set[int]):
+        if self.transmitting_channels_ids == channels_ids:
+            return
         self.transmitting_channels_ids = channels_ids
 
         self.broadcast_tx_channels_info()
 
     def get_idle_event(self, ch_id: int):
         return self.idle_events[ch_id]
+
+    def has_been_idle_during_duration(self, ch_id: int, duration_us: float) -> bool:
+        return self.node.medium.has_been_idle_during_duration(ch_id, duration_us)
 
     def get_busy_event(self, ch_id: int):
         return self.busy_events[ch_id]
@@ -117,26 +127,36 @@ class PHY:
             if self.ampdu_collision_events[ch_id].triggered
         ]
 
+    def get_primary_channel_id(self):
+        if len(self.sensing_channels_ids) > 1:
+            self.logger.critical(
+                f"{self.node.type} {self.node.id} -> Sensing channels does not contain only one (primary) channel! (Channels: {', '.join(map(str, self.node.phy_layer.sensing_channels_ids))})"
+            )
+        return next(iter(self.sensing_channels_ids))
+
+    def get_valid_bonds(self):
+        return self.node.medium.get_valid_bonds()
+
     def select_channels(self):
         # TODO: implement channel selection at the MAC layer
         self.logger.header(
-            f"{self.node.type} {self.node.id} -> Selecting channels at random..."
+            f"{self.node.type} {self.node.id} -> Allocating channels at random..."
         )
 
-        valid_channels = self.node.medium.get_valid_channels()
-        channels_ids = random.choice(valid_channels)
+        valid_bonds = self.get_valid_bonds()
+        channels_ids = random.choice(valid_bonds)
 
         self.logger.info(
-            f"{self.node.type} {self.node.id} -> Selected channels: {', '.join(map(str, channels_ids))}"
+            f"{self.node.type} {self.node.id} -> Allocated channels: {', '.join(map(str, channels_ids))}"
         )
 
-        self.set_channels(channels_ids)
+        self.set_channels(set(channels_ids))
 
-        if self.sparams.BONDING_MODE == 0:
-            primary_channel_id = self.select_primary_channel()
-            self.set_sensing_channels(set([primary_channel_id]))
+
+        if self.sparams.BONDING_MODE in [0, 1]:
+            self.set_sensing_channels({self.select_primary_channel()})
         else:
-            self.set_sensing_channels(self.channels_ids)
+            self.set_sensing_channels(channels_ids)
 
         self.broadcast_channel_info()
 
@@ -282,8 +302,6 @@ class PHY:
 
     def channel_is_busy(self, ch_id: int):
         self.busy_channels_ids.add(ch_id)
-        if any(ch_id in self.busy_channels_ids for ch_id in self.sensing_channels_ids):
-            self.node.mac_layer.trigger_any_busy_event()
         if (
             self.busy_events[ch_id] is not None
             and not self.busy_events[ch_id].triggered
@@ -292,10 +310,6 @@ class PHY:
 
     def channel_is_idle(self, ch_id: int):
         self.busy_channels_ids.remove(ch_id)
-        if all(
-            ch_id not in self.busy_channels_ids for ch_id in self.sensing_channels_ids
-        ):
-            self.node.mac_layer.trigger_all_idle_event()
         if (
             self.idle_events[ch_id] is not None
             and not self.idle_events[ch_id].triggered
@@ -303,13 +317,12 @@ class PHY:
             self.idle_events[ch_id].succeed()
 
     def end_nav(self):
-        self.node.medium.end_nav(self.node.id, self.channels_ids)
+        self.node.medium.end_nav(self.node.id, self.sensing_channels_ids)
 
     def transmit(self, data_unit: DataUnit):
         if (
             not self.transmitting_channels_ids
-            or self.transmitting_channels_ids
-            not in self.node.medium.get_valid_channels()
+            or self.transmitting_channels_ids not in self.get_valid_bonds()
         ):
             self.logger.error(
                 f"{self.node.type} {self.node.id} -> Not associated to any valid channel, cannot transmit"
@@ -317,20 +330,14 @@ class PHY:
             return
 
         if data_unit.is_mgmt_ctrl_frame:
-            # For management and control frames, use the primary channel (if MODE 0) and MCS index 0
+            # For management and control frames, use the sensing channels (i.e., primary channel if BONDING_MODE is 0 or 1) and MCS index 0
             mcs_index = 0
-            tx_channels_ids = (
-                self.sensing_channels_ids
-                if self.sparams.BONDING_MODE == 0
-                else self.transmitting_channels_ids
-            )
+            tx_channels_ids = self.sensing_channels_ids
         else:
             mcs_index = self.mcs_indexes[data_unit.dst_id]
             tx_channels_ids = self.transmitting_channels_ids
 
-        nav_channels_ids = (
-            self.transmitting_channels_ids if data_unit.type == "RTS" else []
-        )
+        nav_channels_ids = self.sensing_channels_ids if data_unit.type == "RTS" else []
 
         ppdu = PPDU(data_unit, self.env.now)
 

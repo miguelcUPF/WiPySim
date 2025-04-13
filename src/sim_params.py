@@ -5,6 +5,7 @@ class SimParams:
     SLOT_TIME_us = 9
     SIFS_us = 16
     DIFS_us = SIFS_us + 2 * SLOT_TIME_us  # equals 34
+    PIFS_us = SIFS_us + SLOT_TIME_us  # equals 25
 
     CW_MIN = 16
     CW_MAX = 1023
@@ -37,13 +38,23 @@ class SimParams:
     RX_GAIN_dB = 0
 
     BONDING_MODE = 0  # Defaults to 0
-    # 0: Sense only primary channel, pause backoff if busy, transmit on the entire bonded channel (Static Channel Bonding)
-    # 1: Sense all channels, pause backoff only if all are busy, transmit on the available subset (Dynamic Channel Bonding)
-
-    ENABLE_NON_STANDARD_BONDS = False  # Defaults to False TODO
-    # True: it is possible to use non-default contiguous channel bonds (e.g., {1, 2}; {2,3}; {3, 4}; {1, 2, 3}; {2, 3, 4})
-    # False: restricts to standard contiguous channel bonds (e.g., {1, 2}; {3, 4}; {1, 2, 3, 4}}).
-
+    # 0: Static Channel Bonding (SCB)
+    #    - Sense only the primary channel during backoff.
+    #    - Pause backoff if the primary is busy.
+    #    - Transmit only if all secondary channels were idle for at least a PIFS duration immediately before backoff expires.
+    #    - Transmit on the full bonded channel; otherwise, defer and restart contention.
+    # 1: Dynamic Channel Bonding (DCB) - TODO: testing
+    #    - Sense only the primary channel during backoff.
+    #    - Pause backoff if the primary is busy.
+    #    - At backoff expiration, select the widest contiguous subset of channels (including the primary) that were idle for at least a PIFS duration for transmission.
+    #    - Must follow IEEE 802.11 standardized channelization.
+    # 2: Toy Channel Bonding (TCB) - Not yet implemented TODO: requires data rate computation for non-standardized channelization and testing
+    #    - Sense on all channels during backoff.
+    #    - Pause backoff only if all channels are busy.
+    #    - Transmit on the available subset of idle channels.
+    #    - No need to follow IEEE 802.11 standardized channelization. Channels also do not need to be contiguous.
+  
+    
     # --- Channel Parameters --- #
     FREQUENCY_GHz = 5
 

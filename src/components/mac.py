@@ -60,9 +60,6 @@ class MAC:
 
         self.tx_queue_event = None
 
-        self.any_channel_busy_event = None
-        self.all_channels_idle_event = None
-
         self.cts_event = None
         self.back_event = None
 
@@ -97,7 +94,7 @@ class MAC:
                 self.env.now, len(self.tx_queue.items)
             )
 
-            self.logger.debug(
+            self.logger.ignore(
                 f"{self.node.type} {self.node.id} -> Packet {packet.id} added to tx queue (Queue length: {len(self.tx_queue.items)}, In transmission: {len(self.tx_ampdu.mpdus) if self.tx_ampdu else 0})"
             )
 
@@ -109,24 +106,15 @@ class MAC:
                 return item
         return None
 
-    def trigger_any_busy_event(self):
-        (
-            self.any_channel_busy_event.succeed()
-            if self.any_channel_busy_event and not self.any_channel_busy_event.triggered
-            else None
-        )
-
-    def trigger_all_idle_event(self):
-        (
-            self.all_channels_idle_event.succeed()
-            if self.all_channels_idle_event
-            and not self.all_channels_idle_event.triggered
-            else None
-        )
-
     def _wait_until_channel_idle(
         self, ch_id: int, duration_us: float, waited_time_us: float = 0
     ):
+        # Wait for channel to become idle
+        if not self.node.phy_layer.is_channel_idle(ch_id):
+            channel_idle_event = self.node.phy_layer.get_idle_event(ch_id)
+            yield channel_idle_event
+            waited_time_us = 0
+
         wait_start_time = self.env.now - waited_time_us
         while True:
             self.node.phy_layer.reset_busy_event(ch_id)
@@ -187,10 +175,10 @@ class MAC:
 
         if len(self.node.phy_layer.sensing_channels_ids) > 1:
             self.logger.critical(
-                f"{self.node.type} {self.node.id} -> Sensing channels does not contain only one channel when using BONDING_MODE 0! (Channels: {', '.join(map(str, self.node.phy_layer.sensing_channels_ids))})"
+                f"{self.node.type} {self.node.id} -> Sensing channels does not contain only one (primary) channel! (Channels: {', '.join(map(str, self.node.phy_layer.sensing_channels_ids))})"
             )
 
-        primary_channel_id = next(iter(self.node.phy_layer.sensing_channels_ids))
+        primary_channel_id = self.node.phy_layer.get_primary_channel_id()
 
         duration_us = (
             ch_duration_us
@@ -207,11 +195,6 @@ class MAC:
             f"{self.node.type} {self.node.id} -> Sensing if primary channel (Channel: {primary_channel_id}) is idle for {duration_us} μs..."
         )
 
-        if not self.node.phy_layer.are_all_sensing_channels_idle():
-            self.all_channels_idle_event = self.env.event()
-            yield self.all_channels_idle_event
-            self.all_channels_idle_event = None
-            waited_time_us = 0
         yield from self._wait_until_channel_idle(
             primary_channel_id, duration_us, waited_time_us
         )
@@ -283,11 +266,10 @@ class MAC:
         slot_remaining_time = self.sparams.SLOT_TIME_us
 
         while self.backoff_slots > 0:
-            if self.sparams.BONDING_MODE == 0:
+            if self.sparams.BONDING_MODE in [0, 1]:
                 # standard behavior
-                self.any_channel_busy_event = self.env.event()
-                event = self.any_channel_busy_event
-
+                event = self.node.phy_layer.get_busy_event(self.node.phy_layer.get_primary_channel_id())
+                
                 slot_start_time = self.env.now
 
                 event_result = yield self.env.timeout(self.sparams.SLOT_TIME_us) | event
@@ -296,9 +278,8 @@ class MAC:
                     event in event_result
                     and self.env.now < slot_start_time + self.sparams.SLOT_TIME_us
                 ):
-                    self.any_channel_busy_event = None
                     self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> Channel busy, pausing backoff ({self.backoff_slots})..."
+                        f"{self.node.type} {self.node.id} -> Primary Channel busy, pausing backoff ({self.backoff_slots})..."
                     )
                     return
 
@@ -307,7 +288,7 @@ class MAC:
                     f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
                 )
             else:
-                # special mode
+                # toy behavior
                 busy_events = {
                     ch_id: self.node.phy_layer.get_busy_event(ch_id)
                     for ch_id in bo_channels
@@ -343,16 +324,72 @@ class MAC:
                     f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
                 )
 
+        if self.sparams.BONDING_MODE == 0:
+            # SCB: transmit on bonded channel only if secondary channels have been idle for at least during PIFS
+            primary_channel = self.node.phy_layer.get_primary_channel_id()
+            secondary_channels = set(self.node.phy_layer.channels_ids) - set([primary_channel])
+
+            # Secondary channels that have been idle for at least PIFS
+            idle_secondary_channels = set(ch_id for ch_id in secondary_channels if self.node.phy_layer.has_been_idle_during_duration(ch_id, self.sparams.PIFS_us))
+
+            if idle_secondary_channels != secondary_channels:
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Secondary channels [{', '.join(map(str, secondary_channels - idle_secondary_channels))}] have not been idle during PIFS duration. Skipping transmission!"
+                )
+                self.backoff_slots = -1
+
+                self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished but skipping transmission...")
+
+                return
+            
+            self.node.phy_layer.set_transmitting_channels(self.node.phy_layer.channels_ids)
+
+        elif self.sparams.BONDING_MODE == 1:
+            # DCB: select the widest contiguous subset of channels (including the primary) that were idle for at least a PIFS duration for transmission according to IEEE 802.11 channelization 
+            primary_channel = self.node.phy_layer.get_primary_channel_id()
+            secondary_channels = set(self.node.phy_layer.channels_ids) - set([primary_channel])
+
+            # Secondary channels that have been idle for at least PIFS
+            idle_secondary_channels = set(
+                ch_id for ch_id in secondary_channels
+                if self.node.phy_layer.has_been_idle_during_duration(ch_id, self.sparams.PIFS_us)
+            )
+
+            # Union primary and idle secondaries
+            available_channels = set([primary_channel]) | idle_secondary_channels
+
+            # Get valid, standardized channel bonds
+            valid_bonds = self.node.phy_layer.get_valid_bonds()
+
+            # Filter: keep only sets that include primary and are subsets of available_channels
+            valid_idle_bonds = [
+                    bond for bond in valid_bonds
+                    if primary_channel in bond and set(bond).issubset(available_channels)
+                ]
+
+            # Pick the widest (i.e., with max length) subset for transmission
+            if valid_idle_bonds:
+                selected_channels = set(max(valid_idle_bonds, key=len))
+            else:
+                selected_channels = {primary_channel}
+
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Selected channel bond for transmission: {', '.join(map(str, selected_channels))}"
+            )
+
+            self.node.phy_layer.set_transmitting_channels(selected_channels)
+
+        elif self.sparams.BONDING_MODE == 2:
+            self.node.phy_layer.set_transmitting_channels(bo_channels)
+
         if self.is_first_tx:
             self.node.tx_stats.first_tx_attempt_us = self.env.now
             self.is_first_tx = False
         else:
             self.node.tx_stats.last_tx_attempt_us = self.env.now
 
-        if self.sparams.BONDING_MODE == 1:
-            self.node.phy_layer.set_transmitting_channels(bo_channels)
-
         self.node.tx_stats.tx_attempts += 1
+        print("transmission attempt for node", self.node.id, "at time", self.env.now)
 
         self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished")
 
@@ -669,19 +706,19 @@ class MAC:
 
                 self.node.phy_layer.reset_collision_events()
 
-                if self.sparams.BONDING_MODE == 1:
-                    idle_channels = yield self.env.process(
-                        self.wait_until_any_idle(ch_duration_us, ch_waited_times)
-                    )
-                    yield self.env.process(self.backoff(idle_channels))
-                else:
+                if self.sparams.BONDING_MODE in [0, 1]:
                     # standard behavior
                     yield self.env.process(
                         self.wait_until_primary_idle(ch_duration_us, ch_waited_times)
                     )
                     yield self.env.process(self.backoff())
+                else:
+                    idle_channels = yield self.env.process(
+                        self.wait_until_any_idle(ch_duration_us, ch_waited_times)
+                    )
+                    yield self.env.process(self.backoff(idle_channels))
 
-                if self.backoff_slots > 0:
+                if self.backoff_slots > 0 or self.backoff_slots == -1:
                     continue
 
                 self.ampdu_aggregation()

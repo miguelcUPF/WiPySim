@@ -27,7 +27,6 @@ sparams.CW_MIN = 4
 sparams.CW_MAX = 2**0*sparams.CW_MIN
 
 sparams.BONDING_MODE = 0
-sparams.ENABLE_NON_STANDARD_BONDS = False
 
 sparams.NUM_CHANNELS = 1
 

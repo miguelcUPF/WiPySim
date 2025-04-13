@@ -19,26 +19,29 @@ from src.utils.messages import (
 import simpy
 
 
-sparams.MAX_TX_QUEUE_SIZE_pkts = 100  # Test: 10, 50, 100
-sparams.ENABLE_RTS_CTS = True  # Test: False and True
-sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
+sparams.MAX_TX_QUEUE_SIZE_pkts = 100
+sparams.ENABLE_RTS_CTS = True
+sparams.MPDU_ERROR_PROBABILITY = 0.1
 
-sparams.BONDING_MODE = 0
+sparams.CW_MIN = 4
+sparams.CW_MAX = 2**0*sparams.CW_MIN
 
-sparams.NUM_CHANNELS = 1
+sparams.BONDING_MODE = 0 # Test: 0 and 1
 
-cfg.SIMULATION_TIME_us = 1e4
-cfg.SEED = 1
+sparams.NUM_CHANNELS = 2
+
+cfg.SIMULATION_TIME_us = 1e5
+cfg.SEED = 2
 
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
+cfg.EXCLUDED_LOGS = {"GEN": ["ALL"], "MEDIUM": ["ALL"], "PHY": ["DEBUG", "HEADER"], "MAC": ["WARNING"]}
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.NETWORK_BOUNDS_m = (10, 10, 2)
-cfg.NUMBER_OF_BSSS = 1
+cfg.NUMBER_OF_BSSS = 3
 cfg.TRAFFIC_MODEL = "Poisson"
 cfg.TRAFFIC_LOAD_kbps = 100e3
 

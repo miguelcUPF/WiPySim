@@ -16,7 +16,6 @@ def validate_params(sparams: sparams, logger: logging.Logger):
     bool_params = {
         "ENABLE_RTS_CTS": sparams.ENABLE_RTS_CTS,
         "ENABLE_SHADOWING": sparams.ENABLE_SHADOWING,
-        "ENABLE_NON_STANDARD_BONDS": sparams.ENABLE_NON_STANDARD_BONDS,
     }
 
     for name, value in bool_params.items():
@@ -33,6 +32,7 @@ def validate_params(sparams: sparams, logger: logging.Logger):
         "SLOT_TIME_us": sparams.SLOT_TIME_us,
         "SIFS_us": sparams.SIFS_us,
         "DIFS_us": sparams.DIFS_us,
+        "PIFS_us": sparams.PIFS_us,
         "MAC_HEADER_SIZE_bytes": sparams.MAC_HEADER_SIZE_bytes,
         "FCS_SIZE_bytes": sparams.FCS_SIZE_bytes,
         "MAX_AMPDU_SIZE_bytes": sparams.MAX_AMPDU_SIZE_bytes,

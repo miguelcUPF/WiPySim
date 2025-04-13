@@ -67,10 +67,13 @@ def success(self, message: str, *args, **kwargs):
     if self.isEnabledFor(SUCCESS_LEVEL):
         self._log(SUCCESS_LEVEL, message, args, **kwargs)
 
+def ignore(self, message: str, *args, **kwargs):
+    pass  # Intentionally does nothing
 
 logging.Logger.header = header
 logging.Logger.success = success
 logging.Logger.default = default
+logging.Logger.ignore = ignore
 
 
 def initialize_log_file(cfg: cfg, log_file: str) -> None:

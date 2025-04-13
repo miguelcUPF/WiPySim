@@ -11,10 +11,10 @@ from src.utils.transmission import get_tx_duration_us, get_rssi_dbm
 import simpy
 import random
 
-VALID_20MHZ_BONDS = [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,)]
-VALID_40MHZ_BONDS = [(1, 2), (3, 4), (5, 6), (7, 8)]
-VALID_80MHZ_BONDS = [(1, 2, 3, 4), (5, 6, 7, 8)]
-VALID_160MHZ_BOND = [(1, 2, 3, 4, 5, 6, 7, 8)]
+VALID_20MHZ_BONDS = [{1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}]
+VALID_40MHZ_BONDS = [{1, 2}, {3, 4}, {5, 6}, {7, 8}]
+VALID_80MHZ_BONDS = [{1, 2, 3, 4}, {5, 6, 7, 8}]
+VALID_160MHZ_BOND = [{1, 2, 3, 4, 5, 6, 7, 8}]
 
 VALID_BONDS = {
     20: VALID_20MHZ_BONDS,
@@ -74,6 +74,13 @@ class Channel20MHz:
         if node is not None and node.id in self.nav_nodes_ids:
             return True
         return self.idle_start_time is not None
+
+    def has_been_idle_during_duration(self, duration_us: float) -> bool:
+        return (
+            (self.env.now - self.idle_start_time >= duration_us)
+            if self.idle_start_time is not None
+            else False
+        )
 
     def occupy(self, node: Node):
         """Marks the channel as busy by a node and checks for collisions."""
@@ -169,14 +176,14 @@ class Medium:
         self.name = "MEDIUM"
         self.logger = get_logger(self.name, cfg, sparams, env)
 
-    def get_valid_channels(self) -> list:
+    def get_valid_bonds(self) -> list:
         available_channels = set(self.channels.keys())  # Extract available channel IDs
 
         valid_channel_bonds = []
         for bw, bond_list in VALID_BONDS.items():
             # Filter bonds that are fully contained in the available channels
             valid_channel_bonds.extend(
-                [bond for bond in bond_list if set(bond).issubset(available_channels)]
+                [bond for bond in bond_list if bond.issubset(available_channels)]
             )
 
         return valid_channel_bonds
@@ -184,45 +191,48 @@ class Medium:
     def are_all_channels_idle(self):
         return all(ch.is_idle() for ch in self.channels.values())
 
-    def are_all_node_channels_idle(self, node: Node, channels_ids: list[int]):
+    def are_all_node_channels_idle(self, node: Node, channels_ids: set[int]):
         """Checks if all selected channels are idle."""
         return all(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
 
-    def is_any_node_channel_idle(self, node: Node, channels_ids: list[int]):
+    def is_any_node_channel_idle(self, node: Node, channels_ids: set[int]):
         """Checks if all selected channels are idle."""
         return any(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
 
-    def any_collision_detected(self, channels_ids: list[int], start_time_us: int):
+    def has_been_idle_during_duration(self, ch_id: int, duration_us: float) -> bool:
+        return self.channels[ch_id].has_been_idle_during_duration(duration_us)
+
+    def any_collision_detected(self, channels_ids: set[int], start_time_us: int):
         """Checks if any of the selected channels has a collision."""
         return any(
             self.channels[ch_id].last_collision_time >= start_time_us
             for ch_id in channels_ids
         )
 
-    def assign_channels(self, node: Node, channels_ids: list[int]):
+    def assign_channels(self, node: Node, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].assign(node)
 
-    def release_channels(self, node: Node, channels_ids: list[int]):
+    def release_channels(self, node: Node, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].release(node)
 
-    def add_sensing_channels(self, node: Node, channels_ids: list[int]):
+    def add_sensing_channels(self, node: Node, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].add_sensing_node(node)
 
-    def remove_sensing_channels(self, node: Node, channels_ids: list[int]):
+    def remove_sensing_channels(self, node: Node, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].remove_sensing_node(node)
 
-    def occupy_channels(self, node, channels_ids: list[int]):
+    def occupy_channels(self, node, channels_ids: set[int]):
         if self.busy_start_time is None:
             self.busy_start_time = self.env.now
 
         for ch_id in channels_ids:
             self.channels[ch_id].occupy(node)
 
-    def unoccupy_channels(self, node, channels_ids: list[int]):
+    def unoccupy_channels(self, node, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].unoccupy(node)
 
@@ -230,15 +240,17 @@ class Medium:
             self.stats.airtime_us += self.env.now - self.busy_start_time
             self.busy_start_time = None
 
-    def start_nav(self, src_id: int, dst_id: int, channels_ids: list[int]):
+    def start_nav(self, src_id: int, dst_id: int, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].start_nav(src_id, dst_id)
 
-    def end_nav(self, src_id, channels_ids: list[int]):
+    def end_nav(self, src_id, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].end_nav(src_id)
 
-    def broadcast_channel_info(self, src_id, dst_id, channels_ids, sensing_channels_ids):
+    def broadcast_channel_info(
+        self, src_id, dst_id, channels_ids, sensing_channels_ids
+    ):
         src_node = self.network.get_node(src_id)
         dst_node = self.network.get_node(dst_id)
 
@@ -268,19 +280,25 @@ class Medium:
 
         dst_node.phy_layer.receive_tx_channels_info(channels_ids)
 
-    def rts_collision_detected(self, channels_ids: list[int]):
+    def rts_collision_detected(self, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].rts_collision_detected()
 
-    def ampdu_collision_detected(self, channels_ids: list[int]):
+    def ampdu_collision_detected(self, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].ampdu_collision_detected()
 
-    def successful_transmission_detected(self, channels_ids: list[int]):
+    def successful_transmission_detected(self, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].successful_transmission_detected()
 
-    def transmit(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int, nav_channels_ids: list[int] = []):
+    def transmit(
+        self,
+        ppdu: PPDU,
+        channels_ids: set[int],
+        mcs_index: int,
+        nav_channels_ids: set[int] = [],
+    ):
         self.logger.header(
             f"Transmitting {ppdu.data_unit.type} from node {ppdu.src_id} to node {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))}..."
         )
@@ -321,7 +339,13 @@ class Medium:
 
         self.unoccupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
-    def receive(self, ppdu: PPDU, channels_ids: list[int], mcs_index: int, nav_channels_ids: list[int] = []):
+    def receive(
+        self,
+        ppdu: PPDU,
+        channels_ids: set[int],
+        mcs_index: int,
+        nav_channels_ids: set[int] = [],
+    ):
         distance_m = self.network.get_distance_between_nodes(ppdu.src_id, ppdu.dst_id)
 
         rssi_dbm = get_rssi_dbm(self.sparams, distance_m)

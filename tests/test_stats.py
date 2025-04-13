@@ -25,7 +25,6 @@ sparams.ENABLE_RTS_CTS = True
 sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.BONDING_MODE = 0
-sparams.ENABLE_NON_STANDARD_BONDS = False
 
 sparams.NUM_CHANNELS = 1
 
