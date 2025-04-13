@@ -34,6 +34,8 @@ class Node:
         self.position = position  # x, y, z
         self.type = type
 
+        self.bss_id = None
+
         self.network: Network = network
 
         self.medium: Medium = medium

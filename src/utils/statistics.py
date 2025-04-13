@@ -233,6 +233,14 @@ class NetworkStats:
                 nodes_mean_queue_len_sum += mean_queue_len
 
             self.per_node_stats[node.id] = {
+                "info": {
+                    "id": node.id,
+                    "bss_id": node.bss_id,
+                    "type": node.type,
+                    "position": node.position,
+                    "allocated_channels": list(node.phy_layer.channels_ids),
+                    "sensing_channels": list(node.phy_layer.sensing_channels_ids),
+                },
                 "tx": {
                     "first_tx_attempt_us": tx_stats.first_tx_attempt_us,
                     "last_tx_attempt_us": tx_stats.last_tx_attempt_us,
@@ -414,6 +422,61 @@ class NetworkStats:
 
     def display_stats(self):
         """Print a summary of network statistics."""
+        from src.components.network import Node, AP, STA
+
+        def _display_node_stats(node: Node, stats: dict, indent: int = 0):
+                prefix = '    ' * indent
+                print("\033[93m" + f"  {prefix}{node.type} {node.id}:" + "\033[0m")
+                print(f"    {prefix}BSS ID {stats['info']['bss_id']}")
+                print(f"    {prefix}Position (at the end of the simulation): {stats['info']['position']}")
+                print(f"    {prefix}Allocated Channels (at the end of the simulation): {stats['info']['allocated_channels']}")
+                print(f"    {prefix}Sensing Channels (at the end of the simulation): {stats['info']['sensing_channels']}")
+                print(
+                    f"    {prefix}TX Attempts: {stats['tx']['tx_attempts']} ({stats['tx']['tx_attempts'] - stats['tx']['tx_successes'] - stats['tx']['tx_failures']} in progress)"
+                )
+                print(f"    {prefix}TX Successes: {stats['tx']['tx_successes']}")
+                print(f"    {prefix}TX Failures: {stats['tx']['tx_failures']}")
+                print(
+                    f"    {prefix}Packets TX (Total): {stats['tx']['pkts_tx']}, "
+                    f"Packets TX (Success): {stats['tx']['pkts_success']}, "
+                    f"Packets TX (Fail): {stats['tx']['pkts_fail']}"
+                )
+                print(
+                    f"    {prefix}Packets Dropped: {stats['tx']['pkts_dropped_queue_lim'] + stats['tx']['pkts_dropped_retry_lim']}"
+                )
+                print(
+                    f"    {prefix}Packets RX (Total): {stats['rx']['pkts_rx']}, "
+                    f"Packets RX (Success): {stats['rx']['pkts_success']}, "
+                    f"Packets RX (Fail): {stats['rx']['pkts_fail']}"
+                )
+                print(f"    {prefix}Queue Length Avg: {stats['tx']['avg_queue_len']:.2f}")
+                print(
+                    f"    {prefix}TX Rate (pkts/s): {stats['tx']['tx_rate_pkts_per_sec']:.2f}, "
+                    f"TX Rate (Mbps): {stats['tx']['tx_rate_Mbits_per_sec']:.2f}"
+                )
+                print(
+                    f"    {prefix}RX Rate (pkts/s): {stats['rx']['rx_rate_pkts_per_sec']:.2f}, "
+                    f"RX Rate (Mbps): {stats['rx']['rx_rate_Mbits_per_sec']:.2f}"
+                )
+                print(
+                    f"    {prefix}Airtime: {stats['states']['tx_time_us'] + stats['states']['rx_time_us']} µs"
+                )
+                print(
+                    f"    {prefix}Utilization: {(stats['states']['tx_time_us'] + stats['states']['rx_time_us']) / self.network.medium.env.now * 100:.2f}%"
+                )
+                print(
+                    f"    {prefix}IDLE Time: {stats['states']['idle_time_us']} µs ({stats['states']['idle_time_us'] / self.network.medium.env.now * 100:.2f}%)"
+                )
+                print(
+                    f"    {prefix}CONTEND Time: {stats['states']['contend_time_us']} µs ({stats['states']['contend_time_us'] / self.network.medium.env.now * 100:.2f}%)"
+                )
+                print(
+                    f"    {prefix}TX Time: {stats['states']['tx_time_us']} µs ({stats['states']['tx_time_us'] / self.network.medium.env.now * 100:.2f}%)"
+                )
+                print(
+                    f"    {prefix}RX Time: {stats['states']['rx_time_us']} µs ({stats['states']['rx_time_us'] / self.network.medium.env.now * 100:.2f}%)"
+                )
+
         print("\033[93m" + "Network Statistics Summary:" + "\033[0m")
         print(
             f"Total TX Attempts: {self.total_tx_attempts} ({self.total_tx_attempts - self.total_tx_successes - self.total_tx_failures} in progress)"
@@ -430,53 +493,29 @@ class NetworkStats:
         print(f"Average Channel Utilization: {self.avg_channel_utilization:.2f}%")
 
         print("\033[93m" + "\nPer-Node Stats:" + "\033[0m")
+        displayed_nodes = set()
+
         for node_id, stats in self.per_node_stats.items():
-            print(f"  {self.network.get_node(node_id).type} {node_id}:")
-            print(
-                f"    TX Attempts: {stats['tx']['tx_attempts']} ({stats['tx']['tx_attempts'] - stats['tx']['tx_successes'] - stats['tx']['tx_failures']} in progress)"
-            )
-            print(f"    TX Successes: {stats['tx']['tx_successes']}")
-            print(f"    TX Failures: {stats['tx']['tx_failures']}")
-            print(
-                f"    Packets TX (Total): {stats['tx']['pkts_tx']}, "
-                f"Packets TX (Success): {stats['tx']['pkts_success']}, "
-                f"Packets TX (Fail): {stats['tx']['pkts_fail']}"
-            )
-            print(
-                f"    Packets Dropped: {stats['tx']['pkts_dropped_queue_lim'] + stats['tx']['pkts_dropped_retry_lim']}"
-            )
-            print(
-                f"    Packets RX (Total): {stats['rx']['pkts_rx']}, "
-                f"Packets RX (Success): {stats['rx']['pkts_success']}, "
-                f"Packets RX (Fail): {stats['rx']['pkts_fail']}"
-            )
-            print(f"    Queue Length Avg: {stats['tx']['avg_queue_len']:.2f}")
-            print(
-                f"    TX Rate (pkts/s): {stats['tx']['tx_rate_pkts_per_sec']:.2f}, "
-                f"TX Rate (Mbps): {stats['tx']['tx_rate_Mbits_per_sec']:.2f}"
-            )
-            print(
-                f"    RX Rate (pkts/s): {stats['rx']['rx_rate_pkts_per_sec']:.2f}, "
-                f"RX Rate (Mbps): {stats['rx']['rx_rate_Mbits_per_sec']:.2f}"
-            )
-            print(
-                f"    Airtime: {stats['states']['tx_time_us'] + stats['states']['rx_time_us']} µs"
-            )
-            print(
-                f"    Utilization: {(stats['states']['tx_time_us'] + stats['states']['rx_time_us']) / self.network.medium.env.now * 100:.2f}%"
-            )
-            print(
-                f"    IDLE Time: {stats['states']['idle_time_us']} µs ({stats['states']['idle_time_us'] / self.network.medium.env.now * 100:.2f}%)"
-            )
-            print(
-                f"    CONTEND Time: {stats['states']['contend_time_us']} µs ({stats['states']['contend_time_us'] / self.network.medium.env.now * 100:.2f}%)"
-            )
-            print(
-                f"    TX Time: {stats['states']['tx_time_us']} µs ({stats['states']['tx_time_us'] / self.network.medium.env.now * 100:.2f}%)"
-            )
-            print(
-                f"    RX Time: {stats['states']['rx_time_us']} µs ({stats['states']['rx_time_us'] / self.network.medium.env.now * 100:.2f}%)"
-            )
+            node = self.network.get_node(node_id)
+            if node.type == "AP":
+                node = cast(AP, node)
+                _display_node_stats(node, stats)
+                displayed_nodes.add(node_id)
+                if node.associated_stas:
+                    print("\033[93m" + "    Associated STAs:" + "\033[0m")
+                    for sta in node.associated_stas:
+                        sta = cast(STA, sta)
+                        if sta.id not in displayed_nodes:
+                            sta = self.network.get_node(sta.id)
+                            _display_node_stats(sta, self.per_node_stats[sta.id], indent=1)
+                            displayed_nodes.add(sta.id)
+
+        for node_id, stats in self.per_node_stats.items():
+            if node_id not in displayed_nodes:
+                node = self.network.get_node(node_id)
+                _display_node_stats(node, stats)
+
+            
 
         print("\033[93m" + "\nPer-Channel Stats:" + "\033[0m")
         for ch_id, stats in self.per_channel_stats.items():
