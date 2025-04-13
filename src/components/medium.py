@@ -3,6 +3,7 @@ from src.user_config import UserConfig as cfg
 
 from src.utils.event_logger import get_logger
 from src.components.network import Network, Node
+from src.components.mac import MACState
 from src.utils.data_units import PPDU
 from src.utils.statistics import ChannelStats, MediumStats
 from src.utils.mcs_table import get_min_sensitivity_dBm
@@ -69,10 +70,8 @@ class Channel20MHz:
     def remove_sensing_node(self, node: Node):
         self.nodes_sensing.pop(node.id, None)
 
-    def is_idle(self, node: Node = None):
+    def is_idle(self):
         """Returns True if the channel is idle, False if busy."""
-        if node is not None and node.id in self.nav_nodes_ids:
-            return True
         return self.idle_start_time is not None
 
     def has_been_idle_during_duration(self, duration_us: float) -> bool:
@@ -91,11 +90,10 @@ class Channel20MHz:
         if self.busy_start_time is None:
             self.busy_start_time = self.env.now
 
-        for node_id, p_node in self.nodes_sensing.items():
-            if node_id not in self.nav_nodes_ids:
-                p_node.phy_layer.channel_is_busy(self.id)
-
         self.nodes_transmitting[node.id] = node
+
+        for node_id, p_node in self.nodes_sensing.items():
+            p_node.phy_layer.channel_is_busy(self.id)
 
         # If more than one node is transmitting, a collision occurs
         if len(self.nodes_transmitting) > 1:
@@ -109,6 +107,12 @@ class Channel20MHz:
         self.nav_master_id = src_id
         self.nav_nodes_ids = set([src_id, dst_id])
 
+        for node_id, p_node in self.nodes_sensing.items():
+            if node_id not in self.nav_nodes_ids:
+                # If the node sensing on the channel is currently transmitting, it can not receive the RTS and thus NAV reservation
+                if p_node.mac_layer.state != MACState.TX:
+                    p_node.phy_layer.channel_is_busy(self.id)
+
     def end_nav(self, dst_id: int):
         if dst_id == self.nav_master_id:
             self.logger.debug(
@@ -117,9 +121,10 @@ class Channel20MHz:
             self.nav_occupied = False
             self.nav_master_id = None
             self.nav_nodes_ids = set()
-            self.idle_start_time = self.env.now
-            for node_id, p_node in self.nodes_sensing.items():
-                p_node.phy_layer.channel_is_idle(self.id)
+
+            if len(self.nodes_transmitting) == 0:
+                for node_id, p_node in self.nodes_sensing.items():
+                    p_node.phy_layer.channel_is_idle(self.id)
 
     def unoccupy(self, node: Node):
         """Removes a node from the channel."""
@@ -127,13 +132,15 @@ class Channel20MHz:
             return
         self.logger.debug(f"Channel {self.id} -> Unoccupied by {node.type} {node.id}")
         self.nodes_transmitting.pop(node.id, None)
+
         if len(self.nodes_transmitting) == 0:
             self.stats.airtime_us += self.env.now - self.busy_start_time
             self.busy_start_time = None
             self.collision_detected = False
-            if not self.nav_occupied:
-                self.idle_start_time = self.env.now
-                for node_id, p_node in self.nodes_sensing.items():
+            self.idle_start_time = self.env.now
+
+            for node_id, p_node in self.nodes_sensing.items():
+                if not self.nav_occupied or node_id in self.nav_nodes_ids:
                     p_node.phy_layer.channel_is_idle(self.id)
 
     def handle_collision(self):
@@ -143,15 +150,18 @@ class Channel20MHz:
 
     def rts_collision_detected(self):
         for node_id, node in self.nodes.items():
-            node.phy_layer.rts_collision_detected(self.id)
+            if node.mac_layer.state != MACState.TX:
+                node.phy_layer.rts_collision_detected(self.id)
 
     def ampdu_collision_detected(self):
         for node_id, node in self.nodes.items():
-            node.phy_layer.ampdu_collision_detected(self.id)
+            if node.mac_layer.state != MACState.TX:
+                node.phy_layer.ampdu_collision_detected(self.id)
 
     def successful_transmission_detected(self):
         for node_id, node in self.nodes.items():
-            node.phy_layer.successful_transmission_detected(self.id)
+            if node.mac_layer.state != MACState.TX:
+                node.phy_layer.successful_transmission_detected(self.id)
 
 
 class Medium:
@@ -191,13 +201,9 @@ class Medium:
     def are_all_channels_idle(self):
         return all(ch.is_idle() for ch in self.channels.values())
 
-    def are_all_node_channels_idle(self, node: Node, channels_ids: set[int]):
+    def are_all_node_channels_idle(self, channels_ids: set[int]):
         """Checks if all selected channels are idle."""
-        return all(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
-
-    def is_any_node_channel_idle(self, node: Node, channels_ids: set[int]):
-        """Checks if all selected channels are idle."""
-        return any(self.channels[ch_id].is_idle(node) for ch_id in channels_ids)
+        return all(self.channels[ch_id].is_idle() for ch_id in channels_ids)
 
     def has_been_idle_during_duration(self, ch_id: int, duration_us: float) -> bool:
         return self.channels[ch_id].has_been_idle_during_duration(duration_us)

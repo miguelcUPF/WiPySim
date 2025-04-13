@@ -268,8 +268,10 @@ class MAC:
         while self.backoff_slots > 0:
             if self.sparams.BONDING_MODE in [0, 1]:
                 # standard behavior
-                event = self.node.phy_layer.get_busy_event(self.node.phy_layer.get_primary_channel_id())
-                
+                event = self.node.phy_layer.get_busy_event(
+                    self.node.phy_layer.get_primary_channel_id()
+                )
+
                 slot_start_time = self.env.now
 
                 event_result = yield self.env.timeout(self.sparams.SLOT_TIME_us) | event
@@ -327,10 +329,18 @@ class MAC:
         if self.sparams.BONDING_MODE == 0:
             # SCB: transmit on bonded channel only if secondary channels have been idle for at least during PIFS
             primary_channel = self.node.phy_layer.get_primary_channel_id()
-            secondary_channels = set(self.node.phy_layer.channels_ids) - set([primary_channel])
+            secondary_channels = set(self.node.phy_layer.channels_ids) - set(
+                [primary_channel]
+            )
 
             # Secondary channels that have been idle for at least PIFS
-            idle_secondary_channels = set(ch_id for ch_id in secondary_channels if self.node.phy_layer.has_been_idle_during_duration(ch_id, self.sparams.PIFS_us))
+            idle_secondary_channels = set(
+                ch_id
+                for ch_id in secondary_channels
+                if self.node.phy_layer.has_been_idle_during_duration(
+                    ch_id, self.sparams.PIFS_us
+                )
+            )
 
             if idle_secondary_channels != secondary_channels:
                 self.logger.debug(
@@ -338,21 +348,30 @@ class MAC:
                 )
                 self.backoff_slots = -1
 
-                self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished but skipping transmission...")
+                self.logger.header(
+                    f"{self.node.type} {self.node.id} -> Backoff finished but skipping transmission..."
+                )
 
                 return
-            
-            self.node.phy_layer.set_transmitting_channels(self.node.phy_layer.channels_ids)
+
+            self.node.phy_layer.set_transmitting_channels(
+                self.node.phy_layer.channels_ids
+            )
 
         elif self.sparams.BONDING_MODE == 1:
-            # DCB: select the widest contiguous subset of channels (including the primary) that were idle for at least a PIFS duration for transmission according to IEEE 802.11 channelization 
+            # DCB: select the widest contiguous subset of channels (including the primary) that were idle for at least a PIFS duration for transmission according to IEEE 802.11 channelization
             primary_channel = self.node.phy_layer.get_primary_channel_id()
-            secondary_channels = set(self.node.phy_layer.channels_ids) - set([primary_channel])
+            secondary_channels = set(self.node.phy_layer.channels_ids) - set(
+                [primary_channel]
+            )
 
             # Secondary channels that have been idle for at least PIFS
             idle_secondary_channels = set(
-                ch_id for ch_id in secondary_channels
-                if self.node.phy_layer.has_been_idle_during_duration(ch_id, self.sparams.PIFS_us)
+                ch_id
+                for ch_id in secondary_channels
+                if self.node.phy_layer.has_been_idle_during_duration(
+                    ch_id, self.sparams.PIFS_us
+                )
             )
 
             # Union primary and idle secondaries
@@ -363,9 +382,10 @@ class MAC:
 
             # Filter: keep only sets that include primary and are subsets of available_channels
             valid_idle_bonds = [
-                    bond for bond in valid_bonds
-                    if primary_channel in bond and set(bond).issubset(available_channels)
-                ]
+                bond
+                for bond in valid_bonds
+                if primary_channel in bond and set(bond).issubset(available_channels)
+            ]
 
             # Pick the widest (i.e., with max length) subset for transmission
             if valid_idle_bonds:
@@ -389,7 +409,6 @@ class MAC:
             self.node.tx_stats.last_tx_attempt_us = self.env.now
 
         self.node.tx_stats.tx_attempts += 1
-        print("transmission attempt for node", self.node.id, "at time", self.env.now)
 
         self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished")
 
@@ -465,9 +484,9 @@ class MAC:
         if not self.cts_event in event_result:
             self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
             self.cts_event = None
+
             self.retries += 1
-            if self.sparams.ENABLE_RTS_CTS:
-                self.node.tx_stats.tx_failures += 1
+            self.node.tx_stats.tx_failures += 1
 
             return
         else:
@@ -500,8 +519,7 @@ class MAC:
             self.tx_ampdu.retries += 1
 
             self.retries += 1
-            if not self.sparams.ENABLE_RTS_CTS:
-                self.node.tx_stats.tx_failures += 1
+            self.node.tx_stats.tx_failures += 1
 
             return
         else:
@@ -641,7 +659,10 @@ class MAC:
                 self.rx_back = data_unit  # Store received BACK frame
                 if not self.sparams.ENABLE_RTS_CTS:
                     self.node.tx_stats.tx_successes += 1
-                elif data_unit.ampdu_id == self.tx_ampdu.id and self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes:
+                elif (
+                    data_unit.ampdu_id == self.tx_ampdu.id
+                    and self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes
+                ):
                     self.node.tx_stats.tx_successes += 1
 
                 self.back_event.succeed()  # Trigger BACK event
@@ -698,11 +719,8 @@ class MAC:
                     ch_waited_times[ch_id] = waited_time_us
                     ch_duration_us[ch_id] = duration_us
                     self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> AMPDU collision on ch {ch_id}, waiting EIFS ({duration_us} us), already waited {waited_time} us"
+                        f"{self.node.type} {self.node.id} -> AMPDU collision on ch {ch_id}, waiting EIFS ({duration_us} us), already waited {waited_time_us} us"
                     )
-                else:
-                    waited_time = 0
-                    duration_us = self.sparams.DIFS_us
 
                 self.node.phy_layer.reset_collision_events()
 

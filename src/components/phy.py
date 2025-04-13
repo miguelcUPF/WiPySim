@@ -152,7 +152,6 @@ class PHY:
 
         self.set_channels(set(channels_ids))
 
-
         if self.sparams.BONDING_MODE in [0, 1]:
             self.set_sensing_channels({self.select_primary_channel()})
         else:
@@ -281,17 +280,10 @@ class PHY:
         )
 
     def are_all_sensing_channels_idle(self):
-        return self.node.medium.are_all_node_channels_idle(
-            self.node, self.sensing_channels_ids
-        )
-
-    def is_any_sensing_channel_idle(self):
-        return self.node.medium.is_any_node_channel_idle(
-            self.node, self.sensing_channels_ids
-        )
+        return self.node.medium.are_all_node_channels_idle(self.sensing_channels_ids)
 
     def is_channel_idle(self, ch_id: int):
-        return self.node.medium.are_all_node_channels_idle(self.node, [ch_id])
+        return self.node.medium.are_all_node_channels_idle([ch_id])
 
     def get_busy_sensing_channels(self):
         return [
@@ -309,7 +301,11 @@ class PHY:
             self.busy_events[ch_id].succeed()
 
     def channel_is_idle(self, ch_id: int):
-        self.busy_channels_ids.remove(ch_id)
+        (
+            self.busy_channels_ids.remove(ch_id)
+            if ch_id in self.busy_channels_ids
+            else None
+        )
         if (
             self.idle_events[ch_id] is not None
             and not self.idle_events[ch_id].triggered

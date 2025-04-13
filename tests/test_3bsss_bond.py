@@ -24,19 +24,21 @@ sparams.ENABLE_RTS_CTS = True
 sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.CW_MIN = 4
-sparams.CW_MAX = 2**0*sparams.CW_MIN
+sparams.CW_MAX = 2**0 * sparams.CW_MIN
 
-sparams.BONDING_MODE = 0 # Test: 0 and 1
+sparams.BONDING_MODE = 0  # Test: 0 and 1
 
 sparams.NUM_CHANNELS = 2
 
-cfg.SIMULATION_TIME_us = 1e5
+cfg.SIMULATION_TIME_us = 2e5
 cfg.SEED = 2
 
-cfg.ENABLE_CONSOLE_LOGGING = True
+cfg.ENABLE_CONSOLE_LOGGING = False
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"GEN": ["ALL"], "MEDIUM": ["ALL"], "PHY": ["DEBUG", "HEADER"], "MAC": ["WARNING"]}
+cfg.EXCLUDED_LOGS = {
+    "GEN": ["ALL"],
+}
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
@@ -67,7 +69,7 @@ if __name__ == "__main__":
 
     for ap in network.get_aps():
         logger.info(
-            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}"
+            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}, Channels: [{', '.join(map(str, ap.phy_layer.channels_ids))}], Sensing Channels: {', '.join(map(str, ap.phy_layer.sensing_channels_ids))}"
         )
 
     print(SIMULATION_TERMINATED_MSG)
