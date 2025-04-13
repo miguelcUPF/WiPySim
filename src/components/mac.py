@@ -187,7 +187,7 @@ class MAC:
 
         if len(self.node.phy_layer.sensing_channels_ids) > 1:
             self.logger.critical(
-                f"{self.node.type} {self.node.id} -> Sensing channels does not contain only one channel when using CSMA_SENSING_MODE 0! (Channels: {', '.join(map(str, self.node.phy_layer.sensing_channels_ids))})"
+                f"{self.node.type} {self.node.id} -> Sensing channels does not contain only one channel when using BONDING_MODE 0! (Channels: {', '.join(map(str, self.node.phy_layer.sensing_channels_ids))})"
             )
 
         primary_channel_id = next(iter(self.node.phy_layer.sensing_channels_ids))
@@ -283,7 +283,7 @@ class MAC:
         slot_remaining_time = self.sparams.SLOT_TIME_us
 
         while self.backoff_slots > 0:
-            if self.sparams.CSMA_SENSING_MODE == 0:
+            if self.sparams.BONDING_MODE == 0:
                 # standard behavior
                 self.any_channel_busy_event = self.env.event()
                 event = self.any_channel_busy_event
@@ -349,7 +349,7 @@ class MAC:
         else:
             self.node.tx_stats.last_tx_attempt_us = self.env.now
 
-        if self.sparams.CSMA_SENSING_MODE == 1:
+        if self.sparams.BONDING_MODE == 1:
             self.node.phy_layer.set_transmitting_channels(bo_channels)
 
         self.node.tx_stats.tx_attempts += 1
@@ -669,7 +669,7 @@ class MAC:
 
                 self.node.phy_layer.reset_collision_events()
 
-                if self.sparams.CSMA_SENSING_MODE == 1:
+                if self.sparams.BONDING_MODE == 1:
                     idle_channels = yield self.env.process(
                         self.wait_until_any_idle(ch_duration_us, ch_waited_times)
                     )

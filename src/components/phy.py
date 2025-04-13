@@ -25,10 +25,10 @@ class PHY:
         self.channels_ids = set()  # Channels selected
         self.sensing_channels_ids = (
             set()
-        )  # if CSMA_SENSING_MODE == 0 then only the primary channel is used; otherwise all channels are used
+        )  # if BONDING_MODE == 0 then only the primary channel is used; otherwise all channels are used
         self.transmitting_channels_ids = (
             set()
-        )  # if CSMA_SENSING_MODE == 1 it can be a subset of sensing_channels_ids; otherwise all channels are used
+        )  # if BONDING_MODE == 1 it can be a subset of sensing_channels_ids; otherwise all channels are used
 
         self.busy_channels_ids = set()
 
@@ -118,7 +118,7 @@ class PHY:
         ]
 
     def select_channels(self):
-        # TODO: implement channel selection
+        # TODO: implement channel selection at the MAC layer
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Selecting channels at random..."
         )
@@ -132,7 +132,7 @@ class PHY:
 
         self.set_channels(channels_ids)
 
-        if self.sparams.CSMA_SENSING_MODE == 0:
+        if self.sparams.BONDING_MODE == 0:
             primary_channel_id = self.select_primary_channel()
             self.set_sensing_channels(set([primary_channel_id]))
         else:
@@ -321,7 +321,7 @@ class PHY:
             mcs_index = 0
             tx_channels_ids = (
                 self.sensing_channels_ids
-                if self.cfg.CSMA_SENSING_MODE == 0
+                if self.sparams.BONDING_MODE == 0
                 else self.transmitting_channels_ids
             )
         else:

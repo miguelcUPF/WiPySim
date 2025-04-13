@@ -65,7 +65,7 @@ def validate_params(sparams: sparams, logger: logging.Logger):
         "SPATIAL_STREAMS": (sparams.SPATIAL_STREAMS, {1, 2, 3}),
         "GUARD_INTERVAL_us": (sparams.GUARD_INTERVAL_us, {0.8, 1.6, 3.2}),
         "NUM_CHANNELS": (sparams.NUM_CHANNELS, {1, 2, 4, 8}),
-        "CSMA_SENSING_MODE": (sparams.CSMA_SENSING_MODE, {0, 1}),
+        "BONDING_MODE": (sparams.BONDING_MODE, {0, 1}),
     }
 
     for name, (value, valid_values) in constrained_params.items():

@@ -23,7 +23,7 @@ sparams.MAX_TX_QUEUE_SIZE_pkts = 100  # Test: 10, 50, 100
 sparams.ENABLE_RTS_CTS = True  # Test: False and True
 sparams.MPDU_ERROR_PROBABILITY = 0.1  # Test: 0, 0.1, 0.5
 
-sparams.CSMA_SENSING_MODE = 0
+sparams.BONDING_MODE = 0
 sparams.ENABLE_NON_STANDARD_BONDS = False
 
 sparams.NUM_CHANNELS = 1

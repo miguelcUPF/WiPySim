@@ -36,9 +36,9 @@ class SimParams:
     TX_GAIN_dB = 0
     RX_GAIN_dB = 0
 
-    CSMA_SENSING_MODE = 0  # Defaults to 0
-    # 0: Sense only primary channel
-    # 1: Sense all channels, pause backoff only if all are busy, send on those available
+    BONDING_MODE = 0  # Defaults to 0
+    # 0: Sense only primary channel, pause backoff if busy, transmit on the entire bonded channel (Static Channel Bonding)
+    # 1: Sense all channels, pause backoff only if all are busy, transmit on the available subset (Dynamic Channel Bonding)
 
     ENABLE_NON_STANDARD_BONDS = False  # Defaults to False TODO
     # True: it is possible to use non-default contiguous channel bonds (e.g., {1, 2}; {2,3}; {3, 4}; {1, 2, 3}; {2, 3, 4})

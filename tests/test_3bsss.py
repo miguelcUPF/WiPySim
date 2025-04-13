@@ -26,7 +26,7 @@ sparams.MPDU_ERROR_PROBABILITY = 0.1
 sparams.CW_MIN = 4
 sparams.CW_MAX = 2**0*sparams.CW_MIN
 
-sparams.CSMA_SENSING_MODE = 0
+sparams.BONDING_MODE = 0
 sparams.ENABLE_NON_STANDARD_BONDS = False
 
 sparams.NUM_CHANNELS = 1
