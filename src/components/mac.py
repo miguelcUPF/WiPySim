@@ -414,22 +414,8 @@ class MAC:
 
     def ampdu_aggregation(self):
         """Aggregates MDPUS into an A-MPDU frame."""
-        if self.tx_ampdu:
-            if self.tx_ampdu.retries >= self.sparams.COMMON_RETRY_LIMIT:
-                self.logger.info(
-                    f"{self.node.type} {self.node.id} -> A-MPDU {self.tx_ampdu.id} dropped after max retries"
-                )
-                self.tx_ampdu = None
-                self.retries = 0
-
-            elif (
-                self.tx_ampdu.retries == 0
-            ):  # If 0 it means that CTS timeout occurred, so no need to aggregate
-                return
-            else:
-                self.logger.info(
-                    f"{self.node.type} {self.node.id} -> No need to aggregate, retransmitting A-MPDU {self.tx_ampdu.id} (retries={self.tx_ampdu.retries})..."
-                )
+        if self.tx_ampdu and self.tx_ampdu.retries == 0:
+                # If retries is 0 it means that CTS timeout occurred, so no need to aggregate
                 return
 
         self.logger.header(f"{self.node.type} {self.node.id} -> Aggregating MPDUs...")
@@ -515,8 +501,6 @@ class MAC:
         if not self.back_event.triggered:
             self.logger.warning(f"{self.node.type} {self.node.id} -> BACK timeout...")
             self.back_event = None
-
-            self.tx_ampdu.retries += 1
 
             self.retries += 1
             self.node.tx_stats.tx_failures += 1
