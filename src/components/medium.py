@@ -357,7 +357,7 @@ class Medium:
         rssi_dbm = get_rssi_dbm(self.sparams, distance_m)
         min_sensitivity_dbm = get_min_sensitivity_dBm(mcs_index, len(channels_ids) * 20)
 
-        if rssi_dbm < min_sensitivity_dbm:
+        if rssi_dbm < min_sensitivity_dbm: # this does nothing if there is no mobility
             self.logger.warning(
                 f"Unreliable PPDU reception (from {ppdu.src_id} to {ppdu.dst_id}): RSSI ({rssi_dbm:.2f} dBm) below min. sensitivity threshold ({min_sensitivity_dbm:.2f} dBm)"
             )
