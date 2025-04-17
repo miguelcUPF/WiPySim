@@ -43,7 +43,7 @@ class SimParams:
     #    - Pause backoff if the primary is busy.
     #    - Transmit only if all secondary channels were idle for at least a PIFS duration immediately before backoff expires.
     #    - Transmit on the full bonded channel; otherwise, defer and restart contention.
-    # 1: Dynamic Channel Bonding (DCB) - TODO: testing
+    # 1: Dynamic Channel Bonding (DCB)
     #    - Sense only the primary channel during backoff.
     #    - Pause backoff if the primary is busy.
     #    - At backoff expiration, select the widest contiguous subset of channels (including the primary) that were idle for at least a PIFS duration for transmission.
