@@ -81,7 +81,7 @@ class MPDU(DataUnit):
             sparams.MAC_HEADER_SIZE_bytes
             + packet.size_bytes
             + sparams.FCS_SIZE_bytes
-            + sparams.MDPU_DELIMITER_SIZE_bytes
+            + sparams.MDPU_DELIMITER_SIZE_bytes  # already accounted the size of the delimiter and padding that surround each MPDU inside an aggregate
             + sparams.MPDU_PADDING_SIZE_bytes,
             packet.src_id,
             packet.dst_id,
@@ -219,7 +219,7 @@ class PPDU(DataUnit):
         """
         super().__init__(
             creation_time_us,
-            data_unit.size_bytes + sparams.PHY_HEADER_SIZE_bytes, # Add PHY header
+            data_unit.size_bytes + sparams.PHY_HEADER_SIZE_bytes,  # Add PHY header
             data_unit.src_id,
             data_unit.dst_id,
         )
