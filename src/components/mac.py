@@ -477,7 +477,8 @@ class MAC:
             return
         else:
             self.retries = 0
-            yield self.env.process(self.wait_until_primary_idle(self.sparams.SIFS_us))
+            
+            yield self.env.timeout(self.sparams.SIFS_us)
             yield self.env.process(self.transmit_ampdu())
 
     def transmit_ampdu(self):
@@ -658,7 +659,7 @@ class MAC:
                 )
 
     def send_response(self, data_unit):
-        yield self.env.process(self.wait_until_primary_idle(self.sparams.SIFS_us))
+        yield self.env.timeout(self.sparams.SIFS_us)
         yield self.env.process(self.transmit(data_unit))
         self.set_state(MACState.IDLE)
 
