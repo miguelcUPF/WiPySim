@@ -197,8 +197,6 @@ class PHY:
             f"{self.node.type} {self.node.id} -> Selected MCS index for STA {sta_id}: {mcs_index}"
         )
 
-        self.broadcast_mcs_info(sta_id)
-
     def select_all_mcs_indexs(self):
         if not isinstance(self.node, AP):
             return
@@ -228,18 +226,6 @@ class PHY:
                 ap.id, sta.id, self.channels_ids, self.sensing_channels_ids
             )
 
-    def broadcast_mcs_info(self, sta_id: int):
-        if not isinstance(self.node, AP):
-            return
-
-        ap = cast(AP, self.node)
-
-        self.logger.debug(
-            f"{self.node.type} {self.node.id} -> Broadcasting MCS info to STA {sta_id}..."
-        )
-
-        self.node.medium.broadcast_mcs_info(ap.id, sta_id, self.mcs_indexes[sta_id])
-
     def broadcast_tx_channels_info(self):
         if not isinstance(self.node, AP):
             return
@@ -263,13 +249,6 @@ class PHY:
 
         self.logger.info(
             f"{self.node.type} {self.node.id} -> Updated PHY settings (channels_ids: {', '.join(map(str, self.channels_ids))}; sensing_channels_ids: {', '.join(map(str, self.sensing_channels_ids))})"
-        )
-
-    def receive_mcs_info(self, mcs_index: int):
-        self.mcs_index = mcs_index
-
-        self.logger.info(
-            f"{self.node.type} {self.node.id} -> Updated PHY settings (mcs_index: {self.mcs_index})"
         )
 
     def receive_tx_channels_info(self, channels_ids: set[int]):

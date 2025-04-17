@@ -266,16 +266,6 @@ class Medium:
 
         dst_node.phy_layer.receive_channel_info(channels_ids, sensing_channels_ids)
 
-    def broadcast_mcs_info(self, src_id, dst_id, mcs_index):
-        src_node = self.network.get_node(src_id)
-        dst_node = self.network.get_node(dst_id)
-
-        self.logger.header(
-            f"Broadcasting MCS info from {src_node.type} {src_id} to {dst_node.type} {dst_id}..."
-        )
-
-        dst_node.phy_layer.receive_mcs_info(mcs_index)
-
     def broadcast_tx_channels_info(self, src_id, dst_id, channels_ids):
         src_node = self.network.get_node(src_id)
         dst_node = self.network.get_node(dst_id)
@@ -357,7 +347,7 @@ class Medium:
         rssi_dbm = get_rssi_dbm(self.sparams, distance_m)
         min_sensitivity_dbm = get_min_sensitivity_dBm(mcs_index, len(channels_ids) * 20)
 
-        if rssi_dbm < min_sensitivity_dbm: # this does nothing if there is no mobility
+        if rssi_dbm < min_sensitivity_dbm:  # this does nothing if there is no mobility
             self.logger.warning(
                 f"Unreliable PPDU reception (from {ppdu.src_id} to {ppdu.dst_id}): RSSI ({rssi_dbm:.2f} dBm) below min. sensitivity threshold ({min_sensitivity_dbm:.2f} dBm)"
             )
