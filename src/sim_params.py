@@ -8,7 +8,7 @@ class SimParams:
     PIFS_us = SIFS_us + SLOT_TIME_us  # equals 25
 
     CW_MIN = 16
-    CW_MAX = 1023
+    CW_MAX = 1024
 
     COMMON_RETRY_LIMIT = 7
 
