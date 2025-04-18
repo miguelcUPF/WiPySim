@@ -21,7 +21,7 @@ CTS_TX_us = round(
     / calculate_data_rate_bps(0, 20, 1, 0.8)
     * 1e6
 )
-CTS_TIMEOUT_us = sparams.SIFS_us + sparams.SLOT_TIME_us + CTS_TX_us
+CTS_TIMEOUT_us = sparams.SIFS_us + CTS_TX_us
 
 
 class MACState:
