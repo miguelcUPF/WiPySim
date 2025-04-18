@@ -333,6 +333,11 @@ class TrafficPlotter(BasePlotter):
         title: str = "Traffic",
         save_name: str = "traffic",
         save_format: str = "pdf",
+        show_xticks: bool = True,
+        show_xlabel: bool = True,
+        show_legend: bool = True,
+        start_x_from_zero: bool = False,
+        fig_size: tuple[float, float] = (6.4, 2.4),
     ) -> None:
         """
         Generalized function for plotting traffic data based on a time attribute.
@@ -355,11 +360,23 @@ class TrafficPlotter(BasePlotter):
 
         # Create a new figure and axis
         plt.ion()
-        fig, ax = plt.subplots(figsize=(6.4, 2.4))
+        fig, ax = plt.subplots(figsize=fig_size)
+
+        # Get first time value
+        first_data_unit = min(self.traffic_data, key=lambda p: getattr(p, time_attr))
+        print(getattr(first_data_unit, time_attr))
 
         # Extract x and y values from the data
         x_values_ms = [
-            getattr(data_unit, time_attr) / 1e3 for data_unit in self.traffic_data
+            (
+                getattr(data_unit, time_attr) / 1e3
+                - (
+                    0
+                    if not start_x_from_zero
+                    else getattr(first_data_unit, time_attr) / 1e3
+                )
+            )
+            for data_unit in self.traffic_data
         ]
         y_values_bytes = [data_unit.size_bytes for data_unit in self.traffic_data]
 
@@ -370,8 +387,8 @@ class TrafficPlotter(BasePlotter):
         color_map = {
             "RTS": mcolors.TABLEAU_COLORS["tab:orange"],
             "CTS": mcolors.TABLEAU_COLORS["tab:green"],
-            "DATA": mcolors.TABLEAU_COLORS["tab:cyan"],
-            "MPDU": mcolors.TABLEAU_COLORS["tab:blue"],
+            "DATA": mcolors.TABLEAU_COLORS["tab:blue"],
+            "MPDU": mcolors.TABLEAU_COLORS["tab:cyan"],
             "BACK": mcolors.TABLEAU_COLORS["tab:purple"],
             "DEFAULT": mcolors.TABLEAU_COLORS["tab:brown"],
         }
@@ -383,29 +400,41 @@ class TrafficPlotter(BasePlotter):
         ]
 
         # Create the scatter plot
-        ax.scatter(x_values_ms, y_values_bytes, s=50, color=colors, marker="|")
+        ax.scatter(
+            x_values_ms,
+            y_values_bytes,
+            s=50,
+            color=colors,
+            marker="|",
+        )
 
         # Set the y-axis limits
         ax.set_ylim((0, None))
 
         # Set the title and labels
         ax.set_title(title, loc="left")
-        ax.set_xlabel("Simulation Time (ms)")
-        ax.set_ylabel("Data Unit Size (bytes)")
+
+        ax.set_ylabel("Size (bytes)")
+
+        if not show_xticks:
+            plt.xticks([])
+        if show_xlabel:
+            ax.set_xlabel("Time (ms)")
 
         # Create a legend for the data unit types
-        legend_elements = [
-            plt.Rectangle((0, 0), 1, 1, label=label, color=color_map[label])
-            for label in data_unit_types
-            if label in color_map
-        ]
-        ax.legend(
-            handles=legend_elements,
-            loc="center left",
-            fontsize="small",
-            frameon=False,
-            bbox_to_anchor=(1, 0.5),
-        )
+        if show_legend:
+            legend_elements = [
+                plt.Rectangle((0, 0), 1, 1, label=label, color=color_map[label])
+                for label in data_unit_types
+                if label in color_map
+            ]
+            ax.legend(
+                handles=legend_elements,
+                loc="center left",
+                fontsize="small",
+                frameon=False,
+                bbox_to_anchor=(1, 0.5),
+            )
 
         # Adjust the layout
         plt.tight_layout()

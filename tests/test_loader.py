@@ -18,6 +18,8 @@ from src.utils.messages import (
     SIMULATION_TERMINATED_MSG,
 )
 
+from typing import cast
+
 import matplotlib.pyplot as plt
 import simpy
 
@@ -110,11 +112,12 @@ if __name__ == "__main__":
     env.run(until=cfg.SIMULATION_TIME_us)
 
     for ap in network.get_aps():
+        mac_layer = cast(DummyMAC, ap.mac_layer)
         logger.info(
-            f"AP {ap.id} -> DL Load: {ap.mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(ap.mac_layer.load_bits*1e-6) / (cfg.SIMULATION_TIME_us*1e-6):.2f} Mbps"
+            f"AP {ap.id} -> DL Load: {mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(mac_layer.load_bits*1e-6) / (cfg.SIMULATION_TIME_us*1e-6):.2f} Mbps"
         )
 
-        ap.mac_layer.plotter.plot_generation(title=f"Traffic AP {ap.id}")
+        mac_layer.plotter.plot_generation(title=f"Traffic AP {ap.id}")
 
     print(SIMULATION_TERMINATED_MSG)
 

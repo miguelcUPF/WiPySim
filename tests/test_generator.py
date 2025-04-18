@@ -18,6 +18,8 @@ from src.utils.messages import (
     SIMULATION_TERMINATED_MSG,
 )
 
+from typing import cast
+
 import matplotlib.pyplot as plt
 import simpy
 
@@ -51,8 +53,7 @@ cfg.BSSs_Advanced = [
                 "destination": 2,
                 "model": {
                     "name": "Poisson",
-                    "traffic_load_kbps": 50e3,
-                    "max_packet_size_bytes": 1240,
+                    # "traffic_load_kbps": 30e3,
                 },
             },
         ],
@@ -67,8 +68,6 @@ cfg.BSSs_Advanced = [
                 "model": {
                     "name": "Bursty",
                     "end_time_us": 1e6,
-                    "traffic_load_kbps": 50e3,
-                    "max_packet_size_bytes": 1240,
                     "burst_size_pkts": 30,
                     "avg_inter_packet_time_us": 5,
                 },
@@ -82,13 +81,14 @@ cfg.BSSs_Advanced = [
         "traffic_flows": [
             {
                 "destination": 6,
-                "model": {"name": "VR", "start_time_us": 2000, "fps": 60},
+                "model": {"name": "VR", "start_time_us": 1000, "fps": 60},
             }
         ],
     },
 ]
 
 SAVE_NAMES = {1: "Poisson_traffic", 3: "Bursty_traffic", 5: "VR_traffic"}
+TITLE_NAMES = {1: "Poisson", 3: "Bursty", 5: "VR"}
 
 
 class DummyMAC:
@@ -99,14 +99,11 @@ class DummyMAC:
 
         self.load_bits = 0
 
-        self.plotter = TrafficPlotter(cfg, sparams, env)
+        self.plotter = TrafficPlotter(cfg, sparams, env, max_data_units=500)
 
     def tx_enqueue(self, packet: Packet):
-        mpdu = MPDU(packet, self.env.now)
-
+        self.plotter.add_data_unit(packet)
         self.load_bits += packet.size_bytes * 8
-
-        self.plotter.add_data_unit(mpdu)
 
 
 if __name__ == "__main__":
@@ -130,12 +127,18 @@ if __name__ == "__main__":
     env.run(until=cfg.SIMULATION_TIME_us)
 
     for ap in network.get_aps():
+        mac_layer = cast(DummyMAC, ap.mac_layer)
         logger.info(
-            f"AP {ap.id} -> DL Load: {ap.mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(ap.mac_layer.load_bits*1e-6) / (cfg.SIMULATION_TIME_us*1e-6):.2f} Mbps"
+            f"AP {ap.id} -> DL Load: {mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(mac_layer.load_bits*1e-6) / (cfg.SIMULATION_TIME_us*1e-6):.2f} Mbps"
         )
 
-        ap.mac_layer.plotter.plot_generation(
-            title=f"Traffic AP {ap.id}", save_name=SAVE_NAMES[ap.id]
+        mac_layer.plotter.plot_generation(
+            title=TITLE_NAMES[ap.id],
+            save_name=SAVE_NAMES[ap.id],
+            show_xlabel=False,
+            show_legend=False,
+            start_x_from_zero=True,
+            fig_size=(4, 2),
         )
 
     print(SIMULATION_TERMINATED_MSG)
