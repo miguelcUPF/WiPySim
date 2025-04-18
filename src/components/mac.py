@@ -18,7 +18,7 @@ BACK_TIMEOUT_us = 281
 CTS_TX_us = round(
     (sparams.CTS_SIZE_bytes + sparams.PHY_HEADER_SIZE_bytes)
     * 8
-    / calculate_data_rate_bps(0, 20, 1, sparams.GUARD_INTERVAL_us)
+    / calculate_data_rate_bps(0, 20, 1, 0.8)
     * 1e6
 )
 CTS_TIMEOUT_us = sparams.SIFS_us + sparams.SLOT_TIME_us + CTS_TX_us

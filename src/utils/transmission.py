@@ -59,7 +59,7 @@ def get_tx_duration_us(
         mcs_index,
         channel_width,
         sparams.SPATIAL_STREAMS if not is_mgmt_ctrl_frame else 1,
-        sparams.GUARD_INTERVAL_us,
+        sparams.GUARD_INTERVAL_us if not is_mgmt_ctrl_frame else 0.8,
     )
 
     # Calculate the transmission duration in microseconds
