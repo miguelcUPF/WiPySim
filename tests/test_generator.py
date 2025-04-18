@@ -89,7 +89,7 @@ cfg.BSSs_Advanced = [
 
 SAVE_NAMES = {1: "Poisson_traffic", 3: "Bursty_traffic", 5: "VR_traffic"}
 TITLE_NAMES = {1: "Poisson", 3: "Bursty", 5: "VR"}
-
+SHOW_Y = {1: True, 3: False, 5: False}
 
 class DummyMAC:
     def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment):
@@ -137,8 +137,10 @@ if __name__ == "__main__":
             save_name=SAVE_NAMES[ap.id],
             show_xlabel=False,
             show_legend=False,
+            show_yticks=SHOW_Y[ap.id],
+            show_ylabel=SHOW_Y[ap.id],
             start_x_from_zero=True,
-            fig_size=(4, 2),
+            fig_size=(3.2, 2),
         )
 
     print(SIMULATION_TERMINATED_MSG)

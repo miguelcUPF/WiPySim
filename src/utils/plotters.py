@@ -336,6 +336,8 @@ class TrafficPlotter(BasePlotter):
         show_xticks: bool = True,
         show_xlabel: bool = True,
         show_legend: bool = True,
+        show_yticks: bool = True,
+        show_ylabel: bool = True,
         start_x_from_zero: bool = False,
         fig_size: tuple[float, float] = (6.4, 2.4),
     ) -> None:
@@ -414,12 +416,16 @@ class TrafficPlotter(BasePlotter):
         # Set the title and labels
         ax.set_title(title, loc="left")
 
-        ax.set_ylabel("Size (bytes)")
-
         if not show_xticks:
             plt.xticks([])
+        if not show_yticks:
+            plt.yticks([])
+
+        # Set the x-axis limits
         if show_xlabel:
             ax.set_xlabel("Time (ms)")
+        if show_ylabel:
+            ax.set_ylabel("Size (bytes)")
 
         # Create a legend for the data unit types
         if show_legend:
