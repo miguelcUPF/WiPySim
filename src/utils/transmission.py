@@ -19,7 +19,7 @@ def get_path_loss_dB(sparams: sparams, distance_m: float) -> float:
     """
     # Path loss at reference distance (1 meter) assuming free space
     path_loss_1m_dB = (
-        20 * math.log10(1) + 20 * math.log10(sparams.FREQUENCY_GHz * 1e9) - 147.55
+        20 * math.log10(1) + 20 * math.log10(sparams.FREQUENCY_GHz * 1e9) - 147.55 - sparams.TX_GAIN_dB - sparams.RX_GAIN_dB
     )
     # Path loss at the given distance using the free-space log-distance path loss model
     path_loss = path_loss_1m_dB + 10 * sparams.PATH_LOSS_EXPONENT * math.log10(
