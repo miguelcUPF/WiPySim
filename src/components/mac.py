@@ -138,9 +138,9 @@ class MAC:
 
             events = [timeout, busy_event, rts_event, ampdu_event]
 
-            event_result = yield AnyOf(self.env, events)
+            yield AnyOf(self.env, events)
 
-            if ampdu_event in event_result:
+            if ampdu_event.triggered:
                 eifs = self.sparams.DIFS_us + BACK_TIMEOUT_us
                 self.logger.debug(
                     f"{self.node.type} {self.node.id} -> AMPDU collision on Channel {ch_id}, waiting EIFS ({eifs} μs)"
@@ -151,7 +151,7 @@ class MAC:
                 yield from self._wait_until_channel_idle(ch_id, eifs)
                 return
 
-            if rts_event in event_result:
+            if rts_event.triggered:
                 eifs = self.sparams.DIFS_us + CTS_TIMEOUT_us
                 self.logger.debug(
                     f"{self.node.type} {self.node.id} -> RTS collision on Channel {ch_id}, waiting EIFS ({eifs} μs)"
@@ -160,7 +160,7 @@ class MAC:
                 yield from self._wait_until_channel_idle(ch_id, eifs)
                 return
 
-            if timeout in event_result:
+            if timeout.triggered:
                 # Successfully stayed idle for duration
                 self.logger.debug(
                     f"{self.node.type} {self.node.id} -> Channel {ch_id} has been idle for {duration_us} μs"
@@ -228,13 +228,13 @@ class MAC:
         ]
 
         # Wait until at least one channel completes its idle time
-        event_result = yield AnyOf(self.env, idle_channel_events)
+        yield AnyOf(self.env, idle_channel_events)
 
         # Get list of channels that completed the idle period
         idle_channels = [
             sensing_channels[i]
             for i, event in enumerate(idle_channel_events)
-            if event in event_result
+            if event.triggered
         ]
 
         self.logger.debug(
@@ -274,10 +274,10 @@ class MAC:
 
                 slot_start_time = self.env.now
 
-                event_result = yield self.env.timeout(self.sparams.SLOT_TIME_us) | event
+                yield self.env.timeout(self.sparams.SLOT_TIME_us) | event
 
                 if (
-                    event in event_result
+                    event.triggered
                     and self.env.now < slot_start_time + self.sparams.SLOT_TIME_us
                 ):
                     self.logger.debug(
@@ -298,10 +298,10 @@ class MAC:
                 event = self.env.any_of(list(busy_events.values()))
 
                 slot_start_time = self.env.now
-                event_result = yield self.env.timeout(slot_remaining_time) | event
+                yield self.env.timeout(slot_remaining_time) | event
 
                 if (
-                    event in event_result
+                    event.triggered
                     and self.env.now < slot_start_time + slot_remaining_time
                 ):
                     # Check which channels got busy
@@ -465,9 +465,9 @@ class MAC:
 
         self.cts_event = self.env.event()
 
-        event_result = yield self.env.timeout(CTS_TIMEOUT_us) | self.cts_event
+        yield self.env.timeout(CTS_TIMEOUT_us) | self.cts_event
 
-        if not self.cts_event in event_result:
+        if not self.cts_event.triggered:
             self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
             self.cts_event = None
 
