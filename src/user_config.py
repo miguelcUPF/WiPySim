@@ -5,10 +5,12 @@ class UserConfig:
     SEED = 1  # Set to None for random behavior
 
     # --- Logging Configuration --- #
-    ENABLE_CONSOLE_LOGGING = True # Enable/disable displaying logs in the console (useful for debugging, may affect performance)
+    ENABLE_CONSOLE_LOGGING = True  # Enable/disable displaying logs in the console (useful for debugging, may affect performance)
     USE_COLORS_IN_LOGS = True  # Enable/disable colored logs
 
-    ENABLE_LOGS_RECORDING = True # Enable/disable recording logs (may affect performance)
+    ENABLE_LOGS_RECORDING = (
+        True  # Enable/disable recording logs (may affect performance)
+    )
     LOGS_RECORDING_PATH = "data/events"
 
     # Logging exclusions (if ENABLE_CONSOLE_LOGGING or ENABLE_LOGS_RECORDING is enabled)
@@ -50,9 +52,10 @@ class UserConfig:
     # - A single STA per BSS.
     # - A single traffic generation model applied to all STAs (using specified traffic load but other default parameters).
     # - STAs and APs are randomly positioned within the network bounds.
-    
+    # - The allocated channels (and primary channel) per BSS are selected at random.
+
     NUMBER_OF_BSSS = 1  # Number of Basic Service Sets (BSSs)
-    TRAFFIC_MODEL = "Poisson" # "Poisson", "Bursty", or "VR"
+    TRAFFIC_MODEL = "Poisson"  # "Poisson", "Bursty", or "VR"
     TRAFFIC_LOAD_kbps = 100e3  # Traffic load in kbps
 
     ## --- Network Configuration (Advanced) --- ##
@@ -60,8 +63,10 @@ class UserConfig:
     # - The number of BSSs, STAs, and their exact positions.
     # - The specific traffic model for each STA, including loading traffic from a file.
     # - Custom parameters like packet size, burst size, and frame rate for different traffic models.
-    
-    ENABLE_ADVANCED_NETWORK_CONFIG = False  # Enable/disable advanced network customizaiton
+
+    ENABLE_ADVANCED_NETWORK_CONFIG = (
+        False  # Enable/disable advanced network customizaiton
+    )
 
     # Advanced:
     # - Each BSS has an AP and a list of STAs.
@@ -72,6 +77,8 @@ class UserConfig:
     # - "ap": The Access Point (AP) of the BSS.
     #   - "id": Unique AP ID (int).
     #   - "pos" (optional): Tuple (x, y, z) specifying the AP’s coordinates in meters. If not specified, the AP is placed at random within the network bounds.
+    #   - "channel" (optional): List of 20 MHz channels (e.g., [1, 2, 3, 4]) defining the AP’s operating bandwidth. If not specified, it is randomly selected at runtime.
+    #   - "primary_channel" (optional): Primary 20 MHz channel used for contention and control frames. Must be one of the channels in "channel". If not specified, it is randomly selected at runtime.
     # - "stas": List of associated Stations (STAs).
     #   - "id": Unique STA ID (int).
     #   - "pos" (optional): Tuple (x, y, z) specifying the STA’s coordinates in meters. If not specified, the STA is placed at random within the network bounds.
@@ -90,39 +97,50 @@ class UserConfig:
     #       - "burst_size_pkts" (optional, Bursty model only): Number of packets per burst (int). Defaults to 20.
     #       - "avg_inter_packet_time_us" (optional, Bursty and VR models only): Average inter-packet time (int, microseconds). Defaults to 6.
     #       - "fps" (optional, VR model only): Frame rate (int, frames per second). Defaults to 90 fps.
-    
+
     BSSs_Advanced = [
         {
             "id": 1,  # A BSS
-            "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
+            "ap": {
+                "id": 1,
+                "pos": (0, 0, 0),
+                "channels": [1],
+                "primary_channel": 1,
+            },  # BSS Access Point (AP)
             "stas": [
                 {"id": 2, "pos": (3, 4, 0)},  # Associated Stations (STAs)
-                {"id": 3, "pos": (6, 8, 2)}
+                {"id": 3, "pos": (6, 8, 2)},
             ],
             "traffic_flows": [
-                {"destination": 2, "file": {"path": "tests/sim_traces/traffic_trace_node_1_to_node_2.csv",
-                                            "start_time_us": 5000, "end_time_us": 10000}},
-                {"destination": 3, "file": {
-                    "path": "tests/ws_traces/tshark_processed_traffic.tsv"}}
-            ]
+                {
+                    "destination": 2,
+                    "file": {
+                        "path": "tests/sim_traces/traffic_trace_node_1_to_node_2.csv",
+                        "start_time_us": 5000,
+                        "end_time_us": 10000,
+                    },
+                },
+                {
+                    "destination": 3,
+                    "file": {"path": "tests/ws_traces/tshark_processed_traffic.tsv"},
+                },
+            ],
         },
         {
             "id": 2,  # Another BSS
             "ap": {"id": 4, "pos": (5, 5, 1)},
-            "stas": [
-                {"id": 5}
-            ],
+            "stas": [{"id": 5}],
             "traffic_flows": [
                 {
                     "destination": 5,
-                    "model":
-                        {"name": "Bursty",
+                    "model": {
+                        "name": "Bursty",
                         "traffic_load_kbps": 50e3,
                         "max_packet_size_bytes": 1240,
                         "burst_size_pkts": 30,
-                        "avg_inter_packet_time_us": 5
-                        }
+                        "avg_inter_packet_time_us": 5,
+                    },
                 }
-            ]
-        }
+            ],
+        },
     ]

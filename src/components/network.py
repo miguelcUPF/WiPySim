@@ -19,6 +19,8 @@ class Node:
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
+        channels: set,
+        sensing_channels: set,
         type: str,
         medium,
         network,
@@ -42,7 +44,7 @@ class Node:
 
         self.app_layer = APP(cfg, sparams, env, self)
         self.mac_layer = MAC(cfg, sparams, env, self)
-        self.phy_layer = PHY(cfg, sparams, env, self)
+        self.phy_layer = PHY(cfg, sparams, env, self, channels, sensing_channels)
 
         self.tx_stats = TransmissionStats()
         self.rx_stats = ReceptionStats()
@@ -70,15 +72,30 @@ class STA(Node):
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
+        channels: set,
+        sensing_channels: set,
         bss_id: int,
         ap,
         medium,
         network,
     ):
         """Station (STA) node, associated with an AP and BSS."""
-        super().__init__(cfg, sparams, env, id, position, "STA", medium, network)
         self.bss_id = bss_id
         self.ap: AP = ap
+
+        super().__init__(
+            cfg,
+            sparams,
+            env,
+            id,
+            position,
+            channels,
+            sensing_channels,
+            "STA",
+            medium,
+            network,
+        )
+
         self.ap.add_sta(self)  # Automatically associate with the AP
 
     def __repr__(self):
@@ -95,15 +112,28 @@ class AP(Node):
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
+        channels: set,
+        sensing_channels: set,
         bss_id: int,
         medium,
         network,
     ):
         """Access Point (AP) node."""
-        super().__init__(cfg, sparams, env, id, position, "AP", medium, network)
         self.bss_id = bss_id
-
         self.associated_stas = []
+
+        super().__init__(
+            cfg,
+            sparams,
+            env,
+            id,
+            position,
+            channels,
+            sensing_channels,
+            "AP",
+            medium,
+            network,
+        )
 
     def add_sta(self, sta: STA):
         """Associates a STA with this AP."""
@@ -146,7 +176,12 @@ class Network:
         return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
 
     def add_ap(
-        self, ap_id: int, position: tuple[float, float, float], bss_id: int
+        self,
+        ap_id: int,
+        position: tuple[float, float, float],
+        bss_id: int,
+        channels: set,
+        sensing_channels: set,
     ) -> AP:
         """Adds an Access Point (AP) to the network."""
         if ap_id in self.nodes:
@@ -162,9 +197,20 @@ class Network:
                 )
                 return None
 
-        self.logger.debug(f"Adding AP {ap_id} to BSS {bss_id} at position {position}")
+        self.logger.debug(
+            f"Adding AP {ap_id} to BSS {bss_id} at position {position}. Channels: {channels}. Sensing Channels: {sensing_channels}"
+        )
         ap = AP(
-            self.cfg, self.sparams, self.env, ap_id, position, bss_id, self.medium, self
+            self.cfg,
+            self.sparams,
+            self.env,
+            ap_id,
+            position,
+            channels,
+            sensing_channels,
+            bss_id,
+            self.medium,
+            self,
         )
         self.nodes[ap_id] = ap
         self.graph.add_node(ap_id, pos=position, type="AP", bss_id=bss_id)
@@ -196,6 +242,8 @@ class Network:
             self.env,
             sta_id,
             position,
+            ap.phy_layer.channels_ids,
+            ap.phy_layer.sensing_channels_ids,
             bss_id,
             ap,
             self.medium,
@@ -259,7 +307,7 @@ class Network:
             elif isinstance(node, STA):
                 sta = cast(STA, node)
                 sta.ap.phy_layer.select_mcs_index(sta.id)
-                
+
         else:
             self.logger.error(f"Node {node_id} not found. Cannot update position.")
 

@@ -279,7 +279,7 @@ def get_logger(
         if not os.path.exists(cfg.LOGS_RECORDING_PATH):
             os.makedirs(cfg.LOGS_RECORDING_PATH)
 
-        file_handler = JSONFileHandler(LOGS_RECORDING_FILE, mode="a", env=env)
+        file_handler = JSONFileHandler(LOGS_RECORDING_FILE, env=env)
         file_handler.setFormatter(logging.Formatter("%(message)s"))
         file_handler.addFilter(ConfigFilter(cfg=cfg, sparams=sparams))
         logger.addHandler(file_handler)

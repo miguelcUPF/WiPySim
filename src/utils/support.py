@@ -2,6 +2,7 @@ from src.user_config import UserConfig as cfg
 from src.sim_params import SimParams as sparams
 
 from src.components.network import Network
+from src.components.medium import VALID_BONDS
 from src.traffic.generator import TrafficGenerator
 from src.traffic.loader import TrafficLoader
 from src.utils.messages import PRESS_TO_CONTINUE_MSG
@@ -102,7 +103,7 @@ def validate_params(sparams: sparams, logger: logging.Logger):
     logger.success("Simulation parameters validated.")
 
 
-def validate_config(cfg: cfg, logger: logging.Logger):
+def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
     def _is_valid_pos(pos) -> bool:
         if isinstance(pos, tuple) and len(pos) == 3:
             return all(isinstance(x, (int, float)) for x in pos)
@@ -265,6 +266,52 @@ def validate_config(cfg: cfg, logger: logging.Logger):
                         f"AP position {ap_pos} is reused across BSSs. Node positions must be unique."
                     )
                 used_node_pos.add(ap_pos)
+
+            if "channels" in bss["ap"]:
+                channels = bss["ap"]["channels"]
+                if not isinstance(channels, list) or not all(
+                    isinstance(ch, int) for ch in channels
+                ):
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has an invalid 'channels': {channels}. "
+                        f"It must be a list of integers (e.g., [1, 2, 3, 4])."
+                    )
+                if len(set(channels)) != len(channels):
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has duplicate entries in 'channels': {channels}."
+                    )
+                if max(channels) > sparams.NUM_CHANNELS:
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has channels that exceed the number of channels configured in the simulation ({sparams.NUM_CHANNELS}): {channels}. Please adjust the number of channels in 'sim_params.py'."
+                    )
+                channels_bw = len(channels) * 20
+                if channels_bw not in VALID_BONDS.keys():
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has an invalid number of channels: {channels_bw}. The simulator supports bonds of 20, 40, 80, and 160; thus, up to 8 channels."
+                    )
+                if channels not in VALID_BONDS[channels_bw]:
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has an invalid set of channels: {channels}. Valid bonds considering a bond of {channels_bw} MHz are: {VALID_BONDS[channels_bw]}."
+                    )
+
+            if "primary_channel" in bss["ap"]:
+                if not "channels" in bss["ap"]:
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has a 'primary_channel' but no 'channels'. Please add 'channels'."
+                    )
+                primary = bss["ap"]["primary_channel"]
+                if not isinstance(primary, int):
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has an invalid 'primary_channel': {primary}. It must be an integer."
+                    )
+                if "channels" in bss["ap"] and primary not in bss["ap"]["channels"]:
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has a 'primary_channel' ({primary}) that is not in its 'channels': {bss['ap']['channels']}."
+                    )
+                if sparams.BONDING_MODE not in [0, 1]:
+                    logger.warning(
+                        f"AP {ap_id} in BSS {bss['id']} has a 'primary_channel' ({primary}) but bonding mode is not 0 or 1. Primary channel will be ignored and all channels will be used for sensing."
+                    )
 
             if "stas" not in bss or not bss["stas"]:
                 logger.critical(f"BSS {bss['id']} does not have any STAs.")
@@ -438,6 +485,12 @@ def warn_overwriting_enabled_paths(cfg: cfg, logger: logging.Logger):
     input(PRESS_TO_CONTINUE_MSG)
 
 
+def validate_settings(cfg: cfg, sparams: sparams, logger: logging.Logger):
+    validate_params(sparams, logger)
+    validate_config(cfg, sparams, logger)
+    warn_overwriting_enabled_paths(cfg, logger)
+
+
 def initialize_network(
     cfg: cfg, sparams: sparams, env: simpy.Environment, network: Network = None
 ) -> Network:
@@ -454,6 +507,19 @@ def initialize_network(
                 used_positions.add(pos)
                 return pos
 
+    def _get_random_channels(sparams) -> list:
+        valid_channel_bonds = []
+        for bw, bond_list in VALID_BONDS.items():
+            if bw <= sparams.NUM_CHANNELS * 20:
+                for bond in bond_list:
+                    invalid_bond = False
+                    for id_ in bond:
+                        if id_ > sparams.NUM_CHANNELS:
+                            invalid_bond = True
+                            break
+                    valid_channel_bonds.append(bond) if not invalid_bond else None
+        return list(random.choice(valid_channel_bonds))
+
     if not network:
         network = Network(cfg, sparams, env)
 
@@ -467,7 +533,13 @@ def initialize_network(
             last_id += 1
             ap_id = last_id
             ap_pos = _get_unique_position(bounds, used_positions)
-            ap = network.add_ap(ap_id, ap_pos, bss_index + 1)
+            channels = _get_random_channels(sparams)
+            sensing_channels = (
+                random.choice(channels) if sparams.BONDING_MODE in [0, 1] else channels
+            )
+            ap = network.add_ap(
+                ap_id, ap_pos, bss_index + 1, set(channels), {sensing_channels}
+            )
 
             # Create associated STAs
             last_id += 1
@@ -498,7 +570,15 @@ def initialize_network(
             # Create the AP
             ap_id = bss["ap"]["id"]
             ap_pos = bss["ap"].get("pos", _get_unique_position(bounds, used_positions))
-            ap = network.add_ap(ap_id, ap_pos, bss_id)
+            channels = bss["ap"].get("channels", _get_random_channels(sparams))
+            sensing_channels = (
+                bss["ap"].get("primary_channel", random.choice(channels))
+                if sparams.BONDING_MODE in [0, 1]
+                else channels
+            )
+            ap = network.add_ap(
+                ap_id, ap_pos, bss_id, set(channels), {sensing_channels}
+            )
 
             # Create associated STAs
             for sta in bss.get("stas", []):

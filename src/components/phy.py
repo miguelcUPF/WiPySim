@@ -15,7 +15,7 @@ import simpy
 
 
 class PHY:
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, node: Node):
+    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, node: Node, channels: set, sensing_channels: set):
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
@@ -44,6 +44,9 @@ class PHY:
         self.rts_collision_events = {}
         self.ampdu_collision_events = {}
         self.last_collision_times = {}
+
+        self.set_channels(channels)
+        self.set_sensing_channels(sensing_channels)
 
         self.env.process(self.run())
 
@@ -137,42 +140,7 @@ class PHY:
     def get_valid_bonds(self):
         return self.node.medium.get_valid_bonds()
 
-    def select_channels(self):
-        # TODO: implement channel selection at the MAC layer
-        self.logger.header(
-            f"{self.node.type} {self.node.id} -> Allocating channels at random..."
-        )
-
-        valid_bonds = self.get_valid_bonds()
-        channels_ids = random.choice(valid_bonds)
-
-        self.logger.info(
-            f"{self.node.type} {self.node.id} -> Allocated channels: {', '.join(map(str, channels_ids))}"
-        )
-
-        self.set_channels(set(channels_ids))
-
-        if self.sparams.BONDING_MODE in [0, 1]:
-            self.set_sensing_channels({self.select_primary_channel()})
-        else:
-            self.set_sensing_channels(channels_ids)
-
-        self.broadcast_channel_info()
-
-    def select_primary_channel(self) -> int:
-        self.logger.header(
-            f"{self.node.type} {self.node.id} -> Selecting primary channel..."
-        )
-
-        primary_channel_id = min(self.channels_ids)
-
-        self.logger.info(
-            f"{self.node.type} {self.node.id} -> Selected primary channel: {primary_channel_id}"
-        )
-
-        return primary_channel_id
-
-    def select_mcs_index(self, sta_id: int):
+    def select_mcs_index(self, sta_id: int): # TODO: change (it should apply to both STAs an APs)
         self.logger.debug(f"Node {self.node.id} -> Selecting MCS for STA {sta_id}...")
 
         # Predict associated STA RSSI
@@ -367,6 +335,5 @@ class PHY:
 
     def run(self):
         if isinstance(self.node, AP):
-            self.select_channels()
-            self.select_all_mcs_indexs()
+            self.select_all_mcs_indexs() # TODO change
             yield self.env.timeout(0)

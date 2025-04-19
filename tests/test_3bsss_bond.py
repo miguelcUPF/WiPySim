@@ -2,12 +2,7 @@ from src.user_config import UserConfig as cfg
 from src.sim_params import SimParams as sparams
 
 from src.utils.event_logger import get_logger
-from src.utils.support import (
-    initialize_network,
-    validate_params,
-    validate_config,
-    warn_overwriting_enabled_paths,
-)
+from src.utils.support import initialize_network, validate_settings
 from src.utils.messages import (
     STARTING_TEST_MSG,
     TEST_COMPLETED_MSG,
@@ -55,9 +50,7 @@ if __name__ == "__main__":
 
     logger = get_logger("TEST", cfg, sparams)
 
-    validate_params(sparams, logger)
-    validate_config(cfg, logger)
-    warn_overwriting_enabled_paths(cfg, logger)
+    validate_settings(cfg, sparams, logger)
 
     print(STARTING_SIMULATION_MSG)
 
