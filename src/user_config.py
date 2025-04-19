@@ -4,6 +4,8 @@ class UserConfig:
 
     SEED = 1  # Set to None for random behavior
 
+    ENABLE_RL_AGENTS = False  # Enable/disable RL agents
+
     # --- Logging Configuration --- #
     ENABLE_CONSOLE_LOGGING = True  # Enable/disable displaying logs in the console (useful for debugging, may affect performance)
     USE_COLORS_IN_LOGS = True  # Enable/disable colored logs
@@ -53,6 +55,7 @@ class UserConfig:
     # - A single traffic generation model applied to all STAs (using specified traffic load but other default parameters).
     # - STAs and APs are randomly positioned within the network bounds.
     # - The allocated channels (and primary channel) per BSS are selected at random.
+    # - The agents are considered non-RL-driven.
 
     NUMBER_OF_BSSS = 1  # Number of Basic Service Sets (BSSs)
     TRAFFIC_MODEL = "Poisson"  # "Poisson", "Bursty", or "VR"
@@ -79,6 +82,7 @@ class UserConfig:
     #   - "pos" (optional): Tuple (x, y, z) specifying the AP’s coordinates in meters. If not specified, the AP is placed at random within the network bounds.
     #   - "channel" (optional): List of 20 MHz channels (e.g., [1, 2, 3, 4]) defining the AP’s operating bandwidth. If not specified, it is randomly selected at runtime.
     #   - "primary_channel" (optional): Primary 20 MHz channel used for contention and control frames. Must be one of the channels in "channel". If not specified, it is randomly selected at runtime.
+    #   - "rl_driven" (optional): Whether the AP is RL-driven. If not specified, it is considered non-RL-driven. 
     # - "stas": List of associated Stations (STAs).
     #   - "id": Unique STA ID (int).
     #   - "pos" (optional): Tuple (x, y, z) specifying the STA’s coordinates in meters. If not specified, the STA is placed at random within the network bounds.

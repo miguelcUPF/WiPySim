@@ -32,6 +32,7 @@ sparams.NUM_CHANNELS = 1
 
 cfg.SIMULATION_TIME_us = 2e6
 cfg.SEED = 1
+cfg.ENABLE_RL_AGENTS = False
 
 cfg.ENABLE_CONSOLE_LOGGING = False
 cfg.USE_COLORS_IN_LOGS = True

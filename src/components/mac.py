@@ -37,12 +37,21 @@ class MAC:
     MAC layer receiver. Handles frame reception, ACK/BACK responses, and demultiplexing MPDUs.
     """
 
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, node: Node):
+    def __init__(
+        self,
+        cfg: cfg,
+        sparams: sparams,
+        env: simpy.Environment,
+        node: Node,
+        rl_driven: bool = False,
+    ):
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
 
         self.node = node
+
+        self.rl_driven = rl_driven
 
         self.state = MACState.IDLE
 
@@ -243,165 +252,150 @@ class MAC:
 
         return idle_channels
 
-    def backoff(self, channels_ids: set[int] = None):
-        self.logger.header(
-            f"{self.node.type} {self.node.id} -> Starting Backoff{'' if channels_ids is None else f' on channels'} {', '.join(map(str, self.node.phy_layer.sensing_channels_ids)) if channels_ids is not None else ''}..."
-        )
-
+    def _initialize_backoff_slots(self):
         if self.backoff_slots > 0:
             self.logger.debug(
                 f"{self.node.type} {self.node.id} -> Backoff slots already set ({self.backoff_slots})"
             )
-        else:
-            cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
-            self.backoff_slots = random.randint(0, max(0, cw - 1))
-            if not self.is_first_tx:
-                self.backoff_slots += 1
-            self.logger.info(
-                f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
+            return
+
+        cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
+        self.backoff_slots = random.randint(0, max(0, cw - 1))
+        if not self.is_first_tx:
+            self.backoff_slots += 1
+
+        self.logger.info(
+            f"{self.node.type} {self.node.id} -> Backoff slots: {self.backoff_slots} (retries: {self.retries})"
+        )
+
+    def _standard_backoff(self):
+        while self.backoff_slots > 0:
+            event = self.node.phy_layer.get_busy_event(
+                self.node.phy_layer.get_primary_channel_id()
+            )
+            slot_start_time = self.env.now
+            yield self.env.timeout(self.sparams.SLOT_TIME_us) | event
+
+            if (
+                event.triggered
+                and self.env.now < slot_start_time + self.sparams.SLOT_TIME_us
+            ):
+                self.logger.debug(
+                    f"{self.node.type} {self.node.id} -> Primary Channel busy, pausing backoff ({self.backoff_slots})..."
+                )
+                return
+
+            self.backoff_slots -= 1
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
             )
 
-        bo_channels = set(channels_ids) if channels_ids else set()
+    def _toy_backoff(self, channels_ids: set[int]):
+        if not channels_ids:
+            self.logger.critical(
+                f"{self.node.type} {self.node.id} -> No channels to backoff on!"
+            )
+            return
 
+        bo_channels = set(channels_ids)
         slot_remaining_time = self.sparams.SLOT_TIME_us
 
         while self.backoff_slots > 0:
-            if self.sparams.BONDING_MODE in [0, 1]:
-                # standard behavior
-                event = self.node.phy_layer.get_busy_event(
-                    self.node.phy_layer.get_primary_channel_id()
-                )
+            busy_events = {
+                ch_id: self.node.phy_layer.get_busy_event(ch_id)
+                for ch_id in bo_channels
+            }
+            event = self.env.any_of(list(busy_events.values()))
+            slot_start_time = self.env.now
+            yield self.env.timeout(slot_remaining_time) | event
 
-                slot_start_time = self.env.now
+            if event.triggered and self.env.now < slot_start_time + slot_remaining_time:
+                busy_channels = {
+                    ch_id for ch_id, ev in busy_events.items() if ev.triggered
+                }
+                slot_remaining_time = self.env.now - slot_start_time
+                bo_channels -= busy_channels
 
-                yield self.env.timeout(self.sparams.SLOT_TIME_us) | event
-
-                if (
-                    event.triggered
-                    and self.env.now < slot_start_time + self.sparams.SLOT_TIME_us
-                ):
+                if busy_channels:
                     self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> Primary Channel busy, pausing backoff ({self.backoff_slots})..."
+                        f"{self.node.type} {self.node.id} -> Channels {', '.join(map(str, busy_channels))} became busy. Remaining idle: {', '.join(map(str, bo_channels))}"
+                    )
+
+                if not bo_channels:
+                    self.logger.debug(
+                        f"{self.node.type} {self.node.id} -> All channels are busy, pausing backoff ({self.backoff_slots})..."
                     )
                     return
 
-                self.backoff_slots -= 1
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
-                )
-            else:
-                # toy behavior
-                busy_events = {
-                    ch_id: self.node.phy_layer.get_busy_event(ch_id)
-                    for ch_id in bo_channels
-                }
-                event = self.env.any_of(list(busy_events.values()))
-
-                slot_start_time = self.env.now
-                yield self.env.timeout(slot_remaining_time) | event
-
-                if (
-                    event.triggered
-                    and self.env.now < slot_start_time + slot_remaining_time
-                ):
-                    # Check which channels got busy
-                    busy_channels = {
-                        ch_id for ch_id, ev in busy_events.items() if ev.triggered
-                    }
-                    slot_remaining_time = self.env.now - slot_start_time
-                    if busy_channels:
-                        # Remove only the busy ones
-                        bo_channels -= busy_channels
-                        self.logger.debug(
-                            f"{self.node.type} {self.node.id} -> Channels {', '.join(map(str, busy_channels))} became busy. Remaining idle: {', '.join(map(str, bo_channels))}"
-                        )
-                        if not bo_channels:
-                            self.logger.debug(
-                                f"{self.node.type} {self.node.id} -> All channels are busy, pausing backoff ({self.backoff_slots})..."
-                            )
-                            return
-
-                self.backoff_slots -= 1
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
-                )
-
-        if self.sparams.BONDING_MODE == 0:
-            # SCB: transmit on bonded channel only if secondary channels have been idle for at least during PIFS
-            primary_channel = self.node.phy_layer.get_primary_channel_id()
-            secondary_channels = set(self.node.phy_layer.channels_ids) - set(
-                [primary_channel]
-            )
-
-            # Secondary channels that have been idle for at least PIFS
-            idle_secondary_channels = set(
-                ch_id
-                for ch_id in secondary_channels
-                if self.node.phy_layer.has_been_idle_during_duration(
-                    ch_id, self.sparams.PIFS_us
-                )
-            )
-
-            if idle_secondary_channels != secondary_channels:
-                self.logger.debug(
-                    f"{self.node.type} {self.node.id} -> Secondary channels [{', '.join(map(str, secondary_channels - idle_secondary_channels))}] have not been idle during PIFS duration. Skipping transmission!"
-                )
-                self.backoff_slots = -1
-
-                self.logger.header(
-                    f"{self.node.type} {self.node.id} -> Backoff finished but skipping transmission..."
-                )
-
-                return
-
-            self.node.phy_layer.set_transmitting_channels(
-                self.node.phy_layer.channels_ids
-            )
-
-        elif self.sparams.BONDING_MODE == 1:
-            # DCB: select the widest contiguous subset of channels (including the primary) that were idle for at least a PIFS duration for transmission according to IEEE 802.11 channelization
-            primary_channel = self.node.phy_layer.get_primary_channel_id()
-            secondary_channels = set(self.node.phy_layer.channels_ids) - set(
-                [primary_channel]
-            )
-
-            # Secondary channels that have been idle for at least PIFS
-            idle_secondary_channels = set(
-                ch_id
-                for ch_id in secondary_channels
-                if self.node.phy_layer.has_been_idle_during_duration(
-                    ch_id, self.sparams.PIFS_us
-                )
-            )
-
-            # Union primary and idle secondaries
-            available_channels = set([primary_channel]) | idle_secondary_channels
-
-            # Get valid, standardized channel bonds
-            valid_bonds = self.node.phy_layer.get_valid_bonds()
-
-            # Filter: keep only sets that include primary and are subsets of available_channels
-            valid_idle_bonds = [
-                bond
-                for bond in valid_bonds
-                if primary_channel in bond and set(bond).issubset(available_channels)
-            ]
-
-            # Pick the widest (i.e., with max length) subset for transmission
-            if valid_idle_bonds:
-                selected_channels = set(max(valid_idle_bonds, key=len))
-            else:
-                selected_channels = {primary_channel}
-
+            self.backoff_slots -= 1
             self.logger.debug(
-                f"{self.node.type} {self.node.id} -> Selected channel bond for transmission: {', '.join(map(str, selected_channels))}"
+                f"{self.node.type} {self.node.id} -> Backoff slots reduced ({self.backoff_slots})"
             )
 
-            self.node.phy_layer.set_transmitting_channels(selected_channels)
+    def _handle_scb_transmission(self):
+        # SCB: transmit on bonded channel only if secondary channels have been idle for at least during PIFS
+        primary = self.node.phy_layer.get_primary_channel_id()
+        secondary = set(self.node.phy_layer.channels_ids) - {primary}
 
-        elif self.sparams.BONDING_MODE == 2:
-            self.node.phy_layer.set_transmitting_channels(bo_channels)
+        idle_secondaries = {
+            ch_id
+            for ch_id in secondary
+            if self.node.phy_layer.has_been_idle_during_duration(
+                ch_id, self.sparams.PIFS_us
+            )
+        }
 
+        if idle_secondaries != secondary:
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Secondary channels [{', '.join(map(str, secondary - idle_secondaries))}] not idle during PIFS. Skipping transmission!"
+            )
+            self.backoff_slots = -1
+            self.logger.header(
+                f"{self.node.type} {self.node.id} -> Backoff finished but skipping transmission..."
+            )
+            return
+
+        self.node.phy_layer.set_transmitting_channels(self.node.phy_layer.channels_ids)
+
+    def _handle_dcb_transmission(self):
+        # DCB: select the widest contiguous subset of channels (including the primary) that were idle for at least a PIFS duration for transmission according to IEEE 802.11 channelization
+        primary = self.node.phy_layer.get_primary_channel_id()
+        secondary = set(self.node.phy_layer.channels_ids) - {primary}
+
+        idle_secondaries = {
+            ch_id
+            for ch_id in secondary
+            if self.node.phy_layer.has_been_idle_during_duration(
+                ch_id, self.sparams.PIFS_us
+            )
+        }
+
+        available_channels = {
+            primary
+        } | idle_secondaries  # Union primary and idle secondaries
+        valid_bonds = self.node.phy_layer.get_valid_bonds()
+
+        valid_idle_bonds = [
+            bond
+            for bond in valid_bonds
+            if primary in bond and set(bond).issubset(available_channels)
+        ]
+
+        # Pick the widest subset for transmission
+        selected = (
+            set(max(valid_idle_bonds, key=len)) if valid_idle_bonds else {primary}
+        )
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Selected channel bond for transmission: {', '.join(map(str, selected))}"
+        )
+
+        self.node.phy_layer.set_transmitting_channels(selected)
+
+    def _handle_toy_transmission(self, channels_ids: set[int]):
+        if channels_ids:
+            self.node.phy_layer.set_transmitting_channels(set(channels_ids))
+
+    def _update_tx_stats(self):
         if self.is_first_tx:
             self.node.tx_stats.first_tx_attempt_us = self.env.now
             self.is_first_tx = False
@@ -409,20 +403,35 @@ class MAC:
             self.node.tx_stats.last_tx_attempt_us = self.env.now
 
         self.node.tx_stats.tx_attempts += 1
-
         self.logger.header(f"{self.node.type} {self.node.id} -> Backoff finished")
 
-    def ampdu_aggregation(self):
-        """Aggregates MDPUS into an A-MPDU frame."""
-        if self.tx_ampdu and self.tx_ampdu.retries == 0:
-                # If retries is 0 it means that CTS timeout occurred, so no need to aggregate
-                return
+    def _handle_post_backoff(self, channels_ids: set[int]):
+        if self.sparams.BONDING_MODE == 0:
+            self._handle_scb_transmission()
+        elif self.sparams.BONDING_MODE == 1:
+            self._handle_dcb_transmission()
+        elif self.sparams.BONDING_MODE == 2:
+            self._handle_toy_transmission(channels_ids)
 
-        self.logger.header(f"{self.node.type} {self.node.id} -> Aggregating MPDUs...")
+        self._update_tx_stats()
 
+    def backoff(self, channels_ids: set[int] = None):
+        self.logger.header(
+            f"{self.node.type} {self.node.id} -> Starting Backoff{'' if channels_ids is None else f' on channels'} {', '.join(map(str, self.node.phy_layer.sensing_channels_ids)) if channels_ids is not None else ''}..."
+        )
+
+        self._initialize_backoff_slots()
+
+        if self.sparams.BONDING_MODE in [0, 1]:
+            yield from self._standard_backoff()
+        else:
+            yield from self._toy_backoff(channels_ids)
+
+        self._handle_post_backoff(channels_ids)
+
+    def _get_aggregatable_mpdus(self):
         agg_mpdus = []
         total_size = 0
-
         first_mpdu = cast(MPDU, self.tx_queue.items[0])
         destination = first_mpdu.dst_id
 
@@ -430,12 +439,21 @@ class MAC:
             mpdu = cast(MPDU, item)
             if mpdu.dst_id != destination:
                 continue
-
             if total_size + mpdu.size_bytes > self.sparams.MAX_AMPDU_SIZE_bytes:
                 break
-
             agg_mpdus.append(mpdu)
             total_size += mpdu.size_bytes
+
+        return agg_mpdus, total_size
+
+    def ampdu_aggregation(self):
+        """Aggregates MPDUs into an A-MPDU frame."""
+        if self.tx_ampdu and self.tx_ampdu.retries == 0:
+            # If retries is 0 it means that CTS timeout occurred, so no need to aggregate
+            return
+
+        self.logger.header(f"{self.node.type} {self.node.id} -> Aggregating MPDUs...")
+        agg_mpdus, total_size = self._get_aggregatable_mpdus()
 
         if not agg_mpdus:
             return
@@ -456,36 +474,80 @@ class MAC:
         yield self.env.process(self.transmit(rts))
         yield self.env.process(self.wait_for_cts())
 
+    def _handle_cts_timeout(self):
+        self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
+        self.cts_event = None
+        self.retries += 1
+        self.node.tx_stats.tx_failures += 1
+
     def wait_for_cts(self):
         self.set_state(MACState.RX)
-
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Waiting for CTS from {self.tx_ampdu.dst_id}..."
         )
-
         self.cts_event = self.env.event()
-
         yield self.env.timeout(CTS_TIMEOUT_us) | self.cts_event
 
         if not self.cts_event.triggered:
-            self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
-            self.cts_event = None
-
-            self.retries += 1
-            self.node.tx_stats.tx_failures += 1
-
+            self._handle_cts_timeout()
             return
-        else:
-            self.retries = 0
-            
-            yield self.env.timeout(self.sparams.SIFS_us)
-            yield self.env.process(self.transmit_ampdu())
+
+        self.retries = 0
+        yield self.env.timeout(self.sparams.SIFS_us)
+        yield self.env.process(self.transmit_ampdu())
 
     def transmit_ampdu(self):
         self.node.tx_stats.ampdus_tx += 1
 
         yield self.env.process(self.transmit(self.tx_ampdu))
         yield self.env.process(self.wait_for_back())
+
+    def _handle_back_timeout(self):
+        self.logger.warning(f"{self.node.type} {self.node.id} -> BACK timeout...")
+        self.back_event = None
+        self.retries += 1
+        self.node.tx_stats.tx_failures += 1
+
+    def _process_back(self):
+        sent_mpdus = self.tx_ampdu.mpdus
+        lost_mpdus = self.rx_back.lost_mpdus
+        rx_mpdus = set(sent_mpdus) - set(lost_mpdus)
+
+        self.node.tx_stats.pkts_tx += len(sent_mpdus)
+        self.node.tx_stats.pkts_success += len(rx_mpdus)
+
+        for mpdu in sent_mpdus:
+            self.node.tx_stats.tx_app_bytes += mpdu.packet.size_bytes
+
+        self.logger.info(
+            f"{self.node.type} {self.node.id} -> {len(rx_mpdus)} Packets successfully transmitted"
+        )
+
+        if lost_mpdus:
+            self.node.tx_stats.pkts_fail += len(lost_mpdus)
+            self.logger.warning(
+                f"{self.node.type} {self.node.id} -> {len(lost_mpdus)} Packet failures"
+            )
+
+        for mpdu in lost_mpdus:
+            mpdu.retries += 1
+            mpdu.is_corrupted = False
+            if mpdu.retries >= self.sparams.COMMON_RETRY_LIMIT:
+                self.node.tx_stats.pkts_dropped_retry_lim += 1
+                self.del_mpdu_from_queue(mpdu)
+                self.logger.warning(
+                    f"{self.node.type} {self.node.id} -> MPDU {mpdu.packet.id} dropped after max retries"
+                )
+
+        for mpdu in rx_mpdus:
+            self.del_mpdu_from_queue(mpdu)
+
+        self.node.tx_stats.add_to_tx_queue_history(
+            self.env.now, len(self.tx_queue.items)
+        )
+
+        self.tx_ampdu = None
+        self.retries = 0
 
     def wait_for_back(self):
         self.set_state(MACState.RX)
@@ -500,60 +562,10 @@ class MAC:
             self.node.phy_layer.end_nav()
 
         if not self.back_event.triggered:
-            self.logger.warning(f"{self.node.type} {self.node.id} -> BACK timeout...")
-            self.back_event = None
-
-            self.retries += 1
-            self.node.tx_stats.tx_failures += 1
-
+            self._handle_back_timeout()
             return
-        else:
-            sent_mpdus = self.tx_ampdu.mpdus
 
-            lost_mpdus = self.rx_back.lost_mpdus
-
-            rx_mpdus = set(sent_mpdus) - set(lost_mpdus)
-
-            self.node.tx_stats.pkts_tx += len(sent_mpdus)
-
-            for mpdu in sent_mpdus:
-                self.node.tx_stats.tx_app_bytes += mpdu.packet.size_bytes
-
-            self.node.tx_stats.pkts_success += len(rx_mpdus)
-
-            self.logger.info(
-                f"{self.node.type} {self.node.id} -> {len(rx_mpdus)} Packets succesfully transmitted according to BACK"
-            )
-
-            if lost_mpdus:
-                self.node.tx_stats.pkts_fail += len(lost_mpdus)
-
-                self.logger.warning(
-                    f"{self.node.type} {self.node.id} -> {len(lost_mpdus)} Packet transmission failures according to BACK"
-                )
-
-            for mpdu in lost_mpdus:
-                mpdu.retries += 1
-                mpdu.is_corrupted = False
-                if mpdu.retries >= self.sparams.COMMON_RETRY_LIMIT:
-                    self.node.tx_stats.pkts_dropped_retry_lim += 1
-
-                    self.del_mpdu_from_queue(mpdu)
-
-                    self.logger.warning(
-                        f"{self.node.type} {self.node.id} -> MPDU {mpdu.packet.id} dropped after max retries"
-                    )
-
-            for mpdu in sent_mpdus:
-                if mpdu not in lost_mpdus:
-                    self.del_mpdu_from_queue(mpdu)
-
-            self.node.tx_stats.add_to_tx_queue_history(
-                self.env.now, len(self.tx_queue.items)
-            )
-
-            self.tx_ampdu = None
-            self.retries = 0
+        self._process_back()
 
     def transmit(self, data_unit: DataUnit):
         self.set_state(MACState.TX)
@@ -569,16 +581,81 @@ class MAC:
         yield self.env.process(self.node.phy_layer.transmit(data_unit))
         self.node.tx_stats.airtime_us += self.env.now - start_tx_time_us
 
-    def receive(self, data_unit: DataUnit):
-
+    def _update_rx_timestamps(self):
         if self.is_first_rx:
             self.node.rx_stats.first_rx_time_us = self.env.now
             self.is_first_rx = False
         else:
             self.node.rx_stats.last_rx_time_us = self.env.now
 
+    def _update_rx_stats(self, data_unit: DataUnit):
         self.node.rx_stats.data_units_rx += 1
         self.node.rx_stats.rx_mac_bytes += data_unit.size_bytes
+
+    def _process_received_ampdu(self, ampdu: AMPDU):
+        back = BACK(ampdu, self.node.id, ampdu.src_id, self.env.now)
+
+        for mpdu in ampdu.mpdus:
+            self.node.rx_stats.pkts_rx += 1
+            if mpdu.is_corrupted:
+                self.node.rx_stats.pkts_fail += 1
+                back.add_lost_mpdus(mpdu)
+            else:
+                self.node.rx_stats.pkts_success += 1
+                self.node.rx_stats.rx_app_bytes += mpdu.packet.size_bytes
+                self.node.app_layer.packet_from_mac(mpdu.packet)
+
+        self.node.tx_stats.backs_tx += 1
+        self.env.process(self.send_response(back))
+
+    def _process_received_rts(self, rts: RTS):
+        self.node.rx_stats.rts_rx += 1
+
+        if self.state == MACState.IDLE:
+            cts = CTS(rts.dst_id, rts.src_id, self.env.now)
+            self.env.process(self.send_response(cts))
+            self.node.tx_stats.cts_tx += 1
+        else:
+            self.logger.warning(
+                f"{self.node.type} {self.node.id} -> Ignoring RTS received from {rts.src_id} (busy)"
+            )
+
+    def _process_received_cts(self, cts: CTS):
+        self.node.rx_stats.cts_rx += 1
+
+        if self.cts_event and not self.cts_event.triggered:
+            if self.sparams.ENABLE_RTS_CTS:
+                self.node.tx_stats.tx_successes += 1
+
+            self.cts_event.succeed()
+        else:
+            self.logger.warning(
+                f"{self.node.type} {self.node.id} -> Ignoring CTS received from {cts.src_id} (outdated)"
+            )
+
+    def _process_received_back(self, back: BACK):
+        self.node.rx_stats.backs_rx += 1
+
+        if self.back_event and not self.back_event.triggered:
+            self.rx_back = back
+            if not self.sparams.ENABLE_RTS_CTS:
+                self.node.tx_stats.tx_successes += 1
+            elif (
+                back.ampdu_id == self.tx_ampdu.id
+                and self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes
+            ):
+                self.node.tx_stats.tx_successes += 1
+
+            self.back_event.succeed()
+            self.set_state(MACState.IDLE)
+        else:
+            self.logger.warning(
+                f"{self.node.type} {self.node.id} -> Ignoring BACK received from {back.src_id} (outdated)"
+            )
+
+    def receive(self, data_unit: DataUnit):
+        self._update_rx_timestamps()
+        self._update_rx_stats(data_unit)
 
         if data_unit.dst_id != self.node.id:
             self.logger.warning(
@@ -587,76 +664,18 @@ class MAC:
             return
 
         data_unit.reception_time_us = self.env.now
-
         self.logger.success(
             f"{self.node.type} {self.node.id} -> Received {data_unit.type}{f' {data_unit.id}' if data_unit.type == 'AMPDU' else ''} from node {data_unit.src_id}"
         )
 
         if data_unit.type == "AMPDU":
-            back = BACK(data_unit, self.node.id, data_unit.src_id, self.env.now)
-
-            for mpdu in data_unit.mpdus:
-                self.node.rx_stats.pkts_rx += 1
-
-                if mpdu.is_corrupted:
-                    self.node.rx_stats.pkts_fail += 1
-                    back.add_lost_mpdus(mpdu)
-                else:
-                    self.node.rx_stats.pkts_success += 1
-                    self.node.rx_stats.rx_app_bytes += mpdu.packet.size_bytes
-                    self.node.app_layer.packet_from_mac(mpdu.packet)
-
-            self.node.tx_stats.backs_tx += 1
-
-            self.env.process(self.send_response(back))
-
+            self._process_received_ampdu(data_unit)
         elif data_unit.type == "RTS":
-            self.node.rx_stats.rts_rx += 1
-
-            if self.state == MACState.IDLE:
-                cts = CTS(data_unit.dst_id, data_unit.src_id, self.env.now)
-
-                self.env.process(self.send_response(cts))
-
-                self.node.tx_stats.cts_tx += 1
-            else:
-                self.logger.warning(
-                    f"{self.node.type} {self.node.id} -> Ignoring RTS received from {data_unit.src_id} (busy) "
-                )
-
+            self._process_received_rts(data_unit)
         elif data_unit.type == "CTS":
-            self.node.rx_stats.cts_rx += 1
-
-            if self.cts_event and not self.cts_event.triggered:
-                if self.sparams.ENABLE_RTS_CTS:
-                    self.node.tx_stats.tx_successes += 1
-
-                self.cts_event.succeed()  # Trigger CTS event
-            else:
-                self.logger.warning(
-                    f"{self.node.type} {self.node.id} -> Ignoring CTS received from {data_unit.src_id} (outdated) "
-                )
-
+            self._process_received_cts(data_unit)
         elif data_unit.type == "BACK":
-            self.node.rx_stats.backs_rx += 1
-
-            if self.back_event and not self.back_event.triggered:
-                self.rx_back = data_unit  # Store received BACK frame
-                if not self.sparams.ENABLE_RTS_CTS:
-                    self.node.tx_stats.tx_successes += 1
-                elif (
-                    data_unit.ampdu_id == self.tx_ampdu.id
-                    and self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes
-                ):
-                    self.node.tx_stats.tx_successes += 1
-
-                self.back_event.succeed()  # Trigger BACK event
-
-                self.set_state(MACState.IDLE)
-            else:
-                self.logger.warning(
-                    f"{self.node.type} {self.node.id} -> Ignoring BACK received from {data_unit.src_id} (outdated) "
-                )
+            self._process_received_back(data_unit)
 
     def send_response(self, data_unit):
         yield self.env.timeout(self.sparams.SIFS_us)
@@ -681,62 +700,73 @@ class MAC:
                 f"{self.node.type} {self.node.id} -> MAC state: {self.state} ({state_name})"
             )
 
+    def _get_channel_durations(self):
+        ch_duration_us = {}
+        ch_waited_times = {}
+
+        for ch_id in self.node.phy_layer.sensing_channels_ids:
+            ch_duration_us[ch_id] = self.sparams.DIFS_us
+            ch_waited_times[ch_id] = 0
+
+        # If an AMDPU/RTS collision occured while not contending it should be sensed during EIFS
+        # This happens when an RTS and AMPDU (sent due to size smaller than RTS_THRESHOLD_SIZE) collide
+        # The RTS sender does not count the channel as idle during the time elapsed from the delivery of the AMPDU until its CTS timeout occurs.
+        for ch_id in self.node.phy_layer.get_ampdu_collisions_channels_ids():
+            waited_time_us = self.env.now - self.node.phy_layer.get_last_collision_time(
+                ch_id
+            )
+            duration_us = self.sparams.DIFS_us + BACK_TIMEOUT_us
+            ch_waited_times[ch_id] = waited_time_us
+            ch_duration_us[ch_id] = duration_us
+
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> AMPDU collision on ch {ch_id}, waiting EIFS ({duration_us} us), already waited {waited_time_us} us"
+            )
+
+        return ch_duration_us, ch_waited_times
+
+    def _prepare_channel_access(self):
+        ch_duration_us, ch_waited_times = self._get_channel_durations()
+
+        self.node.phy_layer.reset_collision_events()
+
+        if self.sparams.BONDING_MODE in [0, 1]:  # Standard behavior
+            yield self.env.process(
+                self.wait_until_primary_idle(ch_duration_us, ch_waited_times)
+            )
+            yield self.env.process(self.backoff())
+        else:  # Toy behavior
+            idle_channels = yield self.env.process(
+                self.wait_until_any_idle(ch_duration_us, ch_waited_times)
+            )
+            yield self.env.process(self.backoff(idle_channels))
+
+    def _transmit_data(self):
+        if self.tx_ampdu is None:
+            return
+
+        if (
+            self.sparams.ENABLE_RTS_CTS
+            and self.tx_ampdu.size_bytes > self.sparams.RTS_THRESHOLD_bytes
+        ):
+            yield self.env.process(self.rts_cts())
+        else:
+            if self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes:
+                self.logger.info(
+                    f"{self.node.type} {self.node.id} -> No need to send RTS/CTS for AMPDU {self.tx_ampdu.id} (size={self.tx_ampdu.size_bytes} bytes < {self.sparams.RTS_THRESHOLD_bytes} bytes)"
+                )
+            yield self.env.process(self.transmit_ampdu())
+
     def run(self):
         """Handles channel access, contention, and transmission"""
         while True:
-            if len(self.tx_queue.items) > 0:
-                ch_duration_us = {}
-                ch_waited_times = {}
-
-                for ch_id in self.node.phy_layer.sensing_channels_ids:
-                    ch_duration_us[ch_id] = self.sparams.DIFS_us
-                    ch_waited_times[ch_id] = 0
-
-                # If an AMDPU/RTS collision occured while not contending it should be sensed during EIFS
-                # This happens when an RTS and AMPDU (sent due to size smaller than RTS_THRESHOLD_SIZE) collide
-                # The RTS sender does not count the channel as idle during the time elapsed from the delivery of the AMPDU until its CTS timeout occurs.
-                for ch_id in self.node.phy_layer.get_ampdu_collisions_channels_ids():
-                    waited_time_us = (
-                        self.env.now
-                        - self.node.phy_layer.get_last_collision_time(ch_id)
-                    )
-                    duration_us = self.sparams.DIFS_us + BACK_TIMEOUT_us
-                    ch_waited_times[ch_id] = waited_time_us
-                    ch_duration_us[ch_id] = duration_us
-                    self.logger.debug(
-                        f"{self.node.type} {self.node.id} -> AMPDU collision on ch {ch_id}, waiting EIFS ({duration_us} us), already waited {waited_time_us} us"
-                    )
-
-                self.node.phy_layer.reset_collision_events()
-
-                if self.sparams.BONDING_MODE in [0, 1]:
-                    # standard behavior
-                    yield self.env.process(
-                        self.wait_until_primary_idle(ch_duration_us, ch_waited_times)
-                    )
-                    yield self.env.process(self.backoff())
-                else:
-                    idle_channels = yield self.env.process(
-                        self.wait_until_any_idle(ch_duration_us, ch_waited_times)
-                    )
-                    yield self.env.process(self.backoff(idle_channels))
-
+            if self.tx_queue.items:
+                yield self.env.process(self._prepare_channel_access())
                 if self.backoff_slots > 0 or self.backoff_slots == -1:
                     continue
 
                 self.ampdu_aggregation()
-
-                if (
-                    self.sparams.ENABLE_RTS_CTS
-                    and self.tx_ampdu.size_bytes > self.sparams.RTS_THRESHOLD_bytes
-                ):
-                    yield self.env.process(self.rts_cts())
-                else:
-                    if self.tx_ampdu.size_bytes <= self.sparams.RTS_THRESHOLD_bytes:
-                        self.logger.info(
-                            f"{self.node.type} {self.node.id} -> No need to send RTS/CTS for AMPDU {self.tx_ampdu.id} (size={self.tx_ampdu.size_bytes} bytes < {self.sparams.RTS_THRESHOLD_bytes} bytes)"
-                        )
-                    yield self.env.process(self.transmit_ampdu())
+                yield self.env.process(self._transmit_data())
             else:
                 self.tx_queue_event = self.env.event()
                 yield self.tx_queue_event

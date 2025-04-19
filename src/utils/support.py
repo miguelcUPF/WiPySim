@@ -125,6 +125,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
         random.seed(cfg.SEED)
 
     bool_settings = {
+        "ENABLE_RL_AGENTS": cfg.ENABLE_RL_AGENTS,
         "ENABLE_CONSOLE_LOGGING": cfg.ENABLE_CONSOLE_LOGGING,
         "USE_COLORS_IN_LOGS": cfg.USE_COLORS_IN_LOGS,
         "ENABLE_LOGS_RECORDING": cfg.ENABLE_LOGS_RECORDING,
@@ -311,6 +312,16 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 if sparams.BONDING_MODE not in [0, 1]:
                     logger.warning(
                         f"AP {ap_id} in BSS {bss['id']} has a 'primary_channel' ({primary}) but bonding mode is not 0 or 1. Primary channel will be ignored and all channels will be used for sensing."
+                    )
+
+            if "rl_driven" in bss["ap"]:
+                if not isinstance(bss["ap"]["rl_driven"], bool):
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has an invalid 'rl_driven': {bss['ap']['rl_driven']}. It must be a boolean."
+                    )
+                if bss["ap"]["rl_driven"] == True and sparams.BONDING_MODE != 0:
+                    logger.critical(
+                        f"AP {ap_id} in BSS {bss['id']} has 'rl_driven' set to True but bonding mode is not 0 (i.e., SCB). Bonding mode must be 0 to use RL. Please set 'rl_driven' to False or set 'BONDING_MODE' to 0."
                     )
 
             if "stas" not in bss or not bss["stas"]:
@@ -538,7 +549,11 @@ def initialize_network(
                 random.choice(channels) if sparams.BONDING_MODE in [0, 1] else channels
             )
             ap = network.add_ap(
-                ap_id, ap_pos, bss_index + 1, set(channels), {sensing_channels}
+                ap_id,
+                ap_pos,
+                bss_index + 1,
+                set(channels),
+                {sensing_channels},
             )
 
             # Create associated STAs
@@ -576,8 +591,9 @@ def initialize_network(
                 if sparams.BONDING_MODE in [0, 1]
                 else channels
             )
+            rl_driven = bss["ap"].get("rl_driven", False)
             ap = network.add_ap(
-                ap_id, ap_pos, bss_id, set(channels), {sensing_channels}
+                ap_id, ap_pos, bss_id, set(channels), {sensing_channels}, rl_driven
             )
 
             # Create associated STAs

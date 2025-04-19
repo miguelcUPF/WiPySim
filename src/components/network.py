@@ -24,6 +24,7 @@ class Node:
         type: str,
         medium,
         network,
+        rl_driven: bool = False
     ):
         """Initializes an individual network node object."""
         from src.components.medium import Medium
@@ -43,7 +44,7 @@ class Node:
         self.medium: Medium = medium
 
         self.app_layer = APP(cfg, sparams, env, self)
-        self.mac_layer = MAC(cfg, sparams, env, self)
+        self.mac_layer = MAC(cfg, sparams, env, self, rl_driven)
         self.phy_layer = PHY(cfg, sparams, env, self, channels, sensing_channels)
 
         self.tx_stats = TransmissionStats()
@@ -117,6 +118,7 @@ class AP(Node):
         bss_id: int,
         medium,
         network,
+        rl_driven: bool = False
     ):
         """Access Point (AP) node."""
         self.bss_id = bss_id
@@ -133,6 +135,7 @@ class AP(Node):
             "AP",
             medium,
             network,
+            rl_driven=rl_driven
         )
 
     def add_sta(self, sta: STA):
@@ -182,6 +185,7 @@ class Network:
         bss_id: int,
         channels: set,
         sensing_channels: set,
+        rl_driven: bool = False,
     ) -> AP:
         """Adds an Access Point (AP) to the network."""
         if ap_id in self.nodes:
@@ -211,6 +215,7 @@ class Network:
             bss_id,
             self.medium,
             self,
+            rl_driven=rl_driven
         )
         self.nodes[ap_id] = ap
         self.graph.add_node(ap_id, pos=position, type="AP", bss_id=bss_id)
