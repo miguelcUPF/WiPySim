@@ -12,6 +12,7 @@ cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
 
 cfg.EXCLUDED_LOGS = {}
+cfg.EXCLUDED_IDS = []
 
 # Each test case is a tuple: (mcs_index, channel_width, num_streams, guard_interval, expected_data_rate)
 TEST_CASES = [

@@ -276,6 +276,12 @@ class Medium:
 
         dst_node.phy_layer.receive_tx_channels_info(channels_ids)
 
+    def get_contender_count(self):
+        return [len(ch.nodes) for ch in self.channels.values()]
+    
+    def get_busy_flags(self):
+        return [not ch.is_idle() for ch in self.channels.values()]
+
     def rts_collision_detected(self, channels_ids: set[int]):
         for ch_id in channels_ids:
             self.channels[ch_id].rts_collision_detected()

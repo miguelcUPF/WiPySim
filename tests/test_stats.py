@@ -41,6 +41,7 @@ cfg.EXCLUDED_LOGS = {
     "CHANNEL": ["ALL"],
     "STATS": [],
 }
+cfg.EXCLUDED_IDS = []
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 

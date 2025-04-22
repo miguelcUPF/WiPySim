@@ -24,12 +24,13 @@ sparams.NUM_CHANNELS = 1
 
 cfg.SIMULATION_TIME_us = 1e4
 cfg.SEED = 1
-cfg.ENABLE_RL_AGENTS = False
+cfg.ENABLE_RL = False
 
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
 cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
+cfg.EXCLUDED_IDS = []
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 

@@ -308,7 +308,7 @@ class Network:
 
             if isinstance(node, AP):
                 ap = cast(AP, node)
-                ap.phy_layer.select_all_mcs_indexs()
+                ap.phy_layer.select_ap_mcs_indexs()
             elif isinstance(node, STA):
                 sta = cast(STA, node)
                 sta.ap.phy_layer.select_mcs_index(sta.id)

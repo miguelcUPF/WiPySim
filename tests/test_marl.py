@@ -15,7 +15,7 @@ import simpy
 
 
 sparams.MAX_TX_QUEUE_SIZE_pkts = 100
-sparams.ENABLE_RTS_CTS = True  # Test: True and False
+sparams.ENABLE_RTS_CTS = True
 sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.CW_MIN = 4
@@ -23,17 +23,17 @@ sparams.CW_MAX = 2**0 * sparams.CW_MIN
 
 sparams.BONDING_MODE = 0
 
-sparams.NUM_CHANNELS = 1
+sparams.NUM_CHANNELS = 4
 
 cfg.SIMULATION_TIME_us = 2e5
 cfg.SEED = 1
-cfg.ENABLE_RL = False
+cfg.ENABLE_RL = True
 
-cfg.ENABLE_CONSOLE_LOGGING = False
+cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
 cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
-cfg.EXCLUDED_IDS = []
+cfg.EXCLUDED_IDS = [2, 3, 4, 5, 6]
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
@@ -42,7 +42,43 @@ cfg.NUMBER_OF_BSSS = 3
 cfg.TRAFFIC_MODEL = "Poisson"
 cfg.TRAFFIC_LOAD_kbps = 200e3
 
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
+cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
+
+cfg.BSSs_Advanced = [
+        {
+            "id": 1,  # A BSS
+            "ap": {"id": 1, "pos": (0, 0, 0), "rl_driven": True},
+            "stas": [{"id": 2, "pos": (3, 4, 0)}],
+            "traffic_flows": [
+                {
+                    "destination": 2,
+                    "model": {"name": "Poisson"},
+                },
+            ],
+        },
+        {
+            "id": 2,  # Another BSS
+            "ap": {"id": 3, "pos": (5, 5, 1)},
+            "stas": [{"id": 4, "pos": (1, 2, 1)}],
+            "traffic_flows": [
+                {
+                    "destination": 4,
+                    "model": {"name": "Poisson"},
+                }
+            ]
+        },
+        {
+            "id": 3,  # Another BSS
+            "ap": {"id": 5, "pos": (2, 3, 1)},
+            "stas": [{"id": 6, "pos": (1, 0, 1)}],
+            "traffic_flows": [
+                {
+                    "destination": 6,
+                    "model": {"name": "Poisson"},
+                }
+            ]
+        }
+    ]
 
 
 if __name__ == "__main__":

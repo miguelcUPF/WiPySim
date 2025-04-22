@@ -4,7 +4,66 @@ class UserConfig:
 
     SEED = 1  # Set to None for random behavior
 
-    ENABLE_RL_AGENTS = False  # Enable/disable RL agents
+    # --- RL Configuration --- #
+    ENABLE_RL =  False  # Enable/disable RL-driven agents (NUM_CHANNELS in sim_params must be 4)
+    RL_MODE = 1  # 0: SARL or 1: MARL # TODO SARL
+
+    # If "MARL", it can be set to True to disable simultaneous action selection so that
+    # agents select actions in a sequential manner, following the logical protocol execution
+    # timeline, and thus, act at the most contextually appropriate step.
+    DISABLE_SIMULTANEOUS_ACTION_SELECTION = True
+
+    # Whether to decompose the reward (average packet delay per transmission)
+    # into distinct components for each agent (sensing delay, backoff delay, transmission delay, residual delay)
+    ENABLE_REWARD_DECOMPOSITION = False
+
+    ## --- Agents settings --- ##
+    # Agents' weights for decomposed reward. Keys:
+    # - "sensing_delay": time in microseconds to spent on average by every tramsmitted packet due to waiting for primary channel to become idle
+    # - "backoff_delay": time in microseconds to spent on average by every tramsmitted packet due to reducing backoff slots
+    # - "tx_delay": time in microseconds to spent on average by every tramsmitted packet due to its transmission over the medium (including BACK reception or its timeout)
+    # - "residual_delay": time in microseconds to spent on average by every tramsmitted packet that is not accounted for the above
+    CHANNEL_AGENT_WEIGHTS = {
+        "sensing_delay": 0.4,
+        "backoff_delay": 0.1,
+        "tx_delay": 0.4,
+        "residual_delay": 0.1,
+    }
+    PRIMARY_AGENT_WEIGHTS = {
+        "sensing_delay": 0.6,
+        "backoff_delay": 0.2,
+        "tx_delay": 0.1,
+        "residual_delay": 0.1,
+    }
+    CW_AGENT_WEIGHTS = {
+        "sensing_delay": 0,
+        "backoff_delay": 0.45,
+        "tx_delay": 0.45,
+        "residual_delay": 0.1,
+    }
+
+    # Algorithm settings for each agent. Keys:
+    # - strategy (optional): "epsilon_greedy" or "decay_epsilon_greedy". Default: "epsilon_greedy"
+    # - epsilon (optional): epsilon value for epsilon-greedy strategy. Default: 0.1
+    # - decay_rate (optional): decay rate for decay epsilon-greedy strategy. Default: 0.99
+    # - alpha_r (optional): exponential moving average (EMA) factor for reward normalization: µ_t = α·R_t+ (1 − α)·µ_t-1. σ**2_t = α·(R_t-µ_t)**2 + (1 − α)·σ**2_t-1.  Default: 0.9
+    # - alpha_q (optional): exponential moving average (EMA) factor for updating Q-values: Q_t= Q_t + α(R_t-Q_t-1). Default: 0.1
+    # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
+    # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
+    # - cw_frequency (optional): frequency of the cw agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
+    # - channel_weights (optional, mandatory if decomposed reward is enabled): weights for the channel agent if decomposed reward is enabled
+    # - primary_weights (optional, mandatory if decomposed reward is enabled): weights for the primary agent if decomposed reward is enabled
+    # - cw_weights (optional, mandatory if decomposed reward is enabled): weights for the cw agent if decomposed reward is enabled
+    AGENTS_SETTINGS = {
+        "strategy": "epsilon_greedy",
+        "epsilon": 0.1,
+        "channel_frequency": 8,
+        "primary_frequency": 4,
+        "cw_frequency": 1,
+        "channel_weights": CHANNEL_AGENT_WEIGHTS,
+        "primary_weights": PRIMARY_AGENT_WEIGHTS,
+        "cw_weights": CW_AGENT_WEIGHTS,
+    }
 
     # --- Logging Configuration --- #
     ENABLE_CONSOLE_LOGGING = True  # Enable/disable displaying logs in the console (useful for debugging, may affect performance)
@@ -17,7 +76,7 @@ class UserConfig:
 
     # Logging exclusions (if ENABLE_CONSOLE_LOGGING or ENABLE_LOGS_RECORDING is enabled)
     # Format: { "<module_name>": ["<excluded_log_level_1>", "<excluded_log_level_2>", ...] }
-    # <module_name>: Module name (e.g., "NETWORK", "NODE", "GEN", "LOAD", "APP", "MAC", "PHY", "MEDIUM", "CHANNEL", "STATS")
+    # <module_name>: Module name (e.g., "NETWORK", "NODE", "GEN", "LOAD", "APP", "MAC", "PHY", "MEDIUM", "CHANNEL", "STATS", "MARL")
     # <excluded_log_level>: Log levels to exclude (e.g., "HEADER","DEBUG", "INFO", "WARNING", "ALL")
     EXCLUDED_LOGS = {
         "NETWORK": ["ALL"],
@@ -30,7 +89,10 @@ class UserConfig:
         "MEDIUM": ["ALL"],
         "CHANNEL": ["ALL"],
         "STATS": ["ALL"],
+        "MARL": ["ALL"],
     }
+    # Logging exclusions for specific nodes IDs (if ENABLE_CONSOLE_LOGGING or ENABLE_LOGS_RECORDING is enabled)
+    EXCLUDED_IDS = []
 
     # --- Visualization --- #
     ENABLE_FIGS_DISPLAY = False  # Enable/disable displaying figures
@@ -82,7 +144,7 @@ class UserConfig:
     #   - "pos" (optional): Tuple (x, y, z) specifying the AP’s coordinates in meters. If not specified, the AP is placed at random within the network bounds.
     #   - "channel" (optional): List of 20 MHz channels (e.g., [1, 2, 3, 4]) defining the AP’s operating bandwidth. If not specified, it is randomly selected at runtime.
     #   - "primary_channel" (optional): Primary 20 MHz channel used for contention and control frames. Must be one of the channels in "channel". If not specified, it is randomly selected at runtime.
-    #   - "rl_driven" (optional): Whether the AP is RL-driven. If not specified, it is considered non-RL-driven. 
+    #   - "rl_driven" (optional): Whether the AP is RL-driven. If not specified, it is considered non-RL-driven.
     # - "stas": List of associated Stations (STAs).
     #   - "id": Unique STA ID (int).
     #   - "pos" (optional): Tuple (x, y, z) specifying the STA’s coordinates in meters. If not specified, the STA is placed at random within the network bounds.

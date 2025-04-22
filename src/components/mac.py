@@ -2,6 +2,7 @@ from src.sim_params import SimParams as sparams
 from src.user_config import UserConfig as cfg
 
 from src.components.network import Node
+from src.components.rl_agents import MARLAgentController
 from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.utils.event_logger import get_logger
 from src.utils.statistics import MACStateStats
@@ -13,6 +14,7 @@ from simpy.events import AnyOf
 
 import simpy
 import random
+import numpy as np
 
 BACK_TIMEOUT_us = 281
 CTS_TX_us = round(
@@ -21,7 +23,20 @@ CTS_TX_us = round(
     / calculate_data_rate_bps(0, 20, 1, 0.8)
     * 1e6
 )
-CTS_TIMEOUT_us = sparams.SIFS_us + CTS_TX_us
+CTS_TIMEOUT_us = sparams.SIFS_us + sparams.SLOT_TIME_us + CTS_TX_us
+
+
+CHANNEL_MAP = {
+    0: {1},
+    1: {2},
+    2: {3},
+    3: {4},
+    4: {1, 2},
+    5: {3, 4},
+    6: {1, 2, 3, 4},
+}
+PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
+CW_MAP = {0: "decrease", 1: "maintain", 2: "increase"}
 
 
 class MACState:
@@ -77,10 +92,24 @@ class MAC:
         self.is_first_tx = True
         self.is_first_rx = True
 
+        self.tx_counter = 0
+        self.sensing_start_time_us = None
+        self.bo_start_time_us = None
+        self.tx_start_time_us = None
+        self.cw_current = self.sparams.CW_OPTIONS[0]
+
+
         self.mac_state_stats = MACStateStats()
 
         self.name = "MAC"
         self.logger = get_logger(self.name, cfg, sparams, env)
+
+        self.rl_settings = self.cfg.AGENTS_SETTINGS
+        self.rl_controller = (
+            MARLAgentController(sparams, cfg, env, self.node, self.rl_settings)
+            if self.rl_driven and self.sparams.BONDING_MODE == 0
+            else None
+        )  # TODO: MARL or SALR depending on mode
 
         self.env.process(self.run())
 
@@ -116,13 +145,17 @@ class MAC:
         return None
 
     def _wait_until_channel_idle(
-        self, ch_id: int, duration_us: float, waited_time_us: float = 0
+        self, ch_id: int, duration_us: float, waited_time_us: float = 0, waiting_eifs=False
     ):
         # Wait for channel to become idle
         if not self.node.phy_layer.is_channel_idle(ch_id):
             channel_idle_event = self.node.phy_layer.get_idle_event(ch_id)
             yield channel_idle_event
             waited_time_us = 0
+
+        if waiting_eifs and self.node.phy_layer.get_successful_tx_event(ch_id).triggered: # if sensing for EIFS but last tx was successful it should be sensed for DIFS
+            yield from self._wait_until_channel_idle(ch_id, self.sparams.DIFS_us, waited_time_us)
+            return
 
         wait_start_time = self.env.now - waited_time_us
         while True:
@@ -134,6 +167,10 @@ class MAC:
                 channel_idle_event = self.node.phy_layer.get_idle_event(ch_id)
                 yield channel_idle_event
                 wait_start_time = self.env.now
+
+                if waiting_eifs and self.node.phy_layer.get_successful_tx_event(ch_id).triggered: # if sensing for EIFS but last tx was successful it should be sensed for DIFS
+                    yield from self._wait_until_channel_idle(ch_id, self.sparams.DIFS_us, 0)
+                    return
 
             remaining_time = duration_us - (self.env.now - wait_start_time)
 
@@ -157,7 +194,7 @@ class MAC:
                 self.node.phy_layer.reset_ampdu_collision_event(ch_id)
                 # reset rts collision event since it might happen that both rts and ampdu collision occur on the same channel, and the ampdu collision EIFS should remain as it is longer
                 self.node.phy_layer.reset_rts_collision_event(ch_id)
-                yield from self._wait_until_channel_idle(ch_id, eifs)
+                yield from self._wait_until_channel_idle(ch_id, eifs, waiting_eifs=True)
                 return
 
             if rts_event.triggered:
@@ -166,7 +203,7 @@ class MAC:
                     f"{self.node.type} {self.node.id} -> RTS collision on Channel {ch_id}, waiting EIFS ({eifs} μs)"
                 )
                 self.node.phy_layer.reset_rts_collision_event(ch_id)
-                yield from self._wait_until_channel_idle(ch_id, eifs)
+                yield from self._wait_until_channel_idle(ch_id, eifs, waiting_eifs=True)
                 return
 
             if timeout.triggered:
@@ -259,8 +296,11 @@ class MAC:
             )
             return
 
-        cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
-        self.backoff_slots = random.randint(0, max(0, cw - 1))
+        if self.rl_driven:
+            self.backoff_slots = random.randint(0, self.cw_current - 1)
+        else:
+            cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
+            self.backoff_slots = random.randint(0, max(0, cw - 1))
         if not self.is_first_tx:
             self.backoff_slots += 1
 
@@ -283,7 +323,7 @@ class MAC:
                 self.logger.debug(
                     f"{self.node.type} {self.node.id} -> Primary Channel busy, pausing backoff ({self.backoff_slots})..."
                 )
-                return
+                return -1
 
             self.backoff_slots -= 1
             self.logger.debug(
@@ -295,7 +335,7 @@ class MAC:
             self.logger.critical(
                 f"{self.node.type} {self.node.id} -> No channels to backoff on!"
             )
-            return
+            return -1
 
         bo_channels = set(channels_ids)
         slot_remaining_time = self.sparams.SLOT_TIME_us
@@ -325,7 +365,7 @@ class MAC:
                     self.logger.debug(
                         f"{self.node.type} {self.node.id} -> All channels are busy, pausing backoff ({self.backoff_slots})..."
                     )
-                    return
+                    return -1
 
             self.backoff_slots -= 1
             self.logger.debug(
@@ -353,7 +393,7 @@ class MAC:
             self.logger.header(
                 f"{self.node.type} {self.node.id} -> Backoff finished but skipping transmission..."
             )
-            return
+            return -1
 
         self.node.phy_layer.set_transmitting_channels(self.node.phy_layer.channels_ids)
 
@@ -381,10 +421,13 @@ class MAC:
             if primary in bond and set(bond).issubset(available_channels)
         ]
 
-        # Pick the widest subset for transmission
-        selected = (
-            set(max(valid_idle_bonds, key=len)) if valid_idle_bonds else {primary}
-        )
+        # Pick the widest subset for transmission (breaking ties at random)
+        if valid_idle_bonds:
+            max_len = max(len(b) for b in valid_idle_bonds)
+            longest_bonds = [b for b in valid_idle_bonds if len(b) == max_len]
+            selected = set(random.choice(longest_bonds))
+        else:
+            selected = {primary}
         self.logger.debug(
             f"{self.node.type} {self.node.id} -> Selected channel bond for transmission: {', '.join(map(str, selected))}"
         )
@@ -407,7 +450,9 @@ class MAC:
 
     def _handle_post_backoff(self, channels_ids: set[int]):
         if self.sparams.BONDING_MODE == 0:
-            self._handle_scb_transmission()
+            result = self._handle_scb_transmission()
+            if result == -1:
+                return
         elif self.sparams.BONDING_MODE == 1:
             self._handle_dcb_transmission()
         elif self.sparams.BONDING_MODE == 2:
@@ -416,6 +461,7 @@ class MAC:
         self._update_tx_stats()
 
     def backoff(self, channels_ids: set[int] = None):
+        self.bo_start_time_us = self.env.now
         self.logger.header(
             f"{self.node.type} {self.node.id} -> Starting Backoff{'' if channels_ids is None else f' on channels'} {', '.join(map(str, self.node.phy_layer.sensing_channels_ids)) if channels_ids is not None else ''}..."
         )
@@ -423,9 +469,16 @@ class MAC:
         self._initialize_backoff_slots()
 
         if self.sparams.BONDING_MODE in [0, 1]:
-            yield from self._standard_backoff()
+            result = yield from self._standard_backoff()
         else:
-            yield from self._toy_backoff(channels_ids)
+            result = yield from self._toy_backoff(channels_ids)
+
+        if result == -1:
+            return
+
+        for mpdu in self.tx_queue.items:
+            mpdu = cast(MPDU, mpdu)
+            mpdu.backoff_delay_us = self.env.now - self.bo_start_time_us
 
         self._handle_post_backoff(channels_ids)
 
@@ -435,8 +488,8 @@ class MAC:
         first_mpdu = cast(MPDU, self.tx_queue.items[0])
         destination = first_mpdu.dst_id
 
-        for item in self.tx_queue.items[:]:
-            mpdu = cast(MPDU, item)
+        for mpdu in self.tx_queue.items[:]:
+            mpdu = cast(MPDU, mpdu)
             if mpdu.dst_id != destination:
                 continue
             if total_size + mpdu.size_bytes > self.sparams.MAX_AMPDU_SIZE_bytes:
@@ -498,7 +551,7 @@ class MAC:
 
     def transmit_ampdu(self):
         self.node.tx_stats.ampdus_tx += 1
-
+        self.tx_start_time_us = self.env.now
         yield self.env.process(self.transmit(self.tx_ampdu))
         yield self.env.process(self.wait_for_back())
 
@@ -518,6 +571,7 @@ class MAC:
 
         for mpdu in sent_mpdus:
             self.node.tx_stats.tx_app_bytes += mpdu.packet.size_bytes
+            mpdu.back_reception_time_us = self.env.now
 
         self.logger.info(
             f"{self.node.type} {self.node.id} -> {len(rx_mpdus)} Packets successfully transmitted"
@@ -549,6 +603,8 @@ class MAC:
         self.tx_ampdu = None
         self.retries = 0
 
+        self._update_rl_agents(sent_mpdus)
+
     def wait_for_back(self):
         self.set_state(MACState.RX)
         self.logger.header(
@@ -557,6 +613,10 @@ class MAC:
         self.back_event = self.env.event()
 
         yield self.env.timeout(BACK_TIMEOUT_us) | self.back_event
+
+        # HERE
+        for mpdu in self.tx_ampdu.mpdus:
+            mpdu.tx_delay_us = self.env.now - self.tx_start_time_us
 
         if self.sparams.ENABLE_RTS_CTS:
             self.node.phy_layer.end_nav()
@@ -725,21 +785,37 @@ class MAC:
 
         return ch_duration_us, ch_waited_times
 
-    def _prepare_channel_access(self):
+    def _csma_ca(self):
         ch_duration_us, ch_waited_times = self._get_channel_durations()
 
         self.node.phy_layer.reset_collision_events()
+        idle_channels = None
+
+        self.sensing_start_time_us = self.env.now
 
         if self.sparams.BONDING_MODE in [0, 1]:  # Standard behavior
             yield self.env.process(
                 self.wait_until_primary_idle(ch_duration_us, ch_waited_times)
             )
-            yield self.env.process(self.backoff())
         else:  # Toy behavior
             idle_channels = yield self.env.process(
                 self.wait_until_any_idle(ch_duration_us, ch_waited_times)
             )
-            yield self.env.process(self.backoff(idle_channels))
+
+        for mpdu in self.tx_queue.items:
+            mpdu = cast(MPDU, mpdu)
+            mpdu.sensing_delay_us = self.env.now - self.sensing_start_time_us
+
+        if (
+            self.rl_driven
+            and self.backoff_slots == 0
+            and self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION
+        ):
+            cw_freq = self.rl_settings.get("cw_frequency", 1)
+            if self.tx_counter % cw_freq == 0:
+                self._run_cw_agent()
+
+        yield self.env.process(self.backoff(idle_channels))
 
     def _transmit_data(self):
         if self.tx_ampdu is None:
@@ -757,11 +833,132 @@ class MAC:
                 )
             yield self.env.process(self.transmit_ampdu())
 
+    def _run_channel_agent(self):
+
+        current_channel = self.node.phy_layer.channels_ids
+        contenders_per_channel = self.node.phy_layer.get_contender_count()
+        busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
+        queue_size = len(self.tx_queue.items)
+
+        channel_key = next(
+            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
+        )
+
+        ch_ctx = [
+            channel_key,
+            *contenders_per_channel,
+            *busy_flags_per_channel,
+            queue_size,
+        ]
+        ch_action = self.rl_controller.decide_channel(ch_ctx)
+
+        self.node.phy_layer.set_channels(CHANNEL_MAP[ch_action])
+
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Channel agent selected action {ch_action}, channel changed to {CHANNEL_MAP[ch_action]}"
+        )
+
+    def _run_primary_agent(self):
+        current_channel = self.node.phy_layer.channels_ids
+        current_primary = self.node.phy_layer.sensing_channels_ids
+        contenders_per_channel = self.node.phy_layer.get_contender_count()
+        busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
+
+        channel_key = next(
+            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
+        )
+        primary_key = next(
+            (k for k, v in PRIMARY_CHANNEL_MAP.items() if v == current_primary), None
+        )
+
+        primary_ctx = [
+            channel_key,
+            primary_key,
+            *contenders_per_channel,
+            *busy_flags_per_channel,
+        ]
+        primary_action = self.rl_controller.decide_primary(primary_ctx, current_channel)
+
+        self.node.phy_layer.set_sensing_channels(PRIMARY_CHANNEL_MAP[primary_action])
+
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Primary agent selected action {primary_action}, primary channel changed to {PRIMARY_CHANNEL_MAP[primary_action]}"
+        )
+
+    def _run_cw_agent(self):
+        current_channel = self.node.phy_layer.channels_ids
+        current_primary = self.node.phy_layer.sensing_channels_ids
+        contenders_per_channel = self.node.phy_layer.get_contender_count()
+        busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
+        queue_size = len(self.tx_queue.items)
+
+        channel_key = next(
+            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
+        )
+        primary_key = next(
+            (k for k, v in PRIMARY_CHANNEL_MAP.items() if v == current_primary), None
+        )
+
+        cw_ctx = [
+            channel_key,
+            primary_key,
+            self.cw_current,
+            *contenders_per_channel,
+            *busy_flags_per_channel,
+            queue_size,
+        ]
+        cw_action = self.rl_controller.decide_cw(cw_ctx)
+
+        index = self.sparams.CW_OPTIONS.index(self.cw_current)
+        if cw_action == 0 and index > 0:
+            self.cw_current = self.sparams.CW_OPTIONS[index - 1]
+        elif cw_action == 2 and index < len(self.sparams.CW_OPTIONS) - 1:
+            self.cw_current = self.sparams.CW_OPTIONS[index + 1]
+
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> CW agent selected action {cw_action} ({CW_MAP[cw_action]}), CW size changed to {self.cw_current}"
+        )
+
+    def _update_rl_agents(self, sent_mpdus: list[MPDU]):
+        self.tx_counter += 1
+        if self.rl_driven:
+            sensing_delays = [mpdu.sensing_delay_us for mpdu in sent_mpdus]
+            backoff_delays = [mpdu.backoff_delay_us for mpdu in sent_mpdus]
+            tx_delays = [mpdu.tx_delay_us for mpdu in sent_mpdus]
+
+            total_delays = [mpdu.back_reception_time_us - mpdu.creation_time_us for mpdu in sent_mpdus]
+
+            residual_delays = total_delays - sensing_delays - backoff_delays - tx_delays
+
+            delay_components = {
+                "sensing_delay": np.mean(sensing_delays),
+                "backoff_delay": np.mean(backoff_delays),
+                "tx_delay": np.mean(tx_delays),
+                "residual_delay": np.mean(residual_delays),
+            }
+            self.rl_controller.update_agents(delay_components)
+
     def run(self):
         """Handles channel access, contention, and transmission"""
         while True:
             if self.tx_queue.items:
-                yield self.env.process(self._prepare_channel_access())
+                if self.rl_driven and self.backoff_slots == 0:
+                    ch_freq = self.rl_settings.get("channel_frequency", 1)
+                    prim_freq = self.rl_settings.get("primary_frequency", 1)
+                    cw_freq = self.rl_settings.get("cw_frequency", 1)
+                    if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
+                        if self.tx_counter % ch_freq == 0:
+                            self._run_channel_agent()
+                        if self.tx_counter % prim_freq == 0:
+                            self._run_primary_agent()
+                        if self.tx_counter % cw_freq == 0:
+                            self._run_cw_agent()
+                    else:
+                        if self.tx_counter % ch_freq == 0:
+                            self._run_channel_agent()
+                        if self.tx_counter % prim_freq == 0:
+                            self._run_primary_agent()
+                yield self.env.process(self._csma_ca())
                 if self.backoff_slots > 0 or self.backoff_slots == -1:
                     continue
 

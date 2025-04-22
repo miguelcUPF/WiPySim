@@ -1,7 +1,7 @@
 from src.sim_params import SimParams as sparams
 from src.user_config import UserConfig as cfg
 
-from src.components.network import Node, AP
+from src.components.network import Node, AP, STA
 from src.utils.event_logger import get_logger
 from src.utils.data_units import DataUnit, PPDU
 from src.utils.mcs_table import get_highest_mcs_index
@@ -10,7 +10,6 @@ from src.utils.transmission import get_rssi_dbm
 
 from typing import cast
 
-import random
 import simpy
 
 
@@ -43,6 +42,7 @@ class PHY:
 
         self.rts_collision_events = {}
         self.ampdu_collision_events = {}
+        self.successful_tx_events = {}
         self.last_collision_times = {}
 
         self.set_channels(channels)
@@ -80,6 +80,7 @@ class PHY:
             self.reset_busy_event(ch_id)
             self.reset_rts_collision_event(ch_id)
             self.reset_ampdu_collision_event(ch_id)
+            self.reset_successful_tx_event(ch_id)
 
     def reset_collision_events(self):
         for ch_id in self.channels_ids:
@@ -113,12 +114,18 @@ class PHY:
 
     def get_ampdu_collision_event(self, ch_id: int):
         return self.ampdu_collision_events[ch_id]
+    
+    def get_successful_tx_event(self, ch_id: int):
+        return self.successful_tx_events[ch_id]
 
     def reset_rts_collision_event(self, ch_id: int):
         self.rts_collision_events[ch_id] = self.env.event()
 
     def reset_ampdu_collision_event(self, ch_id: int):
         self.ampdu_collision_events[ch_id] = self.env.event()
+
+    def reset_successful_tx_event(self, ch_id: int):
+        self.successful_tx_events[ch_id] = self.env.event()
 
     def get_last_collision_time(self, ch_id: int):
         return self.last_collision_times[ch_id]
@@ -139,33 +146,37 @@ class PHY:
 
     def get_valid_bonds(self):
         return self.node.medium.get_valid_bonds()
+    
+    def get_contender_count(self):
+        return self.node.medium.get_contender_count()
+    
+    def get_busy_flags(self):
+        return self.node.medium.get_busy_flags()
 
-    def select_mcs_index(self, sta_id: int): # TODO: change (it should apply to both STAs an APs)
-        self.logger.debug(f"Node {self.node.id} -> Selecting MCS for STA {sta_id}...")
-
-        # Predict associated STA RSSI
-        distance_m = self.node.network.get_distance_between_nodes(self.node.id, sta_id)
+    def select_mcs_index(self, id: int):
+        # RSSI
+        distance_m = self.node.network.get_distance_between_nodes(self.node.id, id)
         rssi_dbm = get_rssi_dbm(self.sparams, distance_m)
 
         # Get the highest MCS index that can be supported
         mcs_index = get_highest_mcs_index(
-            rssi_dbm, len(self.channels_ids) * 20, self.node.id, sta_id
+            rssi_dbm, len(self.channels_ids) * 20, self.node.id, id
         )
 
         # If no MCS index can be supported, select MCS 0
         if mcs_index == -1:
             self.logger.warning(
-                f"{self.node.type} {self.node.id} -> RSSI ({rssi_dbm:.2f} dBm) too low to support any MCS index for STA {sta_id}. Selecting MCS 0. Please reallocate AP {self.node.id} and STA {sta_id} close to each other."
+                f"{self.node.type} {self.node.id} -> RSSI ({rssi_dbm:.2f} dBm) too low to support any MCS index for connection with Node {id}. Selecting MCS 0. Please reallocate nodes {self.node.id} and {id} closer to each other."
             )
             mcs_index = 0
 
-        self.mcs_indexes[sta_id] = mcs_index
+        self.mcs_indexes[id] = mcs_index
 
         self.logger.info(
-            f"{self.node.type} {self.node.id} -> Selected MCS index for STA {sta_id}: {mcs_index}"
+            f"{self.node.type} {self.node.id} -> Selected MCS index for connection with Node {id}: {mcs_index}"
         )
 
-    def select_all_mcs_indexs(self):
+    def select_ap_mcs_indexs(self):
         if not isinstance(self.node, AP):
             return
 
@@ -176,7 +187,22 @@ class PHY:
         )
 
         for sta in ap.get_stas():
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Selecting MCS indexs for STA {sta.id}..."
+            )
             self.select_mcs_index(sta.id)
+    
+    def select_sta_mcs_index(self):
+        if not isinstance(self.node, STA):
+            return
+
+        sta = cast(STA, self.node)
+
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Selecting MCS index..."
+        )
+
+        self.select_mcs_index(sta.ap.id)
 
     def broadcast_channel_info(self):
         """If the node is an AP, send the channel & MCS info to all associated STAs."""
@@ -297,6 +323,7 @@ class PHY:
         )
 
     def rts_collision_detected(self, ch_id: int):
+        self.reset_successful_tx_event(ch_id)
         self.last_collision_times[ch_id] = self.env.now
         (
             self.rts_collision_events[ch_id].succeed()
@@ -305,6 +332,7 @@ class PHY:
         )
 
     def ampdu_collision_detected(self, ch_id: int):
+        self.reset_successful_tx_event(ch_id)
         self.last_collision_times[ch_id] = self.env.now
         (
             self.ampdu_collision_events[ch_id].succeed()
@@ -315,6 +343,7 @@ class PHY:
     def successful_transmission_detected(self, ch_id: int):
         self.reset_rts_collision_event(ch_id)
         self.reset_ampdu_collision_event(ch_id)
+        self.successful_tx_events[ch_id].succeed() if not self.successful_tx_events[ch_id].triggered else None
 
     def receive(self, ppdu: PPDU):
         self.logger.info(
@@ -335,5 +364,7 @@ class PHY:
 
     def run(self):
         if isinstance(self.node, AP):
-            self.select_all_mcs_indexs() # TODO change
-            yield self.env.timeout(0)
+            self.select_ap_mcs_indexs()
+        else:
+            self.select_sta_mcs_index()
+        yield self.env.timeout(0)
