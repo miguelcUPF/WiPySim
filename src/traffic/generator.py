@@ -56,7 +56,7 @@ class TrafficGenerator:
         self.packet_id = 0
 
         self.name = "GEN"
-        self.logger = get_logger(self.name, cfg, sparams, self.env)
+        self.logger = get_logger(self.name, cfg, sparams, self.env, True if node.id in self.cfg.EXCLUDED_IDS else False)
 
         self.active_processes = []
 

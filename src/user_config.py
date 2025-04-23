@@ -72,7 +72,7 @@ class UserConfig:
     ENABLE_LOGS_RECORDING = (
         True  # Enable/disable recording logs (may affect performance)
     )
-    LOGS_RECORDING_PATH = "data/events"
+    LOGS_RECORDING_PATH = "data/events"  # Path to the directory where logs will be recorded. A subfolder can be created for each simulation
 
     # Logging exclusions (if ENABLE_CONSOLE_LOGGING or ENABLE_LOGS_RECORDING is enabled)
     # Format: { "<module_name>": ["<excluded_log_level_1>", "<excluded_log_level_2>", ...] }

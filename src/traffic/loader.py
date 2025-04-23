@@ -38,7 +38,7 @@ class TrafficLoader:
         self.traffic_data = self._load_traffic_data(self.filepath)
 
         self.name = "LOAD"
-        self.logger = get_logger(self.name, cfg, sparams, env)
+        self.logger = get_logger(self.name, cfg, sparams, env, True if node.id in self.cfg.EXCLUDED_IDS else False)
 
         self.active_processes = []
 

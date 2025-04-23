@@ -98,11 +98,10 @@ class MAC:
         self.tx_start_time_us = None
         self.cw_current = self.sparams.CW_OPTIONS[0]
 
-
         self.mac_state_stats = MACStateStats()
 
         self.name = "MAC"
-        self.logger = get_logger(self.name, cfg, sparams, env)
+        self.logger = get_logger(self.name, cfg, sparams, env, True if node.id in self.cfg.EXCLUDED_IDS else False) 
 
         self.rl_settings = self.cfg.AGENTS_SETTINGS
         self.rl_controller = (
@@ -145,7 +144,11 @@ class MAC:
         return None
 
     def _wait_until_channel_idle(
-        self, ch_id: int, duration_us: float, waited_time_us: float = 0, waiting_eifs=False
+        self,
+        ch_id: int,
+        duration_us: float,
+        waited_time_us: float = 0,
+        waiting_eifs=False,
     ):
         # Wait for channel to become idle
         if not self.node.phy_layer.is_channel_idle(ch_id):
@@ -153,8 +156,13 @@ class MAC:
             yield channel_idle_event
             waited_time_us = 0
 
-        if waiting_eifs and self.node.phy_layer.get_successful_tx_event(ch_id).triggered: # if sensing for EIFS but last tx was successful it should be sensed for DIFS
-            yield from self._wait_until_channel_idle(ch_id, self.sparams.DIFS_us, waited_time_us)
+        if (
+            waiting_eifs
+            and self.node.phy_layer.get_successful_tx_event(ch_id).triggered
+        ):  # if sensing for EIFS but last tx was successful it should be sensed for DIFS
+            yield from self._wait_until_channel_idle(
+                ch_id, self.sparams.DIFS_us, waited_time_us
+            )
             return
 
         wait_start_time = self.env.now - waited_time_us
@@ -168,8 +176,13 @@ class MAC:
                 yield channel_idle_event
                 wait_start_time = self.env.now
 
-                if waiting_eifs and self.node.phy_layer.get_successful_tx_event(ch_id).triggered: # if sensing for EIFS but last tx was successful it should be sensed for DIFS
-                    yield from self._wait_until_channel_idle(ch_id, self.sparams.DIFS_us, 0)
+                if (
+                    waiting_eifs
+                    and self.node.phy_layer.get_successful_tx_event(ch_id).triggered
+                ):  # if sensing for EIFS but last tx was successful it should be sensed for DIFS
+                    yield from self._wait_until_channel_idle(
+                        ch_id, self.sparams.DIFS_us, 0
+                    )
                     return
 
             remaining_time = duration_us - (self.env.now - wait_start_time)
@@ -926,10 +939,17 @@ class MAC:
             backoff_delays = [mpdu.backoff_delay_us for mpdu in sent_mpdus]
             tx_delays = [mpdu.tx_delay_us for mpdu in sent_mpdus]
 
-            total_delays = [mpdu.back_reception_time_us - mpdu.creation_time_us for mpdu in sent_mpdus]
+            total_delays = [
+                mpdu.back_reception_time_us - mpdu.creation_time_us
+                for mpdu in sent_mpdus
+            ]
 
-            residual_delays = total_delays - sensing_delays - backoff_delays - tx_delays
-
+            residual_delays = (
+                np.array(total_delays)
+                - np.array(sensing_delays)
+                - np.array(backoff_delays)
+                - np.array(tx_delays)
+            )
             delay_components = {
                 "sensing_delay": np.mean(sensing_delays),
                 "backoff_delay": np.mean(backoff_delays),

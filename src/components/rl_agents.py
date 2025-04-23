@@ -60,7 +60,11 @@ class ContextualMAB:
             action = random.choice(valid_actions)  # Explore
         else:
             preds = self.q_values @ context
-            action = np.argmax(preds)  # Exploit
+            # Create a masked array with -inf for invalid actions to prevent them from being selected
+            masked_preds = np.full_like(preds, -np.inf)
+            for a in valid_actions:
+                masked_preds[a] = preds[a]
+            action = np.argmax(masked_preds)  # Exploit
         return action
 
     def _decay_epsilon_greedy(self, context, valid_actions=None):
@@ -116,7 +120,7 @@ class MARLAgentController:
         self.env = env
 
         self.name = "MARL"
-        self.logger = get_logger(self.name, cfg, sparams, env)
+        self.logger = get_logger(self.name, cfg, sparams, env, True if node.id in self.cfg.EXCLUDED_IDS else False)
 
         self.node = node
 
@@ -134,6 +138,7 @@ class MARLAgentController:
             weights=settings.get("channel_weights", {}),
         )
         self.primary_agent = ContextualMAB(
+            name="primary_agent",
             n_actions=4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
             context_dim=10,  # 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
             strategy=settings.get("strategy", "epsilon_greedy"),
@@ -144,6 +149,7 @@ class MARLAgentController:
             weights=settings.get("primary_weights", {}),
         )
         self.cw_agent = ContextualMAB(
+            name="cw_agent",
             n_actions=3,  # 0: decrease, 1: maintain, 2: increase
             context_dim=12,  # 1x current cw (mapped idx) + 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags  + 1x queue size
             strategy=settings.get("strategy", "epsilon_greedy"),

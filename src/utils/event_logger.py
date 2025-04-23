@@ -101,19 +101,17 @@ initialize_log_file(cfg, LOGS_RECORDING_FILE)
 class ConfigFilter(logging.Filter):
     """Filters log messages based on configuration settings."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, node_id: int = None):
+    def __init__(self, cfg: cfg, sparams: sparams):
         """
         Initialize a ConfigFilter object.
 
         Args:
             cfg (cfg): The UserConfig object.
             sparams (sparams): The SimulationParams object.
-            node_id (int, optional): The node ID. Defaults to None.
         """
         super().__init__()
         self.cfg = cfg
         self.sparams = sparams
-        self.node_id = node_id
 
     def filter(self, record: logging.LogRecord) -> bool:
         """
@@ -129,7 +127,7 @@ class ConfigFilter(logging.Filter):
             bool: True if the log record passes the filter, False otherwise.
         """
         excluded_logs = self.cfg.EXCLUDED_LOGS.get(record.name, [])
-        if record.levelname in excluded_logs or "ALL" in excluded_logs or self.node_id in self.cfg.EXCLUDED_IDS:
+        if record.levelname in excluded_logs or "ALL" in excluded_logs:
             return False
         return True
 
@@ -239,7 +237,7 @@ class JSONFileHandler(logging.Handler):
 
 
 def get_logger(
-    module_name: str, cfg: cfg, sparams: sparams, env: simpy.Environment = None, node_id: int = None
+    module_name: str, cfg: cfg, sparams: sparams, env: simpy.Environment = None, dummy: bool = False
 ) -> logging.Logger:
     """
     Get a logger instance with the specified module name.
@@ -251,11 +249,15 @@ def get_logger(
         cfg (cfg): The UserConfig object.
         sparams (sparams): The SimulationParams object.
         env (simpy.Environment, optional): The simulation environment. Defaults to None.
-        node_id (int, optional): The node ID. Defaults to None.
+        dummy (bool, optional): A flag to indicate if the logger is a dummy logger. Defaults to False.
 
     Returns:
         logging.Logger: The logger instance.
     """
+    if dummy:
+        logger = logging.getLogger("dummy")
+        logger.addHandler(logging.NullHandler())
+        return logger
 
     if module_name in LOGGER_CACHE:
         return LOGGER_CACHE[module_name]
