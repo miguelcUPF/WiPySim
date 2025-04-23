@@ -847,9 +847,9 @@ class MAC:
             yield self.env.process(self.transmit_ampdu())
 
     def _run_channel_agent(self):
-
         current_channel = self.node.phy_layer.channels_ids
         contenders_per_channel = self.node.phy_layer.get_contender_count()
+        normalized_contenders = [c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0 for c in contenders_per_channel]
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
@@ -858,12 +858,12 @@ class MAC:
         )
 
         ch_ctx = [
-            channel_key,
-            *contenders_per_channel,
-            *busy_flags_per_channel,
-            queue_size,
+            channel_key/len(CHANNEL_MAP), # normalized in range [0, 1]
+            *normalized_contenders, # normalized in range [0, 1]
+            *busy_flags_per_channel, # already in range [0, 1]
+            queue_size/self.sparams.MAX_TX_QUEUE_SIZE_pkts, # normalized in range [0, 1]
         ]
-        ch_action = self.rl_controller.decide_channel(ch_ctx)
+        ch_action = self.rl_controller.decide_channel(np.array((ch_ctx)))
 
         self.node.phy_layer.set_channels(CHANNEL_MAP[ch_action])
 
@@ -875,6 +875,7 @@ class MAC:
         current_channel = self.node.phy_layer.channels_ids
         current_primary = self.node.phy_layer.sensing_channels_ids
         contenders_per_channel = self.node.phy_layer.get_contender_count()
+        normalized_contenders = [c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0 for c in contenders_per_channel]
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
 
         channel_key = next(
@@ -885,12 +886,12 @@ class MAC:
         )
 
         primary_ctx = [
-            channel_key,
-            primary_key,
-            *contenders_per_channel,
-            *busy_flags_per_channel,
+            channel_key/len(CHANNEL_MAP), # normalized in range [0, 1]
+            primary_key/len(PRIMARY_CHANNEL_MAP), # normalized in range [0, 1]
+            *normalized_contenders, # normalized in range [0, 1]
+            *busy_flags_per_channel, # already in range [0, 1]
         ]
-        primary_action = self.rl_controller.decide_primary(primary_ctx, current_channel)
+        primary_action = self.rl_controller.decide_primary(np.array(primary_ctx), current_channel)
 
         self.node.phy_layer.set_sensing_channels(PRIMARY_CHANNEL_MAP[primary_action])
 
@@ -902,6 +903,7 @@ class MAC:
         current_channel = self.node.phy_layer.channels_ids
         current_primary = self.node.phy_layer.sensing_channels_ids
         contenders_per_channel = self.node.phy_layer.get_contender_count()
+        normalized_contenders = [c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0 for c in contenders_per_channel]
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
@@ -913,14 +915,14 @@ class MAC:
         )
 
         cw_ctx = [
-            channel_key,
-            primary_key,
-            self.cw_current,
-            *contenders_per_channel,
-            *busy_flags_per_channel,
-            queue_size,
+            channel_key/len(CHANNEL_MAP), # normalized in range [0, 1]
+            primary_key/len(PRIMARY_CHANNEL_MAP), # normalized in range [0, 1]
+            self.cw_current/len(self.sparams.CW_OPTIONS), # normalized in range [0, 1]
+            *normalized_contenders, # normalized in range [0, 1]
+            *busy_flags_per_channel, # already in range [0, 1]
+            queue_size/self.sparams.MAX_TX_QUEUE_SIZE_pkts, # normalized in range [0, 1]
         ]
-        cw_action = self.rl_controller.decide_cw(cw_ctx)
+        cw_action = self.rl_controller.decide_cw(np.array(cw_ctx))
 
         index = self.sparams.CW_OPTIONS.index(self.cw_current)
         if cw_action == 0 and index > 0:

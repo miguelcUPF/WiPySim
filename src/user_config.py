@@ -47,7 +47,7 @@ class UserConfig:
     # - epsilon (optional): epsilon value for epsilon-greedy strategy. Default: 0.1
     # - decay_rate (optional): decay rate for decay epsilon-greedy strategy. Default: 0.99
     # - alpha_r (optional): exponential moving average (EMA) factor for reward normalization: µ_t = α·R_t+ (1 − α)·µ_t-1. σ**2_t = α·(R_t-µ_t)**2 + (1 − α)·σ**2_t-1.  Default: 0.9
-    # - alpha_q (optional): exponential moving average (EMA) factor for updating Q-values: Q_t= Q_t + α(R_t-Q_t-1). Default: 0.1
+    # - alpha_q (optional): linear gradient descent step size for weight matrix update: w_t= w_t-1 + α(R_t-w^T·x)·x. Default: 0.1
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - cw_frequency (optional): frequency of the cw agent (i.e., how often it selects an action, in transmissions attempts). Default: 1

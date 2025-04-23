@@ -19,7 +19,7 @@ class ContextualMAB:
         decay_rate: float = 0.99,
         alpha_q: float = 0.1,
         alpha_r: float = 0.9,
-        weights: dict[str, float] = None,
+        weights_r: dict[str, float] = None,
     ):
 
         self.name = name
@@ -34,18 +34,18 @@ class ContextualMAB:
         # decay epsilon-greedy
         self.decay_rate = decay_rate
 
-        # exponential moving average (EMA) factor
-        self.alpha_q = alpha_q
-        self.alpha_r = alpha_r
+        self.alpha_q = alpha_q  # linear gradient descent step size for weight matrix update
+        self.alpha_r = alpha_r  # for exponential moving average (EMA) factor reward normalization
 
         self.reward_mean = (
             None  # lazy initialization: done once the first reward is observed
         )
         self.reward_std = None
 
-        self.weights = weights or {}  # Used if decomposition enabled
+        self.weights_r = weights_r or {}  # Used if decomposition enabled
 
-        self.q_values = np.zeros((self.n_actions, context_dim))
+        # Weight matrix, i.e., one weight vector per action for linear reward estimation
+        self.weight_matrix = np.zeros((self.n_actions, self.context_dim))
 
     def _epsilon_greedy(self, context, valid_actions=None):
         """
@@ -59,7 +59,7 @@ class ContextualMAB:
         if random.random() < self.epsilon:
             action = random.choice(valid_actions)  # Explore
         else:
-            preds = self.q_values @ context
+            preds = self.weight_matrix @ context
             # Create a masked array with -inf for invalid actions to prevent them from being selected
             masked_preds = np.full_like(preds, -np.inf)
             for a in valid_actions:
@@ -80,6 +80,9 @@ class ContextualMAB:
             raise ValueError(f"Unknown strategy {self.strategy}")
 
     def update(self, context, action, reward):
+        """
+        Updates the weight matrix based on the observed reward and context using linear approximation.
+        """
         if self.reward_mean is None:
             self.reward_mean = reward
             self.reward_std = 0
@@ -94,13 +97,13 @@ class ContextualMAB:
             np.sqrt(self.reward_std) + 1e-8
         )  # Added a small constant to avoid division by zero
 
-        # EMA for non-stationary environments
-        self.q_values[action] += (
-            self.alpha_q * (normalized_reward - self.q_values[action]) * context
-        )
+        # Update weights using linear SGD
+        pred = self.weight_matrix[action] @ context
+        error = normalized_reward - pred
+        self.weight_matrix[action] += self.alpha_q * error * context
 
     def reset(self):
-        self.q_values = [np.zeros(self.context_dim) for _ in range(self.n_actions)]
+        self.weight_matrix = np.zeros((self.n_actions, self.context_dim))
         self.step = 1
         self.reward_mean = None
         self.reward_std = None
@@ -120,7 +123,13 @@ class MARLAgentController:
         self.env = env
 
         self.name = "MARL"
-        self.logger = get_logger(self.name, cfg, sparams, env, True if node.id in self.cfg.EXCLUDED_IDS else False)
+        self.logger = get_logger(
+            self.name,
+            cfg,
+            sparams,
+            env,
+            True if node.id in self.cfg.EXCLUDED_IDS else False,
+        )
 
         self.node = node
 
@@ -135,7 +144,7 @@ class MARLAgentController:
             decay_rate=settings.get("decay_rate", 0.99),
             alpha_q=settings.get("alpha_q", 0.1),
             alpha_r=settings.get("alpha_r", 0.9),
-            weights=settings.get("channel_weights", {}),
+            weights_r=settings.get("channel_weights", {}),
         )
         self.primary_agent = ContextualMAB(
             name="primary_agent",
@@ -146,7 +155,7 @@ class MARLAgentController:
             decay_rate=settings.get("decay_rate", 0.99),
             alpha_q=settings.get("alpha_q", 0.1),
             alpha_r=settings.get("alpha_r", 0.9),
-            weights=settings.get("primary_weights", {}),
+            weights_r=settings.get("primary_weights", {}),
         )
         self.cw_agent = ContextualMAB(
             name="cw_agent",
@@ -157,7 +166,7 @@ class MARLAgentController:
             decay_rate=settings.get("decay_rate", 0.99),
             alpha_q=settings.get("alpha_q", 0.1),
             alpha_r=settings.get("alpha_r", 0.9),
-            weights=settings.get("cw_weights", {}),
+            weights_r=settings.get("cw_weights", {}),
         )
 
         self.last_channel_action = None
@@ -201,13 +210,13 @@ class MARLAgentController:
         if self.cfg.ENABLE_REWARD_DECOMPOSITION:
             # Per-agent weighted reward
             r_ch = self._compute_weighted_reward(
-                delay_components, self.channel_agent.weights
+                delay_components, self.channel_agent.weights_r
             )
             r_pr = self._compute_weighted_reward(
-                delay_components, self.primary_agent.weights
+                delay_components, self.primary_agent.weights_r
             )
             r_cw = self._compute_weighted_reward(
-                delay_components, self.cw_agent.weights
+                delay_components, self.cw_agent.weights_r
             )
         else:
             # Shared reward
