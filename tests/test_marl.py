@@ -27,12 +27,42 @@ sparams.NUM_CHANNELS = 4
 
 cfg.SIMULATION_TIME_us = 2e5
 cfg.SEED = 1
-cfg.ENABLE_RL = True
 
-cfg.ENABLE_CONSOLE_LOGGING = True
+cfg.ENABLE_RL = True
+cfg.RL_MODE = 1
+cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION = True  # Test: True and False
+cfg.ENABLE_REWARD_DECOMPOSITION = False  # Test: True and False
+
+cfg.CHANNEL_AGENT_WEIGHTS = {
+    "sensing_delay": 0.4,
+    "backoff_delay": 0.1,
+    "tx_delay": 0.4,
+    "residual_delay": 0.1,
+}
+cfg.PRIMARY_AGENT_WEIGHTS = {
+    "sensing_delay": 0.6,
+    "backoff_delay": 0.2,
+    "tx_delay": 0.1,
+    "residual_delay": 0.1,
+}
+cfg.CW_AGENT_WEIGHTS = {
+    "sensing_delay": 0,
+    "backoff_delay": 0.45,
+    "tx_delay": 0.45,
+    "residual_delay": 0.1,
+}
+cfg.AGENTS_SETTINGS = {
+        "strategy": "linucb",
+        "channel_frequency": 8,
+        "primary_frequency": 4,
+        "cw_frequency": 1,
+        "epsilon": 0.1,
+    }
+
+cfg.ENABLE_CONSOLE_LOGGING = False
 cfg.USE_COLORS_IN_LOGS = True
 cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
+cfg.EXCLUDED_LOGS = {"GEN": ["ALL"], "MAC": ["ALL"], "PHY": ["ALL"], "CHANNEL": ["ALL"]}
 cfg.EXCLUDED_IDS = [2, 3, 4, 5, 6]
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
@@ -45,40 +75,40 @@ cfg.TRAFFIC_LOAD_kbps = 200e3
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
 cfg.BSSs_Advanced = [
-        {
-            "id": 1,  # A BSS
-            "ap": {"id": 1, "pos": (0, 0, 0), "rl_driven": True},
-            "stas": [{"id": 2, "pos": (3, 4, 0)}],
-            "traffic_flows": [
-                {
-                    "destination": 2,
-                    "model": {"name": "Poisson"},
-                },
-            ],
-        },
-        {
-            "id": 2,  # Another BSS
-            "ap": {"id": 3, "pos": (5, 5, 1)},
-            "stas": [{"id": 4, "pos": (1, 2, 1)}],
-            "traffic_flows": [
-                {
-                    "destination": 4,
-                    "model": {"name": "Poisson"},
-                }
-            ]
-        },
-        {
-            "id": 3,  # Another BSS
-            "ap": {"id": 5, "pos": (2, 3, 1)},
-            "stas": [{"id": 6, "pos": (1, 0, 1)}],
-            "traffic_flows": [
-                {
-                    "destination": 6,
-                    "model": {"name": "Poisson"},
-                }
-            ]
-        }
-    ]
+    {
+        "id": 1,  # A BSS
+        "ap": {"id": 1, "pos": (0, 0, 0), "rl_driven": False},
+        "stas": [{"id": 2, "pos": (3, 4, 0)}],
+        "traffic_flows": [
+            {
+                "destination": 2,
+                "model": {"name": "Poisson"},
+            },
+        ],
+    },
+    {
+        "id": 2,  # Another BSS
+        "ap": {"id": 3, "pos": (5, 5, 1)},
+        "stas": [{"id": 4, "pos": (1, 2, 1)}],
+        "traffic_flows": [
+            {
+                "destination": 4,
+                "model": {"name": "Poisson"},
+            }
+        ],
+    },
+    {
+        "id": 3,  # Another BSS
+        "ap": {"id": 5, "pos": (2, 3, 1)},
+        "stas": [{"id": 6, "pos": (1, 0, 1)}],
+        "traffic_flows": [
+            {
+                "destination": 6,
+                "model": {"name": "Poisson"},
+            }
+        ],
+    },
+]
 
 
 if __name__ == "__main__":

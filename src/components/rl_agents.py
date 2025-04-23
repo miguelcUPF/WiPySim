@@ -8,18 +8,66 @@ import simpy
 import random
 
 
-class ContextualMAB:
+# https://arxiv.org/pdf/1003.0146
+class LinUcbCMAB:
+    def __init__(
+        self,
+        name: str,
+        n_actions: int,
+        context_dim: int,
+        strategy: str = "linucb",
+        weights_r: dict[str, float] = None,
+        alpha: float = 1.0,
+    ):
+        self.name = name
+        self.n_actions = n_actions
+        self.context_dim = context_dim
+
+        self.strategy = strategy
+        self.alpha = alpha  # Confidence bound parameter for LinUCB
+        self.weights_r = weights_r or {}
+
+        self.A = [np.identity(context_dim) for _ in range(n_actions)]
+        self.b = [np.zeros(context_dim) for _ in range(n_actions)]
+
+    def _linucb(self, context, valid_actions=None):
+        if valid_actions is None:
+            valid_actions = list(range(self.n_actions))
+
+        p = np.full(self.n_actions, -np.inf)
+        for a in valid_actions:
+            A_inv = np.linalg.inv(self.A[a])
+            theta = A_inv @ self.b[a]
+            p[a] = context @ theta + self.alpha * np.sqrt(context @ A_inv @ context)
+        return np.argmax(p)
+
+    def select_action(self, context, valid_actions=None):
+        if self.strategy == "linucb":
+            return self._linucb(context, valid_actions)
+        else:
+            raise ValueError(f"Unknown strategy {self.strategy}")
+
+    def update(self, context, action, reward):
+        x = context
+        self.A[action] += np.outer(x, x)
+        self.b[action] += reward * x
+
+    def reset(self):
+        self.A = [np.identity(self.context_dim) for _ in range(self.n_actions)]
+        self.b = [np.zeros(self.context_dim) for _ in range(self.n_actions)]
+
+class EpsCMAB:
     def __init__(
         self,
         name: str,
         n_actions: int,
         context_dim: int,
         strategy: str = "epsilon_greedy",
+        weights_r: dict[str, float] = None,
         epsilon: float = 0.1,
         decay_rate: float = 0.99,
         alpha_q: float = 0.1,
         alpha_r: float = 0.9,
-        weights_r: dict[str, float] = None,
     ):
 
         self.name = name
@@ -104,7 +152,6 @@ class ContextualMAB:
 
     def reset(self):
         self.weight_matrix = np.zeros((self.n_actions, self.context_dim))
-        self.step = 1
         self.reward_mean = None
         self.reward_std = None
 
@@ -135,39 +182,73 @@ class MARLAgentController:
 
         self.settings = settings
 
-        self.channel_agent = ContextualMAB(
-            name="channel_agent",
-            n_actions=7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
-            context_dim=10,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
-            strategy=settings.get("strategy", "epsilon_greedy"),
-            epsilon=settings.get("epsilon", 0.1),
-            decay_rate=settings.get("decay_rate", 0.99),
-            alpha_q=settings.get("alpha_q", 0.1),
-            alpha_r=settings.get("alpha_r", 0.9),
-            weights_r=settings.get("channel_weights", {}),
-        )
-        self.primary_agent = ContextualMAB(
-            name="primary_agent",
-            n_actions=4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            context_dim=10,  # 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
-            strategy=settings.get("strategy", "epsilon_greedy"),
-            epsilon=settings.get("epsilon", 0.1),
-            decay_rate=settings.get("decay_rate", 0.99),
-            alpha_q=settings.get("alpha_q", 0.1),
-            alpha_r=settings.get("alpha_r", 0.9),
-            weights_r=settings.get("primary_weights", {}),
-        )
-        self.cw_agent = ContextualMAB(
-            name="cw_agent",
-            n_actions=3,  # 0: decrease, 1: maintain, 2: increase
-            context_dim=12,  # 1x current cw (mapped idx) + 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags  + 1x queue size
-            strategy=settings.get("strategy", "epsilon_greedy"),
-            epsilon=settings.get("epsilon", 0.1),
-            decay_rate=settings.get("decay_rate", 0.99),
-            alpha_q=settings.get("alpha_q", 0.1),
-            alpha_r=settings.get("alpha_r", 0.9),
-            weights_r=settings.get("cw_weights", {}),
-        )
+        # Select agent types based on the strategy setting
+        strategy = settings.get("strategy", "linucb")
+        
+        if strategy == "linucb":
+            agent_class = LinUcbCMAB
+        elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
+            agent_class = EpsCMAB
+        else:
+            raise ValueError(f"Unknown strategy {strategy}")
+        
+        channel_params = {
+            'name': "channel_agent",
+            'n_actions': 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
+            'context_dim': 10,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
+            'strategy': strategy,
+            'weights_r': settings.get("channel_weights", {}),
+        }
+
+        primary_params = {
+            'name': "primary_agent",
+            'n_actions': 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
+            'context_dim': 10,  # 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
+            'strategy': strategy,
+            'weights_r': settings.get("primary_weights", {}),
+        }
+
+        cw_params = {
+            'name': "cw_agent",
+            'n_actions': 3,  # 0: decrease, 1: maintain, 2: increase
+            'context_dim': 12,  # 1x current cw (mapped idx) + 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
+            'strategy': strategy,
+            'weights_r': settings.get("cw_weights", {}),
+        }
+
+        if agent_class == EpsCMAB:
+            channel_params.update({
+                'epsilon': settings.get("epsilon", 0.1),
+                'decay_rate': settings.get("decay_rate", 0.99),
+                'alpha_q': settings.get("alpha_q", 0.1),
+                'alpha_r': settings.get("alpha_r", 0.9),
+            })
+            primary_params.update({
+                'epsilon': settings.get("epsilon", 0.1),
+                'decay_rate': settings.get("decay_rate", 0.99),
+                'alpha_q': settings.get("alpha_q", 0.1),
+                'alpha_r': settings.get("alpha_r", 0.9),
+            })
+            cw_params.update({
+                'epsilon': settings.get("epsilon", 0.1),
+                'decay_rate': settings.get("decay_rate", 0.99),
+                'alpha_q': settings.get("alpha_q", 0.1),
+                'alpha_r': settings.get("alpha_r", 0.9),
+            })
+        elif agent_class == LinUcbCMAB:
+            channel_params.update({
+                'alpha': settings.get("alpha", 1.0),
+            })
+            primary_params.update({
+                'alpha': settings.get("alpha", 1.0),
+            })
+            cw_params.update({
+                'alpha': settings.get("alpha", 1.0),
+            })
+
+        self.channel_agent = agent_class(**channel_params)
+        self.primary_agent = agent_class(**primary_params)
+        self.cw_agent = agent_class(**cw_params)
 
         self.last_channel_action = None
         self.last_primary_action = None

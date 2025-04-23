@@ -153,70 +153,169 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
         logger.critical(f"Invalid RL_MODE: '{cfg.RL_MODE}'. It must be 0 or 1.")
 
     if cfg.ENABLE_RL:
-        for name, val in zip(["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"], [cfg.CHANNEL_AGENT_WEIGHTS, cfg.PRIMARY_AGENT_WEIGHTS, cfg.CW_AGENT_WEIGHTS]):
+        for name, val in zip(
+            ["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"],
+            [
+                cfg.CHANNEL_AGENT_WEIGHTS,
+                cfg.PRIMARY_AGENT_WEIGHTS,
+                cfg.CW_AGENT_WEIGHTS,
+            ],
+        ):
             if not isinstance(val, dict):
                 logger.critical(f"Invalid {name}: '{val}'. It must be a dictionary.")
             if not all(isinstance(x, (float, int)) for x in val.values()):
-                logger.critical(f"Invalid {name}: '{val}'. All values must be floats or integers.")
+                logger.critical(
+                    f"Invalid {name}: '{val}'. All values must be floats or integers."
+                )
             if not all(0 <= x <= 1 for x in val.values()):
-                logger.critical(f"Invalid {name}: '{val}'. All values must be between 0 and 1.")
-            if not ["sensing_delay", "backoff_delay", "tx_delay", "residual_delay"].sort() == list(val.keys()).sort():
-                logger.critical(f"Invalid {name}: '{val}'. Must be a dictionary with keys 'sensing_delay', 'backoff_delay', 'tx_delay', 'residual_delay'.")
-    
+                logger.critical(
+                    f"Invalid {name}: '{val}'. All values must be between 0 and 1."
+                )
+            if (
+                not [
+                    "sensing_delay",
+                    "backoff_delay",
+                    "tx_delay",
+                    "residual_delay",
+                ].sort()
+                == list(val.keys()).sort()
+            ):
+                logger.critical(
+                    f"Invalid {name}: '{val}'. Must be a dictionary with keys 'sensing_delay', 'backoff_delay', 'tx_delay', 'residual_delay'."
+                )
+
     if cfg.ENABLE_RL:
         if not isinstance(cfg.AGENTS_SETTINGS, dict):
-            logger.critical(f"Invalid AGENTS_SETTINGS: '{cfg.AGENTS_SETTINGS}'. It must be a dictionary.")
+            logger.critical(
+                f"Invalid AGENTS_SETTINGS: '{cfg.AGENTS_SETTINGS}'. It must be a dictionary."
+            )
         if cfg.AGENTS_SETTINGS.get("strategy", None):
-            if cfg.AGENTS_SETTINGS.get("strategy", None) not in ["epsilon_greedy", "decay_epsilon_greedy"]:
-                logger.critical(f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'epsilon_greedy' or 'decay_epsilon_greedy'.")
-        if cfg.AGENTS_SETTINGS.get("epsilon", None):
-            if not isinstance(cfg.AGENTS_SETTINGS.get("epsilon", None), (float, int)):
-                logger.critical(f"Invalid epsilon: '{cfg.AGENTS_SETTINGS.get('epsilon', None)}'. It must be a float or integer.")
-            if cfg.AGENTS_SETTINGS.get("epsilon", None) < 0 or cfg.AGENTS_SETTINGS.get("epsilon", None) > 1:
-                logger.critical(f"Invalid epsilon: '{cfg.AGENTS_SETTINGS.get('epsilon', None)}'. It must be between 0 and 1.")
-        if cfg.AGENTS_SETTINGS.get("decay_rate", None):
-            if not isinstance(cfg.AGENTS_SETTINGS.get("decay_rate", None), (float, int)):
-                logger.critical(f"Invalid decay_rate: '{cfg.AGENTS_SETTINGS.get('decay_rate', None)}'. It must be a float or integer.")
-            if cfg.AGENTS_SETTINGS.get("decay_rate", None) < 0 or cfg.AGENTS_SETTINGS.get("decay_rate", None) > 1:
-                logger.critical(f"Invalid decay_rate: '{cfg.AGENTS_SETTINGS.get('decay_rate', None)}'. It must be between 0 and 1.")
-        if cfg.AGENTS_SETTINGS.get("alpha_q", None):
-            if not isinstance(cfg.AGENTS_SETTINGS.get("alpha_q", None), (float, int)):
-                logger.critical(f"Invalid alpha_q: '{cfg.AGENTS_SETTINGS.get('alpha_q', None)}'. It must be a float or integer.")
-            if cfg.AGENTS_SETTINGS.get("alpha_q", None) < 0 or cfg.AGENTS_SETTINGS.get("alpha_q", None) > 1:
-                logger.critical(f"Invalid alpha_q: '{cfg.AGENTS_SETTINGS.get('alpha_q', None)}'. It must be between 0 and 1.")
-        if cfg.AGENTS_SETTINGS.get("alpha_r", None):
-            if not isinstance(cfg.AGENTS_SETTINGS.get("alpha_r", None), (float, int)):
-                logger.critical(f"Invalid alpha_r: '{cfg.AGENTS_SETTINGS.get('alpha_r', None)}'. It must be a float or integer.")
-            if cfg.AGENTS_SETTINGS.get("alpha_r", None) < 0 or cfg.AGENTS_SETTINGS.get("alpha_r", None) > 1:
-                logger.critical(f"Invalid alpha_r: '{cfg.AGENTS_SETTINGS.get('alpha_r', None)}'. It must be between 0 and 1.")
+            if cfg.AGENTS_SETTINGS.get("strategy", None) not in [
+                "linucb",
+                "epsilon_greedy",
+                "decay_epsilon_greedy",
+            ]:
+                logger.critical(
+                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'linucb', 'epsilon_greedy' or 'decay_epsilon_greedy'."
+                )
         if cfg.AGENTS_SETTINGS.get("channel_frequency", None):
             if not isinstance(cfg.AGENTS_SETTINGS.get("channel_frequency", None), int):
-                logger.critical(f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be an integer.")
+                logger.critical(
+                    f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be an integer."
+                )
             if cfg.AGENTS_SETTINGS.get("channel_frequency", None) < 0:
-                logger.critical(f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be a positive integer.")
+                logger.critical(
+                    f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be a positive integer."
+                )
         if cfg.AGENTS_SETTINGS.get("primary_frequency", None):
             if not isinstance(cfg.AGENTS_SETTINGS.get("primary_frequency", None), int):
-                logger.critical(f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be an integer.")
+                logger.critical(
+                    f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be an integer."
+                )
             if cfg.AGENTS_SETTINGS.get("primary_frequency", None) < 0:
-                logger.critical(f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be a positive integer.")
+                logger.critical(
+                    f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be a positive integer."
+                )
         if cfg.AGENTS_SETTINGS.get("cw_frequency", None):
             if not isinstance(cfg.AGENTS_SETTINGS.get("cw_frequency", None), int):
-                logger.critical(f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be an integer.")
+                logger.critical(
+                    f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be an integer."
+                )
             if cfg.AGENTS_SETTINGS.get("cw_frequency", None) < 0:
-                logger.critical(f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be a positive integer.") 
-        if cfg.ENABLE_REWARD_DECOMPOSITION and cfg.AGENTS_SETTINGS.get("channel_weights", None) is None:
-            logger.critical(f"channel_weights must be provided when ENABLE_REWARD_DECOMPOSITION is true.")
-        if cfg.ENABLE_REWARD_DECOMPOSITION and cfg.AGENTS_SETTINGS.get("primary_weights", None) is None:
-            logger.critical(f"primary_weights must be provided when ENABLE_REWARD_DECOMPOSITION is true.")
-        if cfg.ENABLE_REWARD_DECOMPOSITION and cfg.AGENTS_SETTINGS.get("cw_weights", None) is None:
-            logger.critical(f"cw_weights must be provided when ENABLE_REWARD_DECOMPOSITION is true.")
-        if not isinstance(cfg.AGENTS_SETTINGS.get("channel_weights", None), dict):
-            logger.critical(f"Invalid channel_weights: '{cfg.AGENTS_SETTINGS.get('channel_weights', None)}'. It must be a dictionary.")
-        if not isinstance(cfg.AGENTS_SETTINGS.get("primary_weights", None), dict):
-            logger.critical(f"Invalid primary_weights: '{cfg.AGENTS_SETTINGS.get('primary_weights', None)}'. It must be a dictionary.")
-        if not isinstance(cfg.AGENTS_SETTINGS.get("cw_weights", None), dict):
-            logger.critical(f"Invalid cw_weights: '{cfg.AGENTS_SETTINGS.get('cw_weights', None)}'. It must be a dictionary.")
-        
+                logger.critical(
+                    f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be a positive integer."
+                )
+        if cfg.AGENTS_SETTINGS.get("strategy", None) in [
+            "epsilon_greedy",
+            "decay_epsilon_greedy",
+        ]:
+            if cfg.AGENTS_SETTINGS.get("alpha", None):
+                logger.warning(
+                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use alpha."
+                )
+            if cfg.AGENTS_SETTINGS.get("epsilon", None):
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("epsilon", None), (float, int)
+                ):
+                    logger.critical(
+                        f"Invalid epsilon: '{cfg.AGENTS_SETTINGS.get('epsilon', None)}'. It must be a float or integer."
+                    )
+                if (
+                    cfg.AGENTS_SETTINGS.get("epsilon", None) < 0
+                    or cfg.AGENTS_SETTINGS.get("epsilon", None) > 1
+                ):
+                    logger.critical(
+                        f"Invalid epsilon: '{cfg.AGENTS_SETTINGS.get('epsilon', None)}'. It must be between 0 and 1."
+                    )
+            if cfg.AGENTS_SETTINGS.get("decay_rate", None):
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("decay_rate", None), (float, int)
+                ):
+                    logger.critical(
+                        f"Invalid decay_rate: '{cfg.AGENTS_SETTINGS.get('decay_rate', None)}'. It must be a float or integer."
+                    )
+                if (
+                    cfg.AGENTS_SETTINGS.get("decay_rate", None) < 0
+                    or cfg.AGENTS_SETTINGS.get("decay_rate", None) > 1
+                ):
+                    logger.critical(
+                        f"Invalid decay_rate: '{cfg.AGENTS_SETTINGS.get('decay_rate', None)}'. It must be between 0 and 1."
+                    )
+            if cfg.AGENTS_SETTINGS.get("alpha_q", None):
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("alpha_q", None), (float, int)
+                ):
+                    logger.critical(
+                        f"Invalid alpha_q: '{cfg.AGENTS_SETTINGS.get('alpha_q', None)}'. It must be a float or integer."
+                    )
+                if (
+                    cfg.AGENTS_SETTINGS.get("alpha_q", None) < 0
+                    or cfg.AGENTS_SETTINGS.get("alpha_q", None) > 1
+                ):
+                    logger.critical(
+                        f"Invalid alpha_q: '{cfg.AGENTS_SETTINGS.get('alpha_q', None)}'. It must be between 0 and 1."
+                    )
+            if cfg.AGENTS_SETTINGS.get("alpha_r", None):
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("alpha_r", None), (float, int)
+                ):
+                    logger.critical(
+                        f"Invalid alpha_r: '{cfg.AGENTS_SETTINGS.get('alpha_r', None)}'. It must be a float or integer."
+                    )
+                if (
+                    cfg.AGENTS_SETTINGS.get("alpha_r", None) < 0
+                    or cfg.AGENTS_SETTINGS.get("alpha_r", None) > 1
+                ):
+                    logger.critical(
+                        f"Invalid alpha_r: '{cfg.AGENTS_SETTINGS.get('alpha_r', None)}'. It must be between 0 and 1."
+                    )
+        if cfg.AGENTS_SETTINGS.get("strategy", None) == "linucb":
+            if cfg.AGENTS_SETTINGS.get("alpha", None):
+                if not isinstance(cfg.AGENTS_SETTINGS.get("alpha", None), (float, int)):
+                    logger.critical(
+                        f"Invalid alpha: '{cfg.AGENTS_SETTINGS.get('alpha', None)}'. It must be a float or integer."
+                    )
+                if cfg.AGENTS_SETTINGS.get("alpha", None) <= 0:
+                    logger.critical(
+                        f"Invalid alpha: '{cfg.AGENTS_SETTINGS.get('alpha', None)}'. It must be greater than 0."
+                    )
+            if cfg.AGENTS_SETTINGS.get("epsilon", None):
+                logger.warning(
+                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use epsilon."
+                )
+            if cfg.AGENTS_SETTINGS.get("decay_rate", None):
+                logger.warning(
+                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use decay_rate."
+                )
+            if cfg.AGENTS_SETTINGS.get("alpha_q", None):
+                logger.warning(
+                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use alpha_q."
+                )
+            if cfg.AGENTS_SETTINGS.get("alpha_r", None):
+                logger.warning(
+                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use alpha_r."
+                )
+
     str_settings = {
         "LOGS_RECORDING_PATH": cfg.LOGS_RECORDING_PATH,
         "FIGS_SAVE_PATH": cfg.FIGS_SAVE_PATH,

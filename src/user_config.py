@@ -5,7 +5,9 @@ class UserConfig:
     SEED = 1  # Set to None for random behavior
 
     # --- RL Configuration --- #
-    ENABLE_RL =  False  # Enable/disable RL-driven agents (NUM_CHANNELS in sim_params must be 4)
+    ENABLE_RL = (
+        False  # Enable/disable RL-driven agents (NUM_CHANNELS in sim_params must be 4)
+    )
     RL_MODE = 1  # 0: SARL or 1: MARL # TODO SARL
 
     # If "MARL", it can be set to True to disable simultaneous action selection so that
@@ -23,18 +25,21 @@ class UserConfig:
     # - "backoff_delay": time in microseconds to spent on average by every tramsmitted packet due to reducing backoff slots
     # - "tx_delay": time in microseconds to spent on average by every tramsmitted packet due to its transmission over the medium (including BACK reception or its timeout)
     # - "residual_delay": time in microseconds to spent on average by every tramsmitted packet that is not accounted for the above
+    ##  Weights for the channel agent if decomposed reward is enabled:
     CHANNEL_AGENT_WEIGHTS = {
         "sensing_delay": 0.4,
         "backoff_delay": 0.1,
         "tx_delay": 0.4,
         "residual_delay": 0.1,
     }
+    ##  Weights for the primary agent if decomposed reward is enabled
     PRIMARY_AGENT_WEIGHTS = {
         "sensing_delay": 0.6,
         "backoff_delay": 0.2,
         "tx_delay": 0.1,
         "residual_delay": 0.1,
     }
+    ##  Weights for the cw agent if decomposed reward is enabled
     CW_AGENT_WEIGHTS = {
         "sensing_delay": 0,
         "backoff_delay": 0.45,
@@ -43,26 +48,21 @@ class UserConfig:
     }
 
     # Algorithm settings for each agent. Keys:
-    # - strategy (optional): "epsilon_greedy" or "decay_epsilon_greedy". Default: "epsilon_greedy"
-    # - epsilon (optional): epsilon value for epsilon-greedy strategy. Default: 0.1
-    # - decay_rate (optional): decay rate for decay epsilon-greedy strategy. Default: 0.99
-    # - alpha_r (optional): exponential moving average (EMA) factor for reward normalization: µ_t = α·R_t+ (1 − α)·µ_t-1. σ**2_t = α·(R_t-µ_t)**2 + (1 − α)·σ**2_t-1.  Default: 0.9
-    # - alpha_q (optional): linear gradient descent step size for weight matrix update: w_t= w_t-1 + α(R_t-w^T·x)·x. Default: 0.1
+    # - strategy (optional): "linucb" or "epsilon_greedy" or "decay_epsilon_greedy". Default: "linucb"
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - cw_frequency (optional): frequency of the cw agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
-    # - channel_weights (optional, mandatory if decomposed reward is enabled): weights for the channel agent if decomposed reward is enabled
-    # - primary_weights (optional, mandatory if decomposed reward is enabled): weights for the primary agent if decomposed reward is enabled
-    # - cw_weights (optional, mandatory if decomposed reward is enabled): weights for the cw agent if decomposed reward is enabled
+    # - alpha (optional, only if strategy is "linucb"): confidence bound parameter for LinUCB. Default: 1
+    # - epsilon (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): epsilon value for epsilon-greedy strategy. Default: 0.1
+    # - decay_rate (optional, only if strategy is "decay_epsilon_greedy"): decay rate for decay epsilon-greedy strategy. Default: 0.99
+    # - alpha_r (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): exponential moving average (EMA) factor for reward normalization: µ_t = α·R_t+ (1 − α)·µ_t-1. σ**2_t = α·(R_t-µ_t)**2 + (1 − α)·σ**2_t-1.  Default: 0.9
+    # - alpha_q (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): linear gradient descent step size for weight matrix update: w_t= w_t-1 + α(R_t-w^T·x)·x. Default: 0.1
     AGENTS_SETTINGS = {
-        "strategy": "epsilon_greedy",
-        "epsilon": 0.1,
+        "strategy": "linucb",
         "channel_frequency": 8,
         "primary_frequency": 4,
         "cw_frequency": 1,
-        "channel_weights": CHANNEL_AGENT_WEIGHTS,
-        "primary_weights": PRIMARY_AGENT_WEIGHTS,
-        "cw_weights": CW_AGENT_WEIGHTS,
+        "epsilon": 0.1,
     }
 
     # --- Logging Configuration --- #
