@@ -72,6 +72,7 @@ class PHY:
 
         self.sensing_channels_ids = channels_ids
 
+        self.reset_col_tx_events_for_sensing_channels()
         self.node.medium.add_sensing_channels(self.node, self.sensing_channels_ids)
 
     def reset_events(self):
@@ -81,6 +82,11 @@ class PHY:
             self.reset_rts_collision_event(ch_id)
             self.reset_ampdu_collision_event(ch_id)
             self.reset_successful_tx_event(ch_id)
+
+    def reset_col_tx_events_for_sensing_channels(self):
+        for ch_id in self.sensing_channels_ids:
+            self.reset_rts_collision_event(ch_id)
+            self.reset_ampdu_collision_event(ch_id)
 
     def reset_collision_events(self):
         for ch_id in self.channels_ids:
