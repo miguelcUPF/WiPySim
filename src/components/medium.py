@@ -327,13 +327,15 @@ class Medium:
             self.successful_transmission_detected(channels_ids)
             self.receive(ppdu, channels_ids, mcs_index, nav_channels_ids)
             self.stats.ppdus_success += 1
+            self.stats.tx_bytes += ppdu.size_bytes
+            self.stats.tx_bytes_success += ppdu.size_bytes
         else:
             self.logger.warning(
                 f"{ppdu.type} ({ppdu.data_unit.type}) from {ppdu.src_id} to {ppdu.dst_id} over channel(s) {', '.join(map(str, channels_ids))} collided!"
             )
 
             self.stats.ppdus_fail += 1
-
+            self.stats.tx_bytes += ppdu.size_bytes
             if ppdu.data_unit.type == "RTS":
                 self.rts_collision_detected(channels_ids)
             else:
