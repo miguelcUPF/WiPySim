@@ -68,4 +68,4 @@ class SimParams:
     MPDU_ERROR_PROBABILITY = 0.1
 
     # --- RL Parameters --- #
-    CW_OPTIONS = [2, 4, 8,16, 32, 64, 128]
+    CW_OPTIONS = [2, 4, 8, 16, 32]
