@@ -439,8 +439,12 @@ class NetworkStats:
                 "avg_channel_utilization": self.avg_channel_utilization,
             }
 
-            wandb.run.summary["per_node_stats"] = self.per_node_stats
-            wandb.run.summary["per_channel_stats"] = self.per_channel_stats
+            # Convert integer keys to strings for compatibility with wandb summary
+            safe_per_node_stats = {str(k): v for k, v in self.per_node_stats.items()}
+            safe_per_channel_stats = {str(k): v for k, v in self.per_channel_stats.items()}
+
+            wandb.run.summary["per_node_stats"] = safe_per_node_stats
+            wandb.run.summary["per_channel_stats"] = safe_per_channel_stats
             wandb.run.summary["medium_stats"] = self.medium_stats
 
     def display_stats(self):

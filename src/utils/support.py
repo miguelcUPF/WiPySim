@@ -233,9 +233,9 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 logger.critical(
                     f"Primary frequency must be less than or equal to channel frequency."
                 )
-            if cfg.AGENTS_SETTINGS.get("primary_frequency", None) % cfg.AGENTS_SETTINGS.get("channel_frequency", None) != 0:
+            if cfg.AGENTS_SETTINGS.get("channel_frequency", None) % cfg.AGENTS_SETTINGS.get("primary_frequency", None) != 0:
                 logger.critical(
-                    f"Primary frequency must be a multiple of channel frequency."
+                    f"Channel frequency must be a multiple of primary frequency."
                 )
         if cfg.AGENTS_SETTINGS.get("cw_frequency", None):
             if not isinstance(cfg.AGENTS_SETTINGS.get("cw_frequency", None), int):
