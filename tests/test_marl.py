@@ -2,7 +2,7 @@ from src.user_config import UserConfig as cfg
 from src.sim_params import SimParams as sparams
 
 from src.utils.event_logger import get_logger
-from src.utils.support import initialize_network, validate_settings
+from src.utils.support import initialize_network, validate_settings, wandb_init
 from src.utils.messages import (
     STARTING_TEST_MSG,
     TEST_COMPLETED_MSG,
@@ -25,31 +25,34 @@ sparams.BONDING_MODE = 0
 
 sparams.NUM_CHANNELS = 4
 
-cfg.SIMULATION_TIME_us = 2e5
+cfg.SIMULATION_TIME_us = 2e6
 cfg.SEED = 1
 
 cfg.ENABLE_RL = True
 cfg.RL_MODE = 1
+cfg.USE_WANDB = True
+cfg.WANDB_PROJECT_NAME = "marl-802.11"
+cfg.WANDB_RUN_NAME = "test_marl"
 cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION = True  # Test: True and False
 cfg.ENABLE_REWARD_DECOMPOSITION = False  # Test: True and False
 
 cfg.CHANNEL_AGENT_WEIGHTS = {
-    "sensing_delay": 0.4,
+    "sensing_delay": 0.3,
     "backoff_delay": 0.1,
-    "tx_delay": 0.4,
-    "residual_delay": 0.1,
+    "tx_delay": 0.3,
+    "residual_delay": 0.3,
 }
 cfg.PRIMARY_AGENT_WEIGHTS = {
-    "sensing_delay": 0.6,
+    "sensing_delay": 0.4,
     "backoff_delay": 0.2,
     "tx_delay": 0.1,
-    "residual_delay": 0.1,
+    "residual_delay": 0.3,
 }
 cfg.CW_AGENT_WEIGHTS = {
     "sensing_delay": 0,
-    "backoff_delay": 0.45,
-    "tx_delay": 0.45,
-    "residual_delay": 0.1,
+    "backoff_delay": 0.35,
+    "tx_delay": 0.35,
+    "residual_delay": 0.3,
 }
 cfg.AGENTS_SETTINGS = {
         "strategy": "linucb",
@@ -66,11 +69,6 @@ cfg.EXCLUDED_LOGS = {"GEN": ["ALL"], "MAC": ["ALL"], "PHY": ["ALL"], "CHANNEL": 
 cfg.EXCLUDED_IDS = [2, 3, 4, 5, 6]
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
-
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
-cfg.NUMBER_OF_BSSS = 3
-cfg.TRAFFIC_MODEL = "Poisson"
-cfg.TRAFFIC_LOAD_kbps = 200e3
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
@@ -117,6 +115,7 @@ if __name__ == "__main__":
     logger = get_logger("TEST", cfg, sparams)
 
     validate_settings(cfg, sparams, logger)
+    wandb_init(cfg)
 
     print(STARTING_SIMULATION_MSG)
 
@@ -125,6 +124,8 @@ if __name__ == "__main__":
     network = initialize_network(cfg, sparams, env)
 
     env.run(until=cfg.SIMULATION_TIME_us)
+
+    network.stats.collect_stats()
 
     for ap in network.get_aps():
         logger.info(

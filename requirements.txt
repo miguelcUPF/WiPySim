@@ -5,3 +5,4 @@ simpy
 setuptools
 chardet
 tqdm
+wandb

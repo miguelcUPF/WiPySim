@@ -11,6 +11,7 @@ import os
 import simpy
 import random
 import logging
+import wandb
 
 
 def validate_params(sparams: sparams, logger: logging.Logger):
@@ -126,6 +127,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
 
     bool_settings = {
         "ENABLE_RL_AGENTS": cfg.ENABLE_RL,
+        "USE_WANDB": cfg.USE_WANDB,
         "DISABLE_SIMULTANEOUS_ACTION_SELECTION": cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION,
         "ENABLE_REWARD_DECOMPOSITION": cfg.ENABLE_REWARD_DECOMPOSITION,
         "ENABLE_CONSOLE_LOGGING": cfg.ENABLE_CONSOLE_LOGGING,
@@ -183,11 +185,13 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 logger.critical(
                     f"Invalid {name}: '{val}'. Must be a dictionary with keys 'sensing_delay', 'backoff_delay', 'tx_delay', 'residual_delay'."
                 )
-        cfg.AGENTS_SETTINGS.update({
-                'channel_weights': cfg.CHANNEL_AGENT_WEIGHTS,
-                'primary_weights': cfg.PRIMARY_AGENT_WEIGHTS,
-                'cw_weights': cfg.CW_AGENT_WEIGHTS
-            })
+        cfg.AGENTS_SETTINGS.update(
+            {
+                "channel_weights": cfg.CHANNEL_AGENT_WEIGHTS,
+                "primary_weights": cfg.PRIMARY_AGENT_WEIGHTS,
+                "cw_weights": cfg.CW_AGENT_WEIGHTS,
+            }
+        )
 
     if cfg.ENABLE_RL:
         if not isinstance(cfg.AGENTS_SETTINGS, dict):
@@ -220,6 +224,18 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             if cfg.AGENTS_SETTINGS.get("primary_frequency", None) < 0:
                 logger.critical(
                     f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be a positive integer."
+                )
+            if cfg.AGENTS_SETTINGS.get("channel_frequency", None) is None:
+                logger.critical(
+                    f"Channel frequency must be set when primary frequency is set."
+                )
+            if cfg.AGENTS_SETTINGS.get("primary_frequency", None) > cfg.AGENTS_SETTINGS.get("channel_frequency", None):
+                logger.critical(
+                    f"Primary frequency must be less than or equal to channel frequency."
+                )
+            if cfg.AGENTS_SETTINGS.get("primary_frequency", None) % cfg.AGENTS_SETTINGS.get("channel_frequency", None) != 0:
+                logger.critical(
+                    f"Primary frequency must be a multiple of channel frequency."
                 )
         if cfg.AGENTS_SETTINGS.get("cw_frequency", None):
             if not isinstance(cfg.AGENTS_SETTINGS.get("cw_frequency", None), int):
@@ -322,6 +338,8 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 )
 
     str_settings = {
+        "WANDB_PROJECT_NAME": cfg.WANDB_PROJECT_NAME,
+        "WANDB_RUN_NAME": cfg.WANDB_RUN_NAME,
         "LOGS_RECORDING_PATH": cfg.LOGS_RECORDING_PATH,
         "FIGS_SAVE_PATH": cfg.FIGS_SAVE_PATH,
         "TRAFFIC_GEN_RECORDING_PATH": cfg.TRAFFIC_GEN_RECORDING_PATH,
@@ -824,3 +842,48 @@ def add_bss_automatically(BSSs, num_bss: int = 0, last_node_id: int = 0):
     }
     BSSs.append(new_bss)
     return BSSs
+
+
+def wandb_init(cfg: cfg):
+    if cfg.USE_WANDB and cfg.ENABLE_RL:
+        agent_cfg = {
+            "strategy": cfg.AGENTS_SETTINGS["strategy"],
+            "alpha": cfg.AGENTS_SETTINGS.get("alpha"),
+            "epsilon": cfg.AGENTS_SETTINGS.get("epsilon"),
+            "decay_rate": cfg.AGENTS_SETTINGS.get("decay_rate"),
+            "alpha_r": cfg.AGENTS_SETTINGS.get("alpha_r"),
+            "alpha_q": cfg.AGENTS_SETTINGS.get("alpha_q"),
+        }
+
+        frequency_cfg = {
+            "channel": cfg.AGENTS_SETTINGS.get("channel_frequency"),
+            "primary": cfg.AGENTS_SETTINGS.get("primary_frequency"),
+            "cw": cfg.AGENTS_SETTINGS.get("cw_frequency"),
+        }
+
+        weights_cfg = {
+            "channel": cfg.CHANNEL_AGENT_WEIGHTS,
+            "primary": cfg.PRIMARY_AGENT_WEIGHTS,
+            "cw": cfg.CW_AGENT_WEIGHTS,
+        }
+
+        wandb.init(
+            project=cfg.WANDB_PROJECT_NAME,
+            name=cfg.WANDB_RUN_NAME,
+            config={
+                "seed": cfg.SEED,
+                "rl_mode": cfg.RL_MODE,
+                "reward_decomposition": cfg.ENABLE_REWARD_DECOMPOSITION,
+                "disable_simultaneous_actions": cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION,
+                "agent_settings": agent_cfg,
+                "action_frequency": frequency_cfg,
+                "reward_weights": weights_cfg,
+                "sim_time_us": cfg.SIMULATION_TIME_us,
+            },
+        )
+    elif cfg.USE_WANDB and not cfg.ENABLE_RL:
+        wandb.init(
+            project=cfg.WANDB_PROJECT_NAME,
+            name=cfg.WANDB_RUN_NAME,
+            config={"seed": cfg.SEED, "sim_time_us": cfg.SIMULATION_TIME_us},
+        )

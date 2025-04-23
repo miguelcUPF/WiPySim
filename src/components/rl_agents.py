@@ -6,6 +6,7 @@ from src.components.network import AP
 import numpy as np
 import simpy
 import random
+import wandb
 
 
 # https://arxiv.org/pdf/1003.0146
@@ -56,6 +57,7 @@ class LinUcbCMAB:
         self.A = [np.identity(self.context_dim) for _ in range(self.n_actions)]
         self.b = [np.zeros(self.context_dim) for _ in range(self.n_actions)]
 
+
 class EpsCMAB:
     def __init__(
         self,
@@ -82,8 +84,12 @@ class EpsCMAB:
         # decay epsilon-greedy
         self.decay_rate = decay_rate
 
-        self.alpha_q = alpha_q  # linear gradient descent step size for weight matrix update
-        self.alpha_r = alpha_r  # for exponential moving average (EMA) factor reward normalization
+        self.alpha_q = (
+            alpha_q  # linear gradient descent step size for weight matrix update
+        )
+        self.alpha_r = (
+            alpha_r  # for exponential moving average (EMA) factor reward normalization
+        )
 
         self.reward_mean = (
             None  # lazy initialization: done once the first reward is observed
@@ -184,67 +190,79 @@ class MARLAgentController:
 
         # Select agent types based on the strategy setting
         strategy = settings.get("strategy", "linucb")
-        
+
         if strategy == "linucb":
             agent_class = LinUcbCMAB
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
             agent_class = EpsCMAB
         else:
             raise ValueError(f"Unknown strategy {strategy}")
-        
+
         channel_params = {
-            'name': "channel_agent",
-            'n_actions': 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
-            'context_dim': 10,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
-            'strategy': strategy,
-            'weights_r': settings.get("channel_weights", {}),
+            "name": "channel_agent",
+            "n_actions": 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
+            "context_dim": 10,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
+            "strategy": strategy,
+            "weights_r": settings.get("channel_weights", {}),
         }
 
         primary_params = {
-            'name': "primary_agent",
-            'n_actions': 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            'context_dim': 10,  # 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
-            'strategy': strategy,
-            'weights_r': settings.get("primary_weights", {}),
+            "name": "primary_agent",
+            "n_actions": 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
+            "context_dim": 10,  # 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
+            "strategy": strategy,
+            "weights_r": settings.get("primary_weights", {}),
         }
 
         cw_params = {
-            'name': "cw_agent",
-            'n_actions': 3,  # 0: decrease, 1: maintain, 2: increase
-            'context_dim': 12,  # 1x current cw (mapped idx) + 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
-            'strategy': strategy,
-            'weights_r': settings.get("cw_weights", {}),
+            "name": "cw_agent",
+            "n_actions": 3,  # 0: decrease, 1: maintain, 2: increase
+            "context_dim": 12,  # 1x current cw (mapped idx) + 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
+            "strategy": strategy,
+            "weights_r": settings.get("cw_weights", {}),
         }
 
         if agent_class == EpsCMAB:
-            channel_params.update({
-                'epsilon': settings.get("epsilon", 0.1),
-                'decay_rate': settings.get("decay_rate", 0.99),
-                'alpha_q': settings.get("alpha_q", 0.1),
-                'alpha_r': settings.get("alpha_r", 0.9),
-            })
-            primary_params.update({
-                'epsilon': settings.get("epsilon", 0.1),
-                'decay_rate': settings.get("decay_rate", 0.99),
-                'alpha_q': settings.get("alpha_q", 0.1),
-                'alpha_r': settings.get("alpha_r", 0.9),
-            })
-            cw_params.update({
-                'epsilon': settings.get("epsilon", 0.1),
-                'decay_rate': settings.get("decay_rate", 0.99),
-                'alpha_q': settings.get("alpha_q", 0.1),
-                'alpha_r': settings.get("alpha_r", 0.9),
-            })
+            channel_params.update(
+                {
+                    "epsilon": settings.get("epsilon", 0.1),
+                    "decay_rate": settings.get("decay_rate", 0.99),
+                    "alpha_q": settings.get("alpha_q", 0.1),
+                    "alpha_r": settings.get("alpha_r", 0.9),
+                }
+            )
+            primary_params.update(
+                {
+                    "epsilon": settings.get("epsilon", 0.1),
+                    "decay_rate": settings.get("decay_rate", 0.99),
+                    "alpha_q": settings.get("alpha_q", 0.1),
+                    "alpha_r": settings.get("alpha_r", 0.9),
+                }
+            )
+            cw_params.update(
+                {
+                    "epsilon": settings.get("epsilon", 0.1),
+                    "decay_rate": settings.get("decay_rate", 0.99),
+                    "alpha_q": settings.get("alpha_q", 0.1),
+                    "alpha_r": settings.get("alpha_r", 0.9),
+                }
+            )
         elif agent_class == LinUcbCMAB:
-            channel_params.update({
-                'alpha': settings.get("alpha", 1.0),
-            })
-            primary_params.update({
-                'alpha': settings.get("alpha", 1.0),
-            })
-            cw_params.update({
-                'alpha': settings.get("alpha", 1.0),
-            })
+            channel_params.update(
+                {
+                    "alpha": settings.get("alpha", 1.0),
+                }
+            )
+            primary_params.update(
+                {
+                    "alpha": settings.get("alpha", 1.0),
+                }
+            )
+            cw_params.update(
+                {
+                    "alpha": settings.get("alpha", 1.0),
+                }
+            )
 
         self.channel_agent = agent_class(**channel_params)
         self.primary_agent = agent_class(**primary_params)
@@ -310,3 +328,29 @@ class MARLAgentController:
             self.last_primary_context, self.last_primary_action, r_pr
         )
         self.cw_agent.update(self.last_cw_context, self.last_cw_action, r_cw)
+
+        self._log_to_wandb(
+            delay_components, {"channel": r_ch, "primary": r_pr, "cw": r_cw}
+        )
+
+    def _log_to_wandb(self, delay_components: dict, reward: dict):
+        if wandb.run:
+            wandb.log(
+                {
+                    f"node_{self.node.id}/action/channel": self.last_channel_action,
+                    f"node_{self.node.id}/action/primary": self.last_primary_action,
+                    f"node_{self.node.id}/action/cw": self.last_cw_action,
+                    f"node_{self.node.id}/action/cw_current": self.node.mac_layer.cw_current,
+                    f"node_{self.node.id}/reward/channel": reward["channel"],
+                    f"node_{self.node.id}/reward/primary": reward["primary"],
+                    f"node_{self.node.id}/reward/cw": reward["cw"],
+                    f"node_{self.node.id}/delay/sensing": delay_components["sensing_delay"],
+                    f"node_{self.node.id}/delay/backoff": delay_components["backoff_delay"],
+                    f"node_{self.node.id}/delay/tx": delay_components["tx_delay"],
+                    f"node_{self.node.id}/delay/residual": delay_components[
+                        "residual_delay"
+                    ],
+                    f"node_{self.node.id}/delay/total": sum(delay_components.values()),
+                    "env_time_us": self.env.now,
+                }
+            )

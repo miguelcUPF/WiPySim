@@ -9,6 +9,9 @@ class UserConfig:
         False  # Enable/disable RL-driven agents (NUM_CHANNELS in sim_params must be 4)
     )
     RL_MODE = 1  # 0: SARL or 1: MARL # TODO SARL
+    USE_WANDB = True  # Enable/disable Weights & Biases logging or hyperparameter optimization
+    WANDB_PROJECT_NAME = "marl-802.11"
+    WANDB_RUN_NAME = "main_run"
 
     # If "MARL", it can be set to True to disable simultaneous action selection so that
     # agents select actions in a sequential manner, following the logical protocol execution
@@ -27,24 +30,24 @@ class UserConfig:
     # - "residual_delay": time in microseconds to spent on average by every tramsmitted packet that is not accounted for the above
     ##  Weights for the channel agent if decomposed reward is enabled:
     CHANNEL_AGENT_WEIGHTS = {
-        "sensing_delay": 0.4,
+        "sensing_delay": 0.3,
         "backoff_delay": 0.1,
-        "tx_delay": 0.4,
-        "residual_delay": 0.1,
+        "tx_delay": 0.3,
+        "residual_delay": 0.3,
     }
     ##  Weights for the primary agent if decomposed reward is enabled
     PRIMARY_AGENT_WEIGHTS = {
-        "sensing_delay": 0.6,
+        "sensing_delay": 0.4,
         "backoff_delay": 0.2,
         "tx_delay": 0.1,
-        "residual_delay": 0.1,
+        "residual_delay": 0.3,
     }
     ##  Weights for the cw agent if decomposed reward is enabled
     CW_AGENT_WEIGHTS = {
         "sensing_delay": 0,
-        "backoff_delay": 0.45,
-        "tx_delay": 0.45,
-        "residual_delay": 0.1,
+        "backoff_delay": 0.35,
+        "tx_delay": 0.35,
+        "residual_delay": 0.3,
     }
 
     # Algorithm settings for each agent. Keys:

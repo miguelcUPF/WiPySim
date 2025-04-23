@@ -15,6 +15,8 @@ from simpy.events import AnyOf
 import simpy
 import random
 import numpy as np
+import wandb
+
 
 BACK_TIMEOUT_us = 281
 CTS_TX_us = round(
@@ -88,6 +90,7 @@ class MAC:
         self.back_event = None
 
         self.last_collision_time_us = None
+        self.prev_rx_time_us = self.env.now
 
         self.is_first_tx = True
         self.is_first_rx = True
@@ -101,7 +104,13 @@ class MAC:
         self.mac_state_stats = MACStateStats()
 
         self.name = "MAC"
-        self.logger = get_logger(self.name, cfg, sparams, env, True if node.id in self.cfg.EXCLUDED_IDS else False) 
+        self.logger = get_logger(
+            self.name,
+            cfg,
+            sparams,
+            env,
+            True if node.id in self.cfg.EXCLUDED_IDS else False,
+        )
 
         self.rl_settings = self.cfg.AGENTS_SETTINGS
         self.rl_controller = (
@@ -665,8 +674,33 @@ class MAC:
         self.node.rx_stats.data_units_rx += 1
         self.node.rx_stats.rx_mac_bytes += data_unit.size_bytes
 
+    def _log_to_wandb_rx(self, ampdu: AMPDU):
+        if wandb.run:
+            total_bits_rx = sum(mpdu.size_bytes * 8 for mpdu in ampdu.mpdus)
+            total_bits_success = sum(
+                mpdu.size_bytes * 8 for mpdu in ampdu.mpdus if not mpdu.is_corrupted
+            )
+            duration_sec = (
+                self.env.now - self.prev_rx_time_us
+            ) / 1e6  # microseconds to seconds
+            throughput_mbps = (
+                (total_bits_rx / duration_sec) / 1e6 if duration_sec != 0 else 0
+            )
+            effective_throughput_mbps = (
+                (total_bits_success / duration_sec) / 1e6 if duration_sec != 0 else 0
+            )
+
+            wandb.log(
+                {
+                    f"node_{self.node.id}/rx_stats/throughput_mbps": throughput_mbps,
+                    f"node_{self.node.id}/rx_stats/effective_throughput_mbps": effective_throughput_mbps,
+                    "env_time_us": self.env.now,
+                }
+            )
+
     def _process_received_ampdu(self, ampdu: AMPDU):
         back = BACK(ampdu, self.node.id, ampdu.src_id, self.env.now)
+        self._log_to_wandb_rx(ampdu)
 
         for mpdu in ampdu.mpdus:
             self.node.rx_stats.pkts_rx += 1
@@ -679,6 +713,7 @@ class MAC:
                 self.node.app_layer.packet_from_mac(mpdu.packet)
 
         self.node.tx_stats.backs_tx += 1
+        self.prev_rx_time_us = self.env.now
         self.env.process(self.send_response(back))
 
     def _process_received_rts(self, rts: RTS):
@@ -849,7 +884,10 @@ class MAC:
     def _run_channel_agent(self):
         current_channel = self.node.phy_layer.channels_ids
         contenders_per_channel = self.node.phy_layer.get_contender_count()
-        normalized_contenders = [c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0 for c in contenders_per_channel]
+        normalized_contenders = [
+            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
+            for c in contenders_per_channel
+        ]
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
@@ -858,10 +896,11 @@ class MAC:
         )
 
         ch_ctx = [
-            channel_key/len(CHANNEL_MAP), # normalized in range [0, 1]
-            *normalized_contenders, # normalized in range [0, 1]
-            *busy_flags_per_channel, # already in range [0, 1]
-            queue_size/self.sparams.MAX_TX_QUEUE_SIZE_pkts, # normalized in range [0, 1]
+            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
+            *normalized_contenders,  # normalized in range [0, 1]
+            *busy_flags_per_channel,  # already in range [0, 1]
+            queue_size
+            / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
         ch_action = self.rl_controller.decide_channel(np.array((ch_ctx)))
 
@@ -875,7 +914,10 @@ class MAC:
         current_channel = self.node.phy_layer.channels_ids
         current_primary = self.node.phy_layer.sensing_channels_ids
         contenders_per_channel = self.node.phy_layer.get_contender_count()
-        normalized_contenders = [c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0 for c in contenders_per_channel]
+        normalized_contenders = [
+            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
+            for c in contenders_per_channel
+        ]
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
 
         channel_key = next(
@@ -886,12 +928,14 @@ class MAC:
         )
 
         primary_ctx = [
-            channel_key/len(CHANNEL_MAP), # normalized in range [0, 1]
-            primary_key/len(PRIMARY_CHANNEL_MAP), # normalized in range [0, 1]
-            *normalized_contenders, # normalized in range [0, 1]
-            *busy_flags_per_channel, # already in range [0, 1]
+            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
+            primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
+            *normalized_contenders,  # normalized in range [0, 1]
+            *busy_flags_per_channel,  # already in range [0, 1]
         ]
-        primary_action = self.rl_controller.decide_primary(np.array(primary_ctx), current_channel)
+        primary_action = self.rl_controller.decide_primary(
+            np.array(primary_ctx), current_channel
+        )
 
         self.node.phy_layer.set_sensing_channels(PRIMARY_CHANNEL_MAP[primary_action])
 
@@ -903,7 +947,10 @@ class MAC:
         current_channel = self.node.phy_layer.channels_ids
         current_primary = self.node.phy_layer.sensing_channels_ids
         contenders_per_channel = self.node.phy_layer.get_contender_count()
-        normalized_contenders = [c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0 for c in contenders_per_channel]
+        normalized_contenders = [
+            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
+            for c in contenders_per_channel
+        ]
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
@@ -915,12 +962,14 @@ class MAC:
         )
 
         cw_ctx = [
-            channel_key/len(CHANNEL_MAP), # normalized in range [0, 1]
-            primary_key/len(PRIMARY_CHANNEL_MAP), # normalized in range [0, 1]
-            self.cw_current/len(self.sparams.CW_OPTIONS), # normalized in range [0, 1]
-            *normalized_contenders, # normalized in range [0, 1]
-            *busy_flags_per_channel, # already in range [0, 1]
-            queue_size/self.sparams.MAX_TX_QUEUE_SIZE_pkts, # normalized in range [0, 1]
+            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
+            primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
+            self.cw_current
+            / len(self.sparams.CW_OPTIONS),  # normalized in range [0, 1]
+            *normalized_contenders,  # normalized in range [0, 1]
+            *busy_flags_per_channel,  # already in range [0, 1]
+            queue_size
+            / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
         cw_action = self.rl_controller.decide_cw(np.array(cw_ctx))
 
@@ -934,30 +983,52 @@ class MAC:
             f"{self.node.type} {self.node.id} -> CW agent selected action {cw_action} ({CW_MAP[cw_action]}), CW size changed to {self.cw_current}"
         )
 
+    def _log_to_wandb_delays(self, delay_components: dict):
+        if wandb.run:
+            wandb.log(
+                {
+                    f"node_{self.node.id}/delay/sensing": delay_components[
+                        "sensing_delay"
+                    ],
+                    f"node_{self.node.id}/delay/backoff": delay_components[
+                        "backoff_delay"
+                    ],
+                    f"node_{self.node.id}/delay/tx": delay_components["tx_delay"],
+                    f"node_{self.node.id}/delay/residual": delay_components[
+                        "residual_delay"
+                    ],
+                    f"node_{self.node.id}/delay/total": sum(delay_components.values()),
+                    "env_time_us": self.env.now,
+                }
+            )
+
     def _update_rl_agents(self, sent_mpdus: list[MPDU]):
         self.tx_counter += 1
+
+        sensing_delays = [mpdu.sensing_delay_us for mpdu in sent_mpdus]
+        backoff_delays = [mpdu.backoff_delay_us for mpdu in sent_mpdus]
+        tx_delays = [mpdu.tx_delay_us for mpdu in sent_mpdus]
+
+        total_delays = [
+            mpdu.back_reception_time_us - mpdu.creation_time_us for mpdu in sent_mpdus
+        ]
+
+        residual_delays = (
+            np.array(total_delays)
+            - np.array(sensing_delays)
+            - np.array(backoff_delays)
+            - np.array(tx_delays)
+        )
+        delay_components = {
+            "sensing_delay": np.mean(sensing_delays),
+            "backoff_delay": np.mean(backoff_delays),
+            "tx_delay": np.mean(tx_delays),
+            "residual_delay": np.mean(residual_delays),
+        }
+
+        self._log_to_wandb_delays(delay_components)
+
         if self.rl_driven:
-            sensing_delays = [mpdu.sensing_delay_us for mpdu in sent_mpdus]
-            backoff_delays = [mpdu.backoff_delay_us for mpdu in sent_mpdus]
-            tx_delays = [mpdu.tx_delay_us for mpdu in sent_mpdus]
-
-            total_delays = [
-                mpdu.back_reception_time_us - mpdu.creation_time_us
-                for mpdu in sent_mpdus
-            ]
-
-            residual_delays = (
-                np.array(total_delays)
-                - np.array(sensing_delays)
-                - np.array(backoff_delays)
-                - np.array(tx_delays)
-            )
-            delay_components = {
-                "sensing_delay": np.mean(sensing_delays),
-                "backoff_delay": np.mean(backoff_delays),
-                "tx_delay": np.mean(tx_delays),
-                "residual_delay": np.mean(residual_delays),
-            }
             self.rl_controller.update_agents(delay_components)
 
     def run(self):
