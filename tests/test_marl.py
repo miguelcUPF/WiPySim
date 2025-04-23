@@ -77,7 +77,7 @@ cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 cfg.BSSs_Advanced = [
     {
         "id": 1,  # A BSS
-        "ap": {"id": 1, "pos": (0, 0, 0), "rl_driven": False},
+        "ap": {"id": 1, "pos": (0, 0, 0), "rl_driven": True},
         "stas": [{"id": 2, "pos": (3, 4, 0)}],
         "traffic_flows": [
             {

@@ -183,6 +183,11 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 logger.critical(
                     f"Invalid {name}: '{val}'. Must be a dictionary with keys 'sensing_delay', 'backoff_delay', 'tx_delay', 'residual_delay'."
                 )
+        cfg.AGENTS_SETTINGS.update({
+                'channel_weights': cfg.CHANNEL_AGENT_WEIGHTS,
+                'primary_weights': cfg.PRIMARY_AGENT_WEIGHTS,
+                'cw_weights': cfg.CW_AGENT_WEIGHTS
+            })
 
     if cfg.ENABLE_RL:
         if not isinstance(cfg.AGENTS_SETTINGS, dict):
