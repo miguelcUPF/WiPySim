@@ -45,7 +45,7 @@ cfg.BSSs_Advanced = [
     {
         "id": 1,  # A BSS
         "ap": {"id": 1, "pos": (0, 0, 0), "channels": [1, 2], "primary_channel": 1},
-        "stas": [{"id": 2, "pos": (3, 4, 0)}],
+        "stas": [{"id": 2, "pos": (2, 1, 0)}],
         "traffic_flows": [
             {
                 "destination": 2,
@@ -55,7 +55,7 @@ cfg.BSSs_Advanced = [
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 3, "pos": (5, 5, 1), "channels": [1], "primary_channel": 1},
+        "ap": {"id": 3, "pos": (1, 3, 1), "channels": [1], "primary_channel": 1},
         "stas": [{"id": 4, "pos": (1, 2, 1)}],
         "traffic_flows": [
             {
@@ -96,7 +96,7 @@ if __name__ == "__main__":
 
     for ap in network.get_aps():
         logger.info(
-            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}, Channels: [{', '.join(map(str, ap.phy_layer.channels_ids))}], Sensing Channels: {', '.join(map(str, ap.phy_layer.sensing_channels_ids))}"
+            f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}, Channels: [{', '.join(map(str, ap.phy_layer.channels_ids))}], Sensing Channels: {', '.join(map(str, ap.phy_layer.sensing_channels_ids))}, MCS: {ap.phy_layer.mcs_indexes}"
         )
 
     for node_id, stats in network.stats.per_node_stats.items():
