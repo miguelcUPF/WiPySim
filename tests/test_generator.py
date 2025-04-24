@@ -21,6 +21,7 @@ import simpy
 
 cfg.SIMULATION_TIME_us = 2e6
 cfg.SEED = 1
+cfg.USE_WANDB = False
 
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True

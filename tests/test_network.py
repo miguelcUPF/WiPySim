@@ -16,6 +16,7 @@ from src.utils.messages import (
 import simpy
 import matplotlib.pyplot as plt
 
+cfg.USE_WANDB = False
 
 cfg.ENABLE_CONSOLE_LOGGING = True
 cfg.USE_COLORS_IN_LOGS = True

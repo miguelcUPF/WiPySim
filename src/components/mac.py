@@ -625,7 +625,7 @@ class MAC:
         self.tx_ampdu = None
         self.retries = 0
 
-        self._update_rl_agents(sent_mpdus)
+        self._update_rl_agents(sent_mpdus) # sent_mpdus thus regardless of corruption
 
     def wait_for_back(self):
         self.set_state(MACState.RX)
@@ -636,7 +636,6 @@ class MAC:
 
         yield self.env.timeout(BACK_TIMEOUT_us) | self.back_event
 
-        # HERE
         for mpdu in self.tx_ampdu.mpdus:
             mpdu.tx_delay_us = self.env.now - self.tx_start_time_us
 
