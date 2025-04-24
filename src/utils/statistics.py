@@ -305,6 +305,11 @@ class NetworkStats:
                         if self.network.env.now > 0
                         else 0
                     ),
+                    "app_effective_throughput_Mbits_per_sec": (
+                        rx_stats.rx_app_bytes * 8 / 1e6 / (self.network.env.now / 1e6)
+                        if self.network.env.now > 0
+                        else 0
+                    ),
                 },
                 "states": {
                     "idle_time_us": mac_state_stats.mac_states_history[
@@ -490,6 +495,9 @@ class NetworkStats:
             print(
                 f"    {prefix}RX Rate (pkts/s): {stats['rx']['rx_rate_pkts_per_sec']:.2f}, "
                 f"RX Rate (Mbps): {stats['rx']['rx_rate_Mbits_per_sec']:.2f}"
+            )
+            print(
+                 f"    {prefix}Rx Effective Throughput (Mbps): {stats['rx']['app_effective_throughput_Mbits_per_sec']:.2f}"
             )
             print(
                 f"    {prefix}Airtime: {stats['states']['tx_time_us'] + stats['states']['rx_time_us']} µs"

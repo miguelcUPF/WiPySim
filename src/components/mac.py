@@ -75,6 +75,7 @@ class MAC:
         self.tx_queue: simpy.Store[MPDU] = simpy.Store(
             env, capacity=self.sparams.MAX_TX_QUEUE_SIZE_pkts
         )
+        self.non_full_event = None
 
         self.ampdu_counter = 0
 
@@ -675,24 +676,24 @@ class MAC:
 
     def _log_to_wandb_rx(self, ampdu: AMPDU):
         if wandb.run:
-            total_bits_rx = sum(mpdu.size_bytes * 8 for mpdu in ampdu.mpdus)
-            total_bits_success = sum(
-                mpdu.size_bytes * 8 for mpdu in ampdu.mpdus if not mpdu.is_corrupted
+            total_app_bits_rx = sum(mpdu.packet.size_bytes * 8 for mpdu in ampdu.mpdus)
+            total_app_bits_success = sum(
+                mpdu.packet.size_bytes * 8 for mpdu in ampdu.mpdus if not mpdu.is_corrupted
             )
             duration_sec = (
                 self.env.now - self.prev_rx_time_us
             ) / 1e6  # microseconds to seconds
-            throughput_mbps = (
-                (total_bits_rx / duration_sec) / 1e6 if duration_sec != 0 else 0
+            app_throughput_mbps = (
+                (total_app_bits_rx / duration_sec) / 1e6 if duration_sec != 0 else 0
             )
-            effective_throughput_mbps = (
-                (total_bits_success / duration_sec) / 1e6 if duration_sec != 0 else 0
+            app_effective_throughput_mbps = (
+                (total_app_bits_success / duration_sec) / 1e6 if duration_sec != 0 else 0
             )
 
             wandb.log(
                 {
-                    f"node_{self.node.id}/rx_stats/throughput_mbps": throughput_mbps,
-                    f"node_{self.node.id}/rx_stats/effective_throughput_mbps": effective_throughput_mbps,
+                    f"node_{self.node.id}/rx_stats/app_throughput_mbps": app_throughput_mbps,
+                    f"node_{self.node.id}/rx_stats/app_effective_throughput_mbps": app_effective_throughput_mbps,
                     "env_time_us": self.env.now,
                 }
             )
@@ -1033,6 +1034,8 @@ class MAC:
     def run(self):
         """Handles channel access, contention, and transmission"""
         while True:
+            if self.non_full_event is not None and not len(self.tx_queue.items) == self.sparams.MAX_TX_QUEUE_SIZE_pkts:
+                self.non_full_event.succeed() if not self.non_full_event.triggered else None
             if self.tx_queue.items:
                 if self.rl_driven and self.backoff_slots == 0:
                     ch_freq = self.rl_settings.get("channel_frequency", 1)

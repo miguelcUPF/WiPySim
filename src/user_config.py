@@ -9,7 +9,9 @@ class UserConfig:
         False  # Enable/disable RL-driven agents (NUM_CHANNELS in sim_params must be 4)
     )
     RL_MODE = 1  # 0: SARL or 1: MARL # TODO SARL
-    USE_WANDB = True  # Enable/disable Weights & Biases logging or hyperparameter optimization
+    USE_WANDB = (
+        True  # Enable/disable Weights & Biases logging or hyperparameter optimization
+    )
     WANDB_PROJECT_NAME = "marl-802.11"
     WANDB_RUN_NAME = "main_run"
 
@@ -123,8 +125,10 @@ class UserConfig:
     # - The agents are considered non-RL-driven.
 
     NUMBER_OF_BSSS = 1  # Number of Basic Service Sets (BSSs)
-    TRAFFIC_MODEL = "Poisson"  # "Poisson", "Bursty", or "VR"
-    TRAFFIC_LOAD_kbps = 100e3  # Traffic load in kbps
+    TRAFFIC_MODEL = "Poisson"  # "Poisson", "Bursty", "VR", or "Full"
+    TRAFFIC_LOAD_kbps = (
+        100e3  # Traffic load in kbps (only for "Poisson", "Bursty", and "VR")
+    )
 
     ## --- Network Configuration (Advanced) --- ##
     # If ENABLE_ADVANCED_NETWORK_CONFIG is set to True, the user can fine-tune:
@@ -145,7 +149,7 @@ class UserConfig:
     # - "ap": The Access Point (AP) of the BSS.
     #   - "id": Unique AP ID (int).
     #   - "pos" (optional): Tuple (x, y, z) specifying the AP’s coordinates in meters. If not specified, the AP is placed at random within the network bounds.
-    #   - "channel" (optional): List of 20 MHz channels (e.g., [1, 2, 3, 4]) defining the AP’s operating bandwidth. If not specified, it is randomly selected at runtime.
+    #   - "channels" (optional): List of 20 MHz channels (e.g., [1, 2, 3, 4]) defining the AP’s operating bandwidth. If not specified, it is randomly selected at runtime.
     #   - "primary_channel" (optional): Primary 20 MHz channel used for contention and control frames. Must be one of the channels in "channel". If not specified, it is randomly selected at runtime.
     #   - "rl_driven" (optional): Whether the AP is RL-driven. If not specified, it is considered non-RL-driven.
     # - "stas": List of associated Stations (STAs).
@@ -158,15 +162,14 @@ class UserConfig:
     #       - "start_time_us" (optional): When to start loading the file (int, microseconds). Defaults to 0.
     #       - "end_time_us" (optional): When to stop loading the file (int, microseconds). Defaults to full duration.
     #   - "model": (Optional) Generates traffic using a traffic model.
-    #       - "name": Traffic model name. Options: "Poisson", "Bursty", "VR".
+    #       - "name": Traffic model name. Options: "Poisson", "Bursty", "VR", or "Full".
     #       - "start_time_us" (optional): When to start generating traffic (int, microseconds). Defaults to 0.
     #       - "end_time_us" (optional): When to stop generating traffic (int, microseconds). Defaults to full duration.
-    #       - "traffic_load_kbps" (optional): Traffic load (int, in kbps). Defaults to 100e3.
+    #       - "traffic_load_kbps" (optional, only for "Poisson", "Bursty", and "VR"): Traffic load (int, in kbps). Defaults to 100e3.
     #       - "max_packet_size_bytes" (optional): Maximum packet size (int, bytes). Defaults to 1280.
-    #       - "burst_size_pkts" (optional, Bursty model only): Number of packets per burst (int). Defaults to 20.
-    #       - "avg_inter_packet_time_us" (optional, Bursty and VR models only): Average inter-packet time (int, microseconds). Defaults to 6.
-    #       - "fps" (optional, VR model only): Frame rate (int, frames per second). Defaults to 90 fps.
-
+    #       - "burst_size_pkts" (optional, only for "Bursty"): Number of packets per burst (int). Defaults to 20.
+    #       - "avg_inter_packet_time_us" (optional, only for "Bursty" and "VR"): Average inter-packet time (int, microseconds). Defaults to 6.
+    #       - "fps" (optional, only for "VR"): Frame rate (int, frames per second). Defaults to 90 fps.
     BSSs_Advanced = [
         {
             "id": 1,  # A BSS

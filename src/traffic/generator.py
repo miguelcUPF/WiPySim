@@ -56,7 +56,13 @@ class TrafficGenerator:
         self.packet_id = 0
 
         self.name = "GEN"
-        self.logger = get_logger(self.name, cfg, sparams, self.env, True if node.id in self.cfg.EXCLUDED_IDS else False)
+        self.logger = get_logger(
+            self.name,
+            cfg,
+            sparams,
+            self.env,
+            True if node.id in self.cfg.EXCLUDED_IDS else False,
+        )
 
         self.active_processes = []
 
@@ -90,6 +96,8 @@ class TrafficGenerator:
                 p = self.env.process(self.generate_bursty_traffic())
             case "VR":
                 p = self.env.process(self.generate_vr_traffic())
+            case "Full":
+                p = self.env.process(self.generate_full_traffic())
             case _:
                 self.logger.error(
                     f"{self.node.type} {self.src_id} -> Invalid traffic model specified (from node {self.src_id} to node {self.dst_id}): {self.traffic_model}"
@@ -178,6 +186,20 @@ class TrafficGenerator:
 
             if remainder_bytes > 0:
                 self._create_and_send_packet(remainder_bytes)
+        except simpy.Interrupt:
+            pass
+
+    def generate_full_traffic(self):
+        try:
+            while True:
+                for _ in range(
+                    self.node.mac_layer.sparams.MAX_TX_QUEUE_SIZE_pkts
+                    - len(self.node.mac_layer.tx_queue.items)
+                ):
+                    self._create_and_send_packet(self.max_packet_size_bytes)
+                event = self.env.event()
+                self.node.mac_layer.non_full_event = event
+                yield event
         except simpy.Interrupt:
             pass
 

@@ -21,7 +21,7 @@ sparams.MPDU_ERROR_PROBABILITY = 0.1
 sparams.CW_MIN = 4
 sparams.CW_MAX = 2**0 * sparams.CW_MIN
 
-sparams.BONDING_MODE = 0  # Test: 0 and 1
+sparams.BONDING_MODE = 1  # Test: 0 and 1
 
 sparams.NUM_CHANNELS = 2
 
@@ -40,13 +40,42 @@ cfg.EXCLUDED_IDS = []
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
-cfg.NUMBER_OF_BSSS = 3
-cfg.TRAFFIC_MODEL = "Poisson"
-cfg.TRAFFIC_LOAD_kbps = 100e3
-
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
-
+cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
+cfg.BSSs_Advanced = [
+    {
+        "id": 1,  # A BSS
+        "ap": {"id": 1, "pos": (0, 0, 0), "channels": [1, 2], "primary_channel": 1},
+        "stas": [{"id": 2, "pos": (3, 4, 0)}],
+        "traffic_flows": [
+            {
+                "destination": 2,
+                "model": {"name": "Full"},
+            },
+        ],
+    },
+    {
+        "id": 2,  # Another BSS
+        "ap": {"id": 3, "pos": (5, 5, 1), "channels": [1], "primary_channel": 1},
+        "stas": [{"id": 4, "pos": (1, 2, 1)}],
+        "traffic_flows": [
+            {
+                "destination": 4,
+                "model": {"name": "Full"},
+            }
+        ],
+    },
+    {
+        "id": 3,  # Another BSS
+        "ap": {"id": 5, "pos": (2, 3, 1), "channels": [2], "primary_channel": 2},
+        "stas": [{"id": 6, "pos": (1, 0, 1)}],
+        "traffic_flows": [
+            {
+                "destination": 6,
+                "model": {"name": "Full"},
+            }
+        ],
+    },
+]
 
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
@@ -63,10 +92,22 @@ if __name__ == "__main__":
 
     env.run(until=cfg.SIMULATION_TIME_us)
 
+    network.stats.collect_stats()
+
     for ap in network.get_aps():
         logger.info(
             f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}, Channels: [{', '.join(map(str, ap.phy_layer.channels_ids))}], Sensing Channels: {', '.join(map(str, ap.phy_layer.sensing_channels_ids))}"
         )
+
+    for node_id, stats in network.stats.per_node_stats.items():
+        if node_id in [ap.id for ap in network.get_aps()]:
+            logger.info(
+                f"AP {node_id} -> Tx Rate (Mbps): {stats['tx']['tx_rate_Mbits_per_sec']:.6f}"
+            )
+        if node_id in [sta.id for sta in network.get_stas()]:
+            logger.info(
+                f"STA {node_id} -> RX Rate (Mbps): {stats['rx']['rx_rate_Mbits_per_sec']:.6f}, Rx Effective Throughput (Mbps): {stats['rx']['app_effective_throughput_Mbits_per_sec']:.6f}"
+            )
 
     print(SIMULATION_TERMINATED_MSG)
     print(TEST_COMPLETED_MSG)

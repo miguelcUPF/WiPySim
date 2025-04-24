@@ -229,11 +229,17 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 logger.critical(
                     f"Channel frequency must be set when primary frequency is set."
                 )
-            if cfg.AGENTS_SETTINGS.get("primary_frequency", None) > cfg.AGENTS_SETTINGS.get("channel_frequency", None):
+            if cfg.AGENTS_SETTINGS.get(
+                "primary_frequency", None
+            ) > cfg.AGENTS_SETTINGS.get("channel_frequency", None):
                 logger.critical(
                     f"Primary frequency must be less than or equal to channel frequency."
                 )
-            if cfg.AGENTS_SETTINGS.get("channel_frequency", None) % cfg.AGENTS_SETTINGS.get("primary_frequency", None) != 0:
+            if (
+                cfg.AGENTS_SETTINGS.get("channel_frequency", None)
+                % cfg.AGENTS_SETTINGS.get("primary_frequency", None)
+                != 0
+            ):
                 logger.critical(
                     f"Channel frequency must be a multiple of primary frequency."
                 )
@@ -404,9 +410,9 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             logger.critical(
                 f"Invalid TRAFFIC_MODEL: {cfg.TRAFFIC_MODEL}. It must be a string."
             )
-        if cfg.TRAFFIC_MODEL not in ["Poisson", "Bursty", "VR"]:
+        if cfg.TRAFFIC_MODEL not in ["Poisson", "Bursty", "VR", "Full"]:
             logger.critical(
-                f"Invalid TRAFFIC_MODEL: {cfg.TRAFFIC_MODEL}. It must be 'Poisson', 'Bursty' or 'VR'."
+                f"Invalid TRAFFIC_MODEL: {cfg.TRAFFIC_MODEL}. It must be 'Poisson', 'Bursty', 'VR', or 'Full'."
             )
         if not isinstance(cfg.TRAFFIC_LOAD_kbps, (int, float)):
             logger.critical(
@@ -489,7 +495,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     logger.critical(
                         f"AP {ap_id} in BSS {bss['id']} has an invalid number of channels: {channels_bw}. The simulator supports bonds of 20, 40, 80, and 160; thus, up to 8 channels."
                     )
-                if channels not in VALID_BONDS[channels_bw]:
+                if set(channels) not in VALID_BONDS[channels_bw]:
                     logger.critical(
                         f"AP {ap_id} in BSS {bss['id']} has an invalid set of channels: {channels}. Valid bonds considering a bond of {channels_bw} MHz are: {VALID_BONDS[channels_bw]}."
                     )
@@ -575,7 +581,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     f"BSS {bss['id']} must have at least a traffic flow using either 'model' or 'file'."
                 )
 
-            valid_models = ["Poisson", "Bursty", "VR"]
+            valid_models = ["Poisson", "Bursty", "VR", "Full"]
             for traffic_flow in bss["traffic_flows"]:
                 sta_ids = {sta["id"] for sta in bss["stas"]}
                 if "destination" not in traffic_flow:
