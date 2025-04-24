@@ -108,11 +108,19 @@ class TrafficGenerator:
     def generate_poisson_traffic(self):
         """Generates Poisson traffic"""
         avg_inter_pkt_time_us = (
-            (self.max_packet_size_bytes * 8) / (self.traffic_load_kbps * 1000) * 1e6
+            ((self.max_packet_size_bytes * 8) / (self.traffic_load_kbps * 1000) * 1e6)
+            if self.traffic_load_kbps > 0
+            else None
         )
+        if avg_inter_pkt_time_us is None:
+            return
         try:
             while True:
-                inter_arrival_time_us = random.expovariate(1 / avg_inter_pkt_time_us)
+                inter_arrival_time_us = (
+                    random.expovariate(1 / avg_inter_pkt_time_us)
+                    if avg_inter_pkt_time_us > 0
+                    else 1
+                )
                 yield self.env.timeout(int(math.ceil(inter_arrival_time_us)))
                 self._create_and_send_packet(self.max_packet_size_bytes)
         except simpy.Interrupt:
@@ -121,14 +129,24 @@ class TrafficGenerator:
     def generate_bursty_traffic(self):
         """Generates bursts of packets"""
         avg_inter_burst_time_us = (
-            self.burst_size_pkts
-            * (self.max_packet_size_bytes * 8)
-            / (self.traffic_load_kbps * 1000)
-            * 1e6
+            (
+                self.burst_size_pkts
+                * (self.max_packet_size_bytes * 8)
+                / (self.traffic_load_kbps * 1000)
+                * 1e6
+            )
+            if self.traffic_load_kbps > 0
+            else None
         )
+        if avg_inter_burst_time_us is None:
+            return
         try:
             while True:
-                inter_burst_time_us = random.expovariate(1 / avg_inter_burst_time_us)
+                inter_burst_time_us = (
+                    random.expovariate(1 / avg_inter_burst_time_us)
+                    if avg_inter_burst_time_us > 0
+                    else 1
+                )
                 yield self.env.timeout(int(math.ceil(inter_burst_time_us)))
 
                 self.env.process(self.send_burst(avg_inter_burst_time_us))
@@ -141,8 +159,16 @@ class TrafficGenerator:
                 self._create_and_send_packet(self.max_packet_size_bytes)
 
                 inter_pkt_time_us = min(
-                    random.expovariate(1 / self.avg_inter_packet_time_us),
-                    avg_inter_burst_time_us / self.burst_size_pkts,
+                    (
+                        random.expovariate(1 / self.avg_inter_packet_time_us)
+                        if self.avg_inter_packet_time_us > 0
+                        else 1
+                    ),
+                    (
+                        avg_inter_burst_time_us / self.burst_size_pkts
+                        if self.burst_size_pkts > 0
+                        else 1
+                    ),
                 )
 
                 yield self.env.timeout(int(math.ceil(inter_pkt_time_us)))
@@ -153,8 +179,10 @@ class TrafficGenerator:
         """Generates VR traffic bursts every 1/FPS"""
         avg_inter_frame_time_us = 1 / self.fps * 1e6
         bits_per_frame = (self.traffic_load_kbps * 1000) / self.fps
-        packets_per_frame = math.floor(
-            bits_per_frame / (self.max_packet_size_bytes * 8)
+        packets_per_frame = (
+            math.floor(bits_per_frame / (self.max_packet_size_bytes * 8))
+            if self.max_packet_size_bytes > 0
+            else 0
         )
         remainder_bytes = bits_per_frame % (self.max_packet_size_bytes * 8) // 8
 
@@ -178,8 +206,16 @@ class TrafficGenerator:
                 self._create_and_send_packet(self.max_packet_size_bytes)
 
                 inter_pkt_time_us = min(
-                    random.expovariate(1 / self.avg_inter_packet_time_us),
-                    remaining_frame_time_us / (packets_per_frame - i),
+                    (
+                        random.expovariate(1 / self.avg_inter_packet_time_us)
+                        if self.avg_inter_packet_time_us > 0
+                        else 1
+                    ),
+                    (
+                        remaining_frame_time_us / (packets_per_frame - i)
+                        if packets_per_frame - i > 0
+                        else 1
+                    ),
                 )
                 yield self.env.timeout(int(math.ceil(inter_pkt_time_us)))
                 remaining_frame_time_us -= inter_pkt_time_us
