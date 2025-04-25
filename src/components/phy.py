@@ -14,7 +14,15 @@ import simpy
 
 
 class PHY:
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, node: Node, channels: set, sensing_channels: set):
+    def __init__(
+        self,
+        cfg: cfg,
+        sparams: sparams,
+        env: simpy.Environment,
+        node: Node,
+        channels: set,
+        sensing_channels: set,
+    ):
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
@@ -35,7 +43,13 @@ class PHY:
         self.mcs_indexes = {}
 
         self.name = "PHY"
-        self.logger = get_logger(self.name, cfg, sparams, env, True if node.id in self.cfg.EXCLUDED_IDS else False)
+        self.logger = get_logger(
+            self.name,
+            cfg,
+            sparams,
+            env,
+            True if node.id in self.cfg.EXCLUDED_IDS else False,
+        )
 
         self.idle_events = {}
         self.busy_events = {}
@@ -63,6 +77,8 @@ class PHY:
         self.reset_events()
         self.node.medium.assign_channels(self.node, channels_ids)
 
+        self.broadcast_channel_info()
+
         self.set_transmitting_channels(channels_ids)
 
     def set_sensing_channels(self, channels_ids: set[int]):
@@ -71,6 +87,8 @@ class PHY:
         self.node.medium.remove_sensing_channels(self.node, self.sensing_channels_ids)
 
         self.sensing_channels_ids = channels_ids
+
+        self.broadcast_channel_info()
 
         self.reset_col_tx_events_for_sensing_channels()
         self.node.medium.add_sensing_channels(self.node, self.sensing_channels_ids)
@@ -120,7 +138,7 @@ class PHY:
 
     def get_ampdu_collision_event(self, ch_id: int):
         return self.ampdu_collision_events[ch_id]
-    
+
     def get_successful_tx_event(self, ch_id: int):
         return self.successful_tx_events[ch_id]
 
@@ -152,10 +170,10 @@ class PHY:
 
     def get_valid_bonds(self):
         return self.node.medium.get_valid_bonds()
-    
+
     def get_contender_count(self):
         return self.node.medium.get_contender_count()
-    
+
     def get_busy_flags(self):
         return self.node.medium.get_busy_flags()
 
@@ -197,16 +215,14 @@ class PHY:
                 f"{self.node.type} {self.node.id} -> Selecting MCS indexs for STA {sta.id}..."
             )
             self.select_mcs_index(sta.id)
-    
+
     def select_sta_mcs_index(self):
         if not isinstance(self.node, STA):
             return
 
         sta = cast(STA, self.node)
 
-        self.logger.debug(
-            f"{self.node.type} {self.node.id} -> Selecting MCS index..."
-        )
+        self.logger.debug(f"{self.node.type} {self.node.id} -> Selecting MCS index...")
 
         self.select_mcs_index(sta.ap.id)
 
@@ -349,7 +365,11 @@ class PHY:
     def successful_transmission_detected(self, ch_id: int):
         self.reset_rts_collision_event(ch_id)
         self.reset_ampdu_collision_event(ch_id)
-        self.successful_tx_events[ch_id].succeed() if not self.successful_tx_events[ch_id].triggered else None
+        (
+            self.successful_tx_events[ch_id].succeed()
+            if not self.successful_tx_events[ch_id].triggered
+            else None
+        )
 
     def receive(self, ppdu: PPDU):
         self.logger.info(

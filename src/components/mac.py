@@ -626,7 +626,7 @@ class MAC:
         self.tx_ampdu = None
         self.retries = 0
 
-        self._update_rl_agents(sent_mpdus) # sent_mpdus thus regardless of corruption
+        self._update_rl_agents(sent_mpdus)  # sent_mpdus thus regardless of corruption
 
     def wait_for_back(self):
         self.set_state(MACState.RX)
@@ -678,7 +678,9 @@ class MAC:
         if wandb.run:
             total_app_bits_rx = sum(mpdu.packet.size_bytes * 8 for mpdu in ampdu.mpdus)
             total_app_bits_success = sum(
-                mpdu.packet.size_bytes * 8 for mpdu in ampdu.mpdus if not mpdu.is_corrupted
+                mpdu.packet.size_bytes * 8
+                for mpdu in ampdu.mpdus
+                if not mpdu.is_corrupted
             )
             duration_sec = (
                 self.env.now - self.prev_rx_time_us
@@ -687,7 +689,9 @@ class MAC:
                 (total_app_bits_rx / duration_sec) / 1e6 if duration_sec != 0 else 0
             )
             app_effective_throughput_mbps = (
-                (total_app_bits_success / duration_sec) / 1e6 if duration_sec != 0 else 0
+                (total_app_bits_success / duration_sec) / 1e6
+                if duration_sec != 0
+                else 0
             )
 
             wandb.log(
@@ -883,7 +887,14 @@ class MAC:
 
     def _run_channel_agent(self):
         current_channel = self.node.phy_layer.channels_ids
-        contenders_per_channel = self.node.phy_layer.get_contender_count()
+        contenders_per_channel = [
+            (
+                c
+                if i + 1 not in current_channel
+                else c - 1 - len(self.node.associated_stas)
+            )
+            for i, c in enumerate(self.node.phy_layer.get_contender_count())
+        ]  # do not count itself nor associated STAs as contenders
         normalized_contenders = [
             c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
             for c in contenders_per_channel
@@ -913,7 +924,14 @@ class MAC:
     def _run_primary_agent(self):
         current_channel = self.node.phy_layer.channels_ids
         current_primary = self.node.phy_layer.sensing_channels_ids
-        contenders_per_channel = self.node.phy_layer.get_contender_count()
+        contenders_per_channel = [
+            (
+                c
+                if i + 1 not in current_channel
+                else c - 1 - len(self.node.associated_stas)
+            )
+            for i, c in enumerate(self.node.phy_layer.get_contender_count())
+        ]  # do not count itself nor associated STAs as contenders
         normalized_contenders = [
             c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
             for c in contenders_per_channel
@@ -946,7 +964,14 @@ class MAC:
     def _run_cw_agent(self):
         current_channel = self.node.phy_layer.channels_ids
         current_primary = self.node.phy_layer.sensing_channels_ids
-        contenders_per_channel = self.node.phy_layer.get_contender_count()
+        contenders_per_channel = [
+            (
+                c
+                if i + 1 not in current_channel
+                else c - 1 - len(self.node.associated_stas)
+            )
+            for i, c in enumerate(self.node.phy_layer.get_contender_count())
+        ]  # do not count itself nor associated STAs as contenders
         normalized_contenders = [
             c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
             for c in contenders_per_channel
@@ -1034,8 +1059,15 @@ class MAC:
     def run(self):
         """Handles channel access, contention, and transmission"""
         while True:
-            if self.non_full_event is not None and not len(self.tx_queue.items) == self.sparams.MAX_TX_QUEUE_SIZE_pkts:
-                self.non_full_event.succeed() if not self.non_full_event.triggered else None
+            if (
+                self.non_full_event is not None
+                and not len(self.tx_queue.items) == self.sparams.MAX_TX_QUEUE_SIZE_pkts
+            ):
+                (
+                    self.non_full_event.succeed()
+                    if not self.non_full_event.triggered
+                    else None
+                )
             if self.tx_queue.items:
                 if self.rl_driven and self.backoff_slots == 0:
                     ch_freq = self.rl_settings.get("channel_frequency", 1)
