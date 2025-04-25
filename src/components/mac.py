@@ -16,6 +16,7 @@ import simpy
 import random
 import numpy as np
 import wandb
+import math
 
 
 BACK_TIMEOUT_us = 281
@@ -92,6 +93,7 @@ class MAC:
 
         self.last_collision_time_us = None
         self.prev_rx_time_us = self.env.now
+        self.ema_goodput_mbps = 0
 
         self.is_first_tx = True
         self.is_first_rx = True
@@ -682,22 +684,30 @@ class MAC:
                 for mpdu in ampdu.mpdus
                 if not mpdu.is_corrupted
             )
-            duration_sec = (
+            delta_t_sec  = (
                 self.env.now - self.prev_rx_time_us
             ) / 1e6  # microseconds to seconds
-            app_throughput_mbps = (
-                (total_app_bits_rx / duration_sec) / 1e6 if duration_sec != 0 else 0
+            instant_throughput_mbps = (
+                (total_app_bits_rx / delta_t_sec ) / 1e6 if delta_t_sec != 0 else 0
             )
-            app_effective_throughput_mbps = (
-                (total_app_bits_success / duration_sec) / 1e6
-                if duration_sec != 0
+            instant_goodput_mbps = (
+                (total_app_bits_success / delta_t_sec ) / 1e6
+                if delta_t_sec != 0
                 else 0
             )
 
+            # Time-weighted EMA
+            ema_tau = 0.2
+            alpha = 1 - math.exp(-delta_t_sec / ema_tau)
+            self.ema_goodput_mbps = (
+                alpha * instant_goodput_mbps + (1 - alpha) * self.ema_goodput_mbps
+                )
+
             wandb.log(
                 {
-                    f"node_{self.node.id}/rx_stats/app_throughput_mbps": app_throughput_mbps,
-                    f"node_{self.node.id}/rx_stats/app_effective_throughput_mbps": app_effective_throughput_mbps,
+                    f"node_{self.node.id}/rx_stats/instant_app_throughput_mbps": instant_throughput_mbps,
+                    f"node_{self.node.id}/rx_stats/instant_goodput_mbps": instant_goodput_mbps,
+                    f"node_{self.node.id}/rx_stats/ema_goodput_mbps": self.ema_goodput_mbps,
                     "env_time_us": self.env.now,
                 }
             )
