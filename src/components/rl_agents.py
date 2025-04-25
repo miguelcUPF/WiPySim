@@ -16,6 +16,7 @@ class LinUcbCMAB:
         name: str,
         n_actions: int,
         context_dim: int,
+        marl_controller,
         strategy: str = "linucb",
         weights_r: dict[str, float] = None,
         alpha: float = 1.0,
@@ -23,6 +24,8 @@ class LinUcbCMAB:
         self.name = name
         self.n_actions = n_actions
         self.context_dim = context_dim
+
+        self.marl_controller = marl_controller
 
         self.strategy = strategy
         self.alpha = alpha  # Confidence bound parameter for LinUCB
@@ -64,6 +67,7 @@ class EpsCMAB:
         name: str,
         n_actions: int,
         context_dim: int,
+        marl_controller,
         strategy: str = "epsilon_greedy",
         weights_r: dict[str, float] = None,
         epsilon: float = 0.1,
@@ -76,6 +80,8 @@ class EpsCMAB:
 
         self.n_actions = n_actions
         self.context_dim = context_dim
+
+        self.marl_controller = marl_controller
 
         self.strategy = strategy
 
@@ -269,9 +275,9 @@ class MARLAgentController:
                 }
             )
 
-        self.channel_agent = agent_class(**channel_params)
-        self.primary_agent = agent_class(**primary_params)
-        self.cw_agent = agent_class(**cw_params)
+        self.channel_agent = agent_class(**channel_params, marl_controller=self)
+        self.primary_agent = agent_class(**primary_params, marl_controller=self)
+        self.cw_agent = agent_class(**cw_params, marl_controller=self)
 
         self.last_channel_action = None
         self.last_primary_action = None
