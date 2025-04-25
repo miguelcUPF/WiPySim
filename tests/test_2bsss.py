@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg
+from tests._sim_params_tests import SimParams as sparams
 
 from src.utils.event_logger import get_logger
 from src.utils.support import initialize_network, validate_settings
@@ -10,40 +10,17 @@ from src.utils.messages import (
     SIMULATION_TERMINATED_MSG,
 )
 
-
 import simpy
 
-
-sparams.MAX_TX_QUEUE_SIZE_pkts = 100
-sparams.ENABLE_RTS_CTS = True
-sparams.MPDU_ERROR_PROBABILITY = 0.1
 
 sparams.CW_MIN = 4
 sparams.CW_MAX = 2**0 * sparams.CW_MIN
 
-sparams.BONDING_MODE = 0
-
 sparams.NUM_CHANNELS = 1
 
 cfg.SIMULATION_TIME_us = 2e5
-cfg.SEED = 1
-cfg.ENABLE_RL = False
-cfg.USE_WANDB = False
 
-cfg.ENABLE_CONSOLE_LOGGING = True
-cfg.USE_COLORS_IN_LOGS = True
-cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
-cfg.EXCLUDED_IDS = []
-
-cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
-
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 cfg.NUMBER_OF_BSSS = 2
-cfg.TRAFFIC_MODEL = "Poisson"
-cfg.TRAFFIC_LOAD_kbps = 100e3
-
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = False
 
 
 if __name__ == "__main__":

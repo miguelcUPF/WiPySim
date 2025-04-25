@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg
+from tests._sim_params_tests import SimParams as sparams
 
 from src.utils.event_logger import get_logger
 from src.components.network import Network, Node
@@ -16,19 +16,8 @@ from src.utils.messages import (
 import simpy
 import matplotlib.pyplot as plt
 
-cfg.USE_WANDB = False
-
-cfg.ENABLE_CONSOLE_LOGGING = True
-cfg.USE_COLORS_IN_LOGS = True
-cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {}
-cfg.EXCLUDED_IDS = []
-
 cfg.ENABLE_FIGS_DISPLAY = True
 cfg.ENABLE_FIGS_SAVING = True
-cfg.FIGS_SAVE_PATH = "figs/tests"
-
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 

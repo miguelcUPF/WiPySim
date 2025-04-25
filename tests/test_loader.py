@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg
+from tests._sim_params_tests import SimParams as sparams
 
 from src.utils.data_units import MPDU, Packet
 from src.utils.plotters import TrafficPlotter
@@ -19,22 +19,9 @@ import matplotlib.pyplot as plt
 import simpy
 
 
-cfg.SIMULATION_TIME_us = 2e6
-cfg.SEED = 1
-cfg.USE_WANDB = False
-
-cfg.ENABLE_CONSOLE_LOGGING = True
-cfg.USE_COLORS_IN_LOGS = True
-cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"LOAD": ["ALL"]}
-cfg.EXCLUDED_IDS = []
+cfg.SIMULATION_TIME_us = 2e5
 
 cfg.ENABLE_FIGS_DISPLAY = True
-cfg.ENABLE_FIGS_SAVING = False
-
-cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
-
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 

@@ -1,7 +1,7 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg
+from tests._sim_params_tests import SimParams as sparams
 
-from src.utils.data_units import MPDU, Packet
+from src.utils.data_units import Packet
 from src.utils.plotters import TrafficPlotter
 from src.utils.event_logger import get_logger
 from src.utils.support import initialize_network, validate_settings
@@ -19,24 +19,12 @@ import matplotlib.pyplot as plt
 import simpy
 
 
-cfg.SIMULATION_TIME_us = 2e6
-cfg.SEED = 1
-cfg.USE_WANDB = False
-
-cfg.ENABLE_CONSOLE_LOGGING = True
-cfg.USE_COLORS_IN_LOGS = True
-cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
-cfg.EXCLUDED_IDS = []
+cfg.SIMULATION_TIME_us = 2e5
 
 cfg.ENABLE_FIGS_DISPLAY = True
 cfg.ENABLE_FIGS_SAVING = True
-cfg.FIGS_SAVE_PATH = "figs/tests"
 
 cfg.ENABLE_TRAFFIC_GEN_RECORDING = True
-cfg.TRAFFIC_GEN_RECORDING_PATH = "tests/sim_traces"
-
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 

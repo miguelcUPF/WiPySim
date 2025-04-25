@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg
+from tests._sim_params_tests import SimParams as sparams
 
 from src.utils.event_logger import get_logger
 from src.utils.support import initialize_network, validate_settings, wandb_init
@@ -10,20 +10,11 @@ from src.utils.messages import (
     SIMULATION_TERMINATED_MSG,
 )
 
-
 import simpy
 
 
-sparams.MAX_TX_QUEUE_SIZE_pkts = 100
-sparams.ENABLE_RTS_CTS = True
-sparams.MPDU_ERROR_PROBABILITY = 0.1
-
 sparams.CW_MIN = 4
 sparams.CW_MAX = 2**0 * sparams.CW_MIN
-
-sparams.BONDING_MODE = 0
-
-sparams.NUM_CHANNELS = 4
 
 cfg.SIMULATION_TIME_us = 2e6
 cfg.SEED = 1
@@ -31,7 +22,6 @@ cfg.SEED = 1
 cfg.ENABLE_RL = True
 cfg.RL_MODE = 1
 cfg.USE_WANDB = True
-cfg.WANDB_PROJECT_NAME = "marl-802.11"
 cfg.WANDB_RUN_NAME = "test_marl"
 cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION = True  # Test: True and False
 cfg.ENABLE_REWARD_DECOMPOSITION = False  # Test: True and False
@@ -55,20 +45,14 @@ cfg.CW_AGENT_WEIGHTS = {
     "residual_delay": 0.3,
 }
 cfg.AGENTS_SETTINGS = {
-        "strategy": "linucb",
-        "channel_frequency": 8,
-        "primary_frequency": 4,
-        "cw_frequency": 1,
-        "epsilon": 0.1,
-    }
+    "strategy": "linucb",
+    "channel_frequency": 8,
+    "primary_frequency": 4,
+    "cw_frequency": 1,
+    "epsilon": 0.1,
+}
 
 cfg.ENABLE_CONSOLE_LOGGING = False
-cfg.USE_COLORS_IN_LOGS = True
-cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"GEN": ["ALL"], "MAC": ["ALL"], "PHY": ["ALL"], "CHANNEL": ["ALL"]}
-cfg.EXCLUDED_IDS = [2, 3, 4, 5, 6]
-
-cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 

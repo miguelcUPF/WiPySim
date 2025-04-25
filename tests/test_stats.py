@@ -1,7 +1,6 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg
+from tests._sim_params_tests import SimParams as sparams
 
-from src.components.network import Network
 from src.utils.event_logger import get_logger
 from src.utils.support import initialize_network, validate_settings
 from src.utils.messages import (
@@ -11,25 +10,12 @@ from src.utils.messages import (
     SIMULATION_TERMINATED_MSG,
 )
 
-
 import simpy
-
-
-sparams.MAX_TX_QUEUE_SIZE_pkts = 100
-sparams.ENABLE_RTS_CTS = True
-sparams.MPDU_ERROR_PROBABILITY = 0.1
-
-sparams.BONDING_MODE = 0
 
 sparams.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e4
-cfg.SEED = 1
-cfg.USE_WANDB = False
+cfg.SIMULATION_TIME_us = 2e5
 
-cfg.ENABLE_CONSOLE_LOGGING = True
-cfg.USE_COLORS_IN_LOGS = True
-cfg.ENABLE_LOGS_RECORDING = False
 cfg.EXCLUDED_LOGS = {
     "NETWORK": ["ALL"],
     "NODE": ["ALL"],
@@ -42,14 +28,9 @@ cfg.EXCLUDED_LOGS = {
     "CHANNEL": ["ALL"],
     "STATS": [],
 }
-cfg.EXCLUDED_IDS = []
-
-cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
 
 cfg.ENABLE_STATS_COLLECTION = True
 cfg.STATS_SAVE_PATH = "data/statistics"
-
-cfg.NETWORK_BOUNDS_m = (10, 10, 2)
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 

@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg
+from tests._sim_params_tests import SimParams as sparams
 
 from src.utils.event_logger import get_logger
 from src.utils.plotters import DelayPerLoadPlotter
@@ -21,31 +21,15 @@ import simpy
 import os
 
 sparams.MAX_TX_QUEUE_SIZE_pkts = 50
-sparams.ENABLE_RTS_CTS = True
-sparams.MPDU_ERROR_PROBABILITY = 0.1
-
-sparams.BONDING_MODE = 0
 
 sparams.NUM_CHANNELS = 1
 
 cfg.SIMULATION_TIME_us = 2e6
-cfg.SEED = 1
-cfg.ENABLE_RL = False
-cfg.USE_WANDB = False
 
 cfg.ENABLE_CONSOLE_LOGGING = False
-cfg.USE_COLORS_IN_LOGS = True
-cfg.ENABLE_LOGS_RECORDING = False
-cfg.EXCLUDED_LOGS = {"GEN": ["ALL"]}
-cfg.EXCLUDED_IDS = []
-
-cfg.ENABLE_TRAFFIC_GEN_RECORDING = False
-
-cfg.ENABLE_STATS_COLLECTION = False
 
 cfg.ENABLE_FIGS_DISPLAY = True
 cfg.ENABLE_FIGS_SAVING = True
-cfg.FIGS_SAVE_PATH = "figs/tests"
 
 cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
