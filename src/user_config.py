@@ -57,6 +57,7 @@ class UserConfig:
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - cw_frequency (optional): frequency of the cw agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
+    # - include_prev_decision: whether to include the previous action in the state. Default: False
     # - alpha (optional, only if strategy is "linucb"): confidence bound parameter for LinUCB. Default: 1
     # - epsilon (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): epsilon value for epsilon-greedy strategy. Default: 0.1
     # - decay_rate (optional, only if strategy is "decay_epsilon_greedy"): decay rate for decay epsilon-greedy strategy. Default: 0.99

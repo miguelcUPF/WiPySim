@@ -907,12 +907,12 @@ class MAC:
         )
 
         ch_ctx = [
-            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
             *normalized_contenders,  # normalized in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
+        ch_ctx.append(channel_key / len(CHANNEL_MAP)) if self.rl_settings.get("include_prev_decision", False) else None
         ch_action = self.rl_controller.decide_channel(np.array((ch_ctx)))
 
         self.node.phy_layer.set_channels(CHANNEL_MAP[ch_action])
@@ -947,10 +947,10 @@ class MAC:
 
         primary_ctx = [
             channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
-            primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
             *normalized_contenders,  # normalized in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
         ]
+        primary_ctx.append(primary_key / len(PRIMARY_CHANNEL_MAP)) if self.rl_settings.get("include_prev_decision", False) else None
         primary_action = self.rl_controller.decide_primary(
             np.array(primary_ctx), current_channel
         )
@@ -989,13 +989,12 @@ class MAC:
         cw_ctx = [
             channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
             primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
-            self.cw_current
-            / len(self.sparams.CW_OPTIONS),  # normalized in range [0, 1]
             *normalized_contenders,  # normalized in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
+        cw_ctx.append(self.cw_current / len(self.sparams.CW_OPTIONS)) if self.rl_settings.get("include_prev_decision", False) else None
         cw_action = self.rl_controller.decide_cw(np.array(cw_ctx))
 
         index = self.sparams.CW_OPTIONS.index(self.cw_current)

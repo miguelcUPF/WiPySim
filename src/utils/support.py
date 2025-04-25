@@ -252,6 +252,13 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 logger.critical(
                     f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be a positive integer."
                 )
+        if cfg.AGENTS_SETTINGS.get("include_prev_decision", None):
+            if not isinstance(
+                cfg.AGENTS_SETTINGS.get("include_prev_decision", None), (bool)
+            ):
+                logger.critical(
+                    f"Invalid include_prev_decision: '{cfg.AGENTS_SETTINGS.get('include_prev_decision', None)}'. It must be a boolean."
+                ) 
         if cfg.AGENTS_SETTINGS.get("strategy", None) in [
             "epsilon_greedy",
             "decay_epsilon_greedy",

@@ -198,10 +198,13 @@ class MARLAgentController:
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
+        padding_ctxt = 1 if settings.get("include_prev_decision", False) else 0
+
         channel_params = {
             "name": "channel_agent",
             "n_actions": 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
-            "context_dim": 10,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
+            "context_dim": 9
+            + padding_ctxt,  # 4x channel contenders + 4x channel busy flags + 1x queue size + (prev decision: current channel (mapped idx))
             "strategy": strategy,
             "weights_r": settings.get("channel_weights", {}),
         }
@@ -209,7 +212,8 @@ class MARLAgentController:
         primary_params = {
             "name": "primary_agent",
             "n_actions": 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            "context_dim": 10,  # 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
+            "context_dim": 9
+            + padding_ctxt,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + (prev decision: current primary (mapped idx))
             "strategy": strategy,
             "weights_r": settings.get("primary_weights", {}),
         }
@@ -217,7 +221,8 @@ class MARLAgentController:
         cw_params = {
             "name": "cw_agent",
             "n_actions": 3,  # 0: decrease, 1: maintain, 2: increase
-            "context_dim": 12,  # 1x current cw (mapped idx) + 1x current primary (mapped idx) + 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
+            "context_dim": 11
+            + padding_ctxt,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size + (prev decision: current cw)
             "strategy": strategy,
             "weights_r": settings.get("cw_weights", {}),
         }
@@ -344,8 +349,12 @@ class MARLAgentController:
                     f"node_{self.node.id}/reward/channel": reward["channel"],
                     f"node_{self.node.id}/reward/primary": reward["primary"],
                     f"node_{self.node.id}/reward/cw": reward["cw"],
-                    f"node_{self.node.id}/delay/sensing": delay_components["sensing_delay"],
-                    f"node_{self.node.id}/delay/backoff": delay_components["backoff_delay"],
+                    f"node_{self.node.id}/delay/sensing": delay_components[
+                        "sensing_delay"
+                    ],
+                    f"node_{self.node.id}/delay/backoff": delay_components[
+                        "backoff_delay"
+                    ],
                     f"node_{self.node.id}/delay/tx": delay_components["tx_delay"],
                     f"node_{self.node.id}/delay/residual": delay_components[
                         "residual_delay"
