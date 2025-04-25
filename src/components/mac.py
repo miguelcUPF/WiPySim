@@ -503,7 +503,7 @@ class MAC:
 
         for mpdu in self.tx_queue.items:
             mpdu = cast(MPDU, mpdu)
-            mpdu.backoff_delay_us = self.env.now - self.bo_start_time_us
+            mpdu.backoff_delay_us += self.env.now - self.bo_start_time_us
 
         self._handle_post_backoff(channels_ids)
 
@@ -640,7 +640,7 @@ class MAC:
         yield self.env.timeout(BACK_TIMEOUT_us) | self.back_event
 
         for mpdu in self.tx_ampdu.mpdus:
-            mpdu.tx_delay_us = self.env.now - self.tx_start_time_us
+            mpdu.tx_delay_us += self.env.now - self.tx_start_time_us
 
         if self.sparams.ENABLE_RTS_CTS:
             self.node.phy_layer.end_nav()
@@ -866,7 +866,7 @@ class MAC:
 
         for mpdu in self.tx_queue.items:
             mpdu = cast(MPDU, mpdu)
-            mpdu.sensing_delay_us = self.env.now - self.sensing_start_time_us
+            mpdu.sensing_delay_us += self.env.now - self.sensing_start_time_us
 
         if (
             self.rl_driven
