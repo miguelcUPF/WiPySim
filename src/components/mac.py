@@ -99,9 +99,15 @@ class MAC:
         self.is_first_rx = True
 
         self.tx_counter = 0
+
+        self.tx_attempt_time_us = None
         self.sensing_start_time_us = None
         self.bo_start_time_us = None
         self.tx_start_time_us = None
+        self.sensing_duration_us = 0
+        self.bo_duration_us = 0
+        self.tx_duration_us = 0
+
         self.cw_current = self.sparams.CW_OPTIONS[0]
 
         self.mac_state_stats = MACStateStats()
@@ -501,9 +507,7 @@ class MAC:
         if result == -1:
             return
 
-        for mpdu in self.tx_queue.items:
-            mpdu = cast(MPDU, mpdu)
-            mpdu.backoff_delay_us += self.env.now - self.bo_start_time_us
+        self.bo_duration_us += self.env.now - self.bo_start_time_us
 
         self._handle_post_backoff(channels_ids)
 
@@ -628,8 +632,6 @@ class MAC:
         self.tx_ampdu = None
         self.retries = 0
 
-        self._update_rl_agents(sent_mpdus)  # sent_mpdus thus regardless of corruption
-
     def wait_for_back(self):
         self.set_state(MACState.RX)
         self.logger.header(
@@ -639,8 +641,7 @@ class MAC:
 
         yield self.env.timeout(BACK_TIMEOUT_us) | self.back_event
 
-        for mpdu in self.tx_ampdu.mpdus:
-            mpdu.tx_delay_us += self.env.now - self.tx_start_time_us
+        self.tx_duration_us += self.env.now - self.tx_start_time_us
 
         if self.sparams.ENABLE_RTS_CTS:
             self.node.phy_layer.end_nav()
@@ -864,9 +865,7 @@ class MAC:
                 self.wait_until_any_idle(ch_duration_us, ch_waited_times)
             )
 
-        for mpdu in self.tx_queue.items:
-            mpdu = cast(MPDU, mpdu)
-            mpdu.sensing_delay_us += self.env.now - self.sensing_start_time_us
+        self.sensing_duration_us += self.env.now - self.sensing_start_time_us
 
         if (
             self.rl_driven
@@ -1036,28 +1035,23 @@ class MAC:
                 }
             )
 
-    def _update_rl_agents(self, sent_mpdus: list[MPDU]):
+    def _update_rl_agents(self):
         self.tx_counter += 1
 
-        sensing_delays = [mpdu.sensing_delay_us for mpdu in sent_mpdus]
-        backoff_delays = [mpdu.backoff_delay_us for mpdu in sent_mpdus]
-        tx_delays = [mpdu.tx_delay_us for mpdu in sent_mpdus]
+        sensing_delay = self.sensing_duration_us
+        backoff_delay = self.bo_duration_us
+        tx_delay = self.tx_duration_us
 
-        total_delays = [
-            mpdu.back_reception_time_us - mpdu.creation_time_us for mpdu in sent_mpdus
-        ]
+        total_delay = self.env.now - self.tx_attempt_time_us
+        
 
-        residual_delays = (
-            np.array(total_delays)
-            - np.array(sensing_delays)
-            - np.array(backoff_delays)
-            - np.array(tx_delays)
-        )
+        residual_delay = total_delay - sensing_delay - backoff_delay - tx_delay
+
         delay_components = {
-            "sensing_delay": np.mean(sensing_delays),
-            "backoff_delay": np.mean(backoff_delays),
-            "tx_delay": np.mean(tx_delays),
-            "residual_delay": np.mean(residual_delays),
+            "sensing_delay": sensing_delay,
+            "backoff_delay": backoff_delay,
+            "tx_delay": tx_delay,
+            "residual_delay": residual_delay,
         }
 
         self._log_to_wandb_delays(delay_components)
@@ -1078,10 +1072,17 @@ class MAC:
                     else None
                 )
             if self.tx_queue.items:
-                if self.rl_driven and self.backoff_slots == 0:
+                if self.rl_driven and self.backoff_slots == 0 and (self.retries == 0 or self.retries > self.sparams.COMMON_RETRY_LIMIT):
+                    self._update_rl_agents() if self.tx_attempt_time_us is not None else None
+                    self.tx_attempt_time_us = self.env.now
+                    self.sensing_duration_us = 0
+                    self.bo_duration_us = 0
+                    self.tx_duration_us = 0
+
                     ch_freq = self.rl_settings.get("channel_frequency", 1)
                     prim_freq = self.rl_settings.get("primary_frequency", 1)
                     cw_freq = self.rl_settings.get("cw_frequency", 1)
+
                     if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
                         if self.tx_counter % ch_freq == 0:
                             self._run_channel_agent()
@@ -1094,11 +1095,14 @@ class MAC:
                             self._run_channel_agent()
                         if self.tx_counter % prim_freq == 0:
                             self._run_primary_agent()
+
                 yield self.env.process(self._csma_ca())
+
                 if self.backoff_slots > 0 or self.backoff_slots == -1:
                     continue
 
                 self.ampdu_aggregation()
+
                 yield self.env.process(self._transmit_data())
             else:
                 self.tx_queue_event = self.env.event()

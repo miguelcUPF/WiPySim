@@ -90,12 +90,6 @@ class MPDU(DataUnit):
         self.packet: Packet = packet  # The Packet object encapsulated in this MPDU
         self.is_corrupted: bool = False  # Whether the MPDU is corrupted
 
-        self.sensing_delay_us: float = 0
-        self.backoff_delay_us: float = 0
-        self.tx_delay_us: float = 0
-
-        self.back_reception_time_us: float | None = None
-
         self.type: str = "MPDU"
 
     def __repr__(self):
