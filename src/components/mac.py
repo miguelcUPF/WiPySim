@@ -685,16 +685,14 @@ class MAC:
                 for mpdu in ampdu.mpdus
                 if not mpdu.is_corrupted
             )
-            delta_t_sec  = (
+            delta_t_sec = (
                 self.env.now - self.prev_rx_time_us
             ) / 1e6  # microseconds to seconds
             instant_throughput_mbps = (
-                (total_app_bits_rx / delta_t_sec ) / 1e6 if delta_t_sec != 0 else 0
+                (total_app_bits_rx / delta_t_sec) / 1e6 if delta_t_sec != 0 else 0
             )
             instant_goodput_mbps = (
-                (total_app_bits_success / delta_t_sec ) / 1e6
-                if delta_t_sec != 0
-                else 0
+                (total_app_bits_success / delta_t_sec) / 1e6 if delta_t_sec != 0 else 0
             )
 
             # Time-weighted EMA
@@ -702,7 +700,7 @@ class MAC:
             alpha = 1 - math.exp(-delta_t_sec / ema_tau)
             self.ema_goodput_mbps = (
                 alpha * instant_goodput_mbps + (1 - alpha) * self.ema_goodput_mbps
-                )
+            )
 
             wandb.log(
                 {
@@ -871,6 +869,7 @@ class MAC:
             self.rl_driven
             and self.backoff_slots == 0
             and self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION
+            and self.retries == 0
         ):
             cw_freq = self.rl_settings.get("cw_frequency", 1)
             if self.tx_counter % cw_freq == 0:
@@ -921,7 +920,11 @@ class MAC:
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
-        ch_ctx.append(channel_key / len(CHANNEL_MAP)) if self.rl_settings.get("include_prev_decision", False) else None
+        (
+            ch_ctx.append(channel_key / len(CHANNEL_MAP))
+            if self.rl_settings.get("include_prev_decision", False)
+            else None
+        )
         ch_action = self.rl_controller.decide_channel(np.array((ch_ctx)))
 
         self.node.phy_layer.set_channels(CHANNEL_MAP[ch_action])
@@ -959,7 +962,11 @@ class MAC:
             *normalized_contenders,  # normalized in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
         ]
-        primary_ctx.append(primary_key / len(PRIMARY_CHANNEL_MAP)) if self.rl_settings.get("include_prev_decision", False) else None
+        (
+            primary_ctx.append(primary_key / len(PRIMARY_CHANNEL_MAP))
+            if self.rl_settings.get("include_prev_decision", False)
+            else None
+        )
         primary_action = self.rl_controller.decide_primary(
             np.array(primary_ctx), current_channel
         )
@@ -1003,7 +1010,11 @@ class MAC:
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
-        cw_ctx.append(self.cw_current / len(self.sparams.CW_OPTIONS)) if self.rl_settings.get("include_prev_decision", False) else None
+        (
+            cw_ctx.append(self.cw_current / len(self.sparams.CW_OPTIONS))
+            if self.rl_settings.get("include_prev_decision", False)
+            else None
+        )
         cw_action = self.rl_controller.decide_cw(np.array(cw_ctx))
 
         index = self.sparams.CW_OPTIONS.index(self.cw_current)
@@ -1043,7 +1054,6 @@ class MAC:
         tx_delay = self.tx_duration_us
 
         total_delay = self.env.now - self.tx_attempt_time_us
-        
 
         residual_delay = total_delay - sensing_delay - backoff_delay - tx_delay
 
@@ -1072,12 +1082,24 @@ class MAC:
                     else None
                 )
             if self.tx_queue.items:
-                if self.rl_driven and self.backoff_slots == 0 and (self.retries == 0 or self.retries > self.sparams.COMMON_RETRY_LIMIT):
-                    self._update_rl_agents() if self.tx_attempt_time_us is not None else None
+                if (
+                    self.rl_driven
+                    and self.backoff_slots == 0
+                    and (
+                        self.retries == 0
+                        or self.retries > self.sparams.COMMON_RETRY_LIMIT
+                    )
+                ):
+                    (
+                        self._update_rl_agents()
+                        if self.tx_attempt_time_us is not None
+                        else None
+                    )
                     self.tx_attempt_time_us = self.env.now
                     self.sensing_duration_us = 0
                     self.bo_duration_us = 0
                     self.tx_duration_us = 0
+                    self.retries = 0
 
                     ch_freq = self.rl_settings.get("channel_frequency", 1)
                     prim_freq = self.rl_settings.get("primary_frequency", 1)
