@@ -869,7 +869,6 @@ class MAC:
             self.rl_driven
             and self.backoff_slots == 0
             and self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION
-            and self.retries == 0
         ):
             cw_freq = self.rl_settings.get("cw_frequency", 1)
             if self.tx_counter % cw_freq == 0:
@@ -1085,10 +1084,6 @@ class MAC:
                 if (
                     self.rl_driven
                     and self.backoff_slots == 0
-                    and (
-                        self.retries == 0
-                        or self.retries > self.sparams.COMMON_RETRY_LIMIT
-                    )
                 ):
                     (
                         self._update_rl_agents()
@@ -1099,7 +1094,6 @@ class MAC:
                     self.sensing_duration_us = 0
                     self.bo_duration_us = 0
                     self.tx_duration_us = 0
-                    self.retries = 0
 
                     ch_freq = self.rl_settings.get("channel_frequency", 1)
                     prim_freq = self.rl_settings.get("primary_frequency", 1)
