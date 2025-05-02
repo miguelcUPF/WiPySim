@@ -91,6 +91,8 @@ class MAC:
         self.cts_event = None
         self.back_event = None
 
+        self.cts_timedout = False
+
         self.last_collision_time_us = None
         self.prev_rx_time_us = self.env.now
         self.ema_goodput_mbps = 0
@@ -559,6 +561,7 @@ class MAC:
     def _handle_cts_timeout(self):
         self.logger.warning(f"{self.node.type} {self.node.id} -> CTS timeout...")
         self.cts_event = None
+        self.cts_timedout = True
         self.retries += 1
         self.node.tx_stats.tx_failures += 1
 
@@ -575,6 +578,7 @@ class MAC:
             return
 
         self.retries = 0
+        self.cts_timedout = False
         yield self.env.timeout(self.sparams.SIFS_us)
         yield self.env.process(self.transmit_ampdu())
 
@@ -869,6 +873,7 @@ class MAC:
             self.rl_driven
             and self.backoff_slots == 0
             and self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION
+            and not self.cts_timedout
         ):
             cw_freq = self.rl_settings.get("cw_frequency", 1)
             if self.tx_counter % cw_freq == 0:
@@ -1084,6 +1089,7 @@ class MAC:
                 if (
                     self.rl_driven
                     and self.backoff_slots == 0
+                    and not self.cts_timedout
                 ):
                     (
                         self._update_rl_agents()
