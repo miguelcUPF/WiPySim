@@ -309,20 +309,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     logger.critical(
                         f"Invalid alpha_q: '{cfg.AGENTS_SETTINGS.get('alpha_q', None)}'. It must be between 0 and 1."
                     )
-            if cfg.AGENTS_SETTINGS.get("alpha_r", None):
-                if not isinstance(
-                    cfg.AGENTS_SETTINGS.get("alpha_r", None), (float, int)
-                ):
-                    logger.critical(
-                        f"Invalid alpha_r: '{cfg.AGENTS_SETTINGS.get('alpha_r', None)}'. It must be a float or integer."
-                    )
-                if (
-                    cfg.AGENTS_SETTINGS.get("alpha_r", None) < 0
-                    or cfg.AGENTS_SETTINGS.get("alpha_r", None) > 1
-                ):
-                    logger.critical(
-                        f"Invalid alpha_r: '{cfg.AGENTS_SETTINGS.get('alpha_r', None)}'. It must be between 0 and 1."
-                    )
+        
         if cfg.AGENTS_SETTINGS.get("strategy", None) == "linucb":
             if cfg.AGENTS_SETTINGS.get("alpha", None):
                 if not isinstance(cfg.AGENTS_SETTINGS.get("alpha", None), (float, int)):
@@ -344,10 +331,6 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             if cfg.AGENTS_SETTINGS.get("alpha_q", None):
                 logger.warning(
                     f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use alpha_q."
-                )
-            if cfg.AGENTS_SETTINGS.get("alpha_r", None):
-                logger.warning(
-                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use alpha_r."
                 )
 
     str_settings = {
@@ -864,7 +847,6 @@ def wandb_init(cfg: cfg):
             "alpha": cfg.AGENTS_SETTINGS.get("alpha"),
             "epsilon": cfg.AGENTS_SETTINGS.get("epsilon"),
             "decay_rate": cfg.AGENTS_SETTINGS.get("decay_rate"),
-            "alpha_r": cfg.AGENTS_SETTINGS.get("alpha_r"),
             "alpha_q": cfg.AGENTS_SETTINGS.get("alpha_q"),
         }
 

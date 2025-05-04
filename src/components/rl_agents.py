@@ -73,7 +73,6 @@ class EpsCMAB:
         epsilon: float = 0.1,
         decay_rate: float = 0.99,
         alpha_q: float = 0.1,
-        alpha_r: float = 0.9,
     ):
 
         self.name = name
@@ -93,14 +92,6 @@ class EpsCMAB:
         self.alpha_q = (
             alpha_q  # linear gradient descent step size for weight matrix update
         )
-        self.alpha_r = (
-            alpha_r  # for exponential moving average (EMA) factor reward normalization
-        )
-
-        self.reward_mean = (
-            None  # lazy initialization: done once the first reward is observed
-        )
-        self.reward_std = None
 
         self.weights_r = weights_r or {}  # Used if decomposition enabled
 
@@ -143,29 +134,13 @@ class EpsCMAB:
         """
         Updates the weight matrix based on the observed reward and context using linear approximation.
         """
-        if self.reward_mean is None:
-            self.reward_mean = reward
-            self.reward_std = 0
-        # EMA Z-score normalization https://arxiv.org/pdf/2101.08482
-        self.reward_mean = self.alpha_r * reward + (1 - self.alpha_r) * self.reward_mean
-        self.reward_std = (
-            self.alpha_r * (reward - self.reward_mean) ** 2
-            + (1 - self.alpha_r) * self.reward_std
-        )
-
-        normalized_reward = (reward - self.reward_mean) / (
-            np.sqrt(self.reward_std) + 1e-8
-        )  # Added a small constant to avoid division by zero
-
         # Update weights using linear SGD
         pred = self.weight_matrix[action] @ context
-        error = normalized_reward - pred
+        error = reward - pred
         self.weight_matrix[action] += self.alpha_q * error * context
 
     def reset(self):
         self.weight_matrix = np.zeros((self.n_actions, self.context_dim))
-        self.reward_mean = None
-        self.reward_std = None
 
 
 class MARLAgentController:
@@ -239,7 +214,6 @@ class MARLAgentController:
                     "epsilon": settings.get("epsilon", 0.1),
                     "decay_rate": settings.get("decay_rate", 0.99),
                     "alpha_q": settings.get("alpha_q", 0.1),
-                    "alpha_r": settings.get("alpha_r", 0.9),
                 }
             )
             primary_params.update(
@@ -247,7 +221,6 @@ class MARLAgentController:
                     "epsilon": settings.get("epsilon", 0.1),
                     "decay_rate": settings.get("decay_rate", 0.99),
                     "alpha_q": settings.get("alpha_q", 0.1),
-                    "alpha_r": settings.get("alpha_r", 0.9),
                 }
             )
             cw_params.update(
@@ -255,7 +228,6 @@ class MARLAgentController:
                     "epsilon": settings.get("epsilon", 0.1),
                     "decay_rate": settings.get("decay_rate", 0.99),
                     "alpha_q": settings.get("alpha_q", 0.1),
-                    "alpha_r": settings.get("alpha_r", 0.9),
                 }
             )
         elif agent_class == LinUcbCMAB:

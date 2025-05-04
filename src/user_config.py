@@ -61,7 +61,6 @@ class UserConfig:
     # - alpha (optional, only if strategy is "linucb"): confidence bound parameter for LinUCB. Default: 1
     # - epsilon (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): epsilon value for epsilon-greedy strategy. Default: 0.1
     # - decay_rate (optional, only if strategy is "decay_epsilon_greedy"): decay rate for decay epsilon-greedy strategy. Default: 0.99
-    # - alpha_r (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): exponential moving average (EMA) factor for reward normalization: µ_t = α·R_t+ (1 − α)·µ_t-1. σ**2_t = α·(R_t-µ_t)**2 + (1 − α)·σ**2_t-1.  Default: 0.9
     # - alpha_q (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): linear gradient descent step size for weight matrix update: w_t= w_t-1 + α(R_t-w^T·x)·x. Default: 0.1
     AGENTS_SETTINGS = {
         "strategy": "linucb",
