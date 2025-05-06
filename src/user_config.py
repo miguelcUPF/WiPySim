@@ -61,7 +61,9 @@ class UserConfig:
     # - alpha (optional, only if strategy is "linucb"): confidence bound parameter for LinUCB. Default: 1
     # - epsilon (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): epsilon value for epsilon-greedy strategy. Default: 0.1
     # - decay_rate (optional, only if strategy is "decay_epsilon_greedy"): decay rate for decay epsilon-greedy strategy. Default: 0.99
-    # - alpha_q (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): linear gradient descent step size for weight matrix update: w_t= w_t-1 + α(R_t-w^T·x)·x. Default: 0.1
+    # - eta (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): learning rate. Default: 0.1
+    # - gamma (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): RMSProp decay factor. Default: 0.9
+    # - alpha_ema (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): EMA smoothing factor. Default: 0.1
     AGENTS_SETTINGS = {
         "strategy": "linucb",
         "channel_frequency": 8,

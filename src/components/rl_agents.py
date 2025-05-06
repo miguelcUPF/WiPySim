@@ -61,7 +61,12 @@ class LinUcbCMAB:
         self.b = [np.zeros(self.context_dim) for _ in range(self.n_actions)]
 
 
-class EpsCMAB:
+class EpsRMSPropCMAB:
+    """
+    Epsilon-greedy Contextual Multi-Armed Bandit with linear reward approximation
+    and RMSProp-based weight updates.
+    """
+
     def __init__(
         self,
         name: str,
@@ -72,7 +77,9 @@ class EpsCMAB:
         weights_r: dict[str, float] = None,
         epsilon: float = 0.1,
         decay_rate: float = 0.99,
-        alpha_q: float = 0.1,
+        eta: float = 0.1,
+        gamma: float = 0.9,
+        alpha_ema: float = 0.1,  # EMA factor
     ):
 
         self.name = name
@@ -84,19 +91,24 @@ class EpsCMAB:
 
         self.strategy = strategy
 
-        # epsilon-greedy
-        self.epsilon = epsilon
-        # decay epsilon-greedy
-        self.decay_rate = decay_rate
-
-        self.alpha_q = (
-            alpha_q  # linear gradient descent step size for weight matrix update
-        )
-
         self.weights_r = weights_r or {}  # Used if decomposition enabled
 
-        # Weight matrix, i.e., one weight vector per action for linear reward estimation
-        self.weight_matrix = np.zeros((self.n_actions, self.context_dim))
+        # (decay) epsilon-greedy
+        self.epsilon = epsilon
+        self.decay_rate = decay_rate
+
+        self.eta = eta  # Learning rate
+        self.gamma = gamma  # RMSProp decay factor
+        self.epsilon_rms = 1e-8  # for numerical stability
+
+        self.alpha_ema = alpha_ema
+
+        # Linear model: one weight vector per action
+        self.weight_matrix = np.zeros((n_actions, context_dim))
+        self.weight_matrix_ema = np.zeros((n_actions, context_dim))  # EMA of weights
+
+        # RMSProp: moving average of squared gradients
+        self.grad_squared_avg = np.zeros((n_actions, context_dim))
 
     def _epsilon_greedy(self, context, valid_actions=None):
         """
@@ -110,7 +122,7 @@ class EpsCMAB:
         if random.random() < self.epsilon:
             action = random.choice(valid_actions)  # Explore
         else:
-            preds = self.weight_matrix @ context
+            preds = self.weight_matrix_ema @ context
             # Create a masked array with -inf for invalid actions to prevent them from being selected
             masked_preds = np.full_like(preds, -np.inf)
             for a in valid_actions:
@@ -132,15 +144,34 @@ class EpsCMAB:
 
     def update(self, context, action, reward):
         """
-        Updates the weight matrix based on the observed reward and context using linear approximation.
+        Updates weights using RMSProp and maintains EMA of weights.
         """
-        # Update weights using linear SGD
         pred = self.weight_matrix[action] @ context
-        error = reward - pred
-        self.weight_matrix[action] += self.alpha_q * error * context
+        error = pred - reward
+        gradient = error * context
+
+        # Update RMSProp memory
+        self.grad_squared_avg[action] = self.gamma * self.grad_squared_avg[action] + (
+            1 - self.gamma
+        ) * (gradient**2)
+
+        # Parameter update
+        self.weight_matrix[action] -= (
+            self.eta
+            / (np.sqrt(self.grad_squared_avg[action] + self.epsilon_rms))
+            * gradient
+        )
+
+        # EMA update
+        self.weight_matrix_ema[action] = (
+            self.alpha_ema * self.weight_matrix_ema[action]
+            + (1 - self.alpha_ema) * self.weight_matrix[action]
+        )
 
     def reset(self):
         self.weight_matrix = np.zeros((self.n_actions, self.context_dim))
+        self.weight_matrix_ema = np.zeros((self.n_actions, self.context_dim))
+        self.grad_squared_avg = np.zeros((self.n_actions, self.context_dim))
 
 
 class MARLAgentController:
@@ -175,7 +206,7 @@ class MARLAgentController:
         if strategy == "linucb":
             agent_class = LinUcbCMAB
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
-            agent_class = EpsCMAB
+            agent_class = EpsRMSPropCMAB
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
@@ -208,26 +239,32 @@ class MARLAgentController:
             "weights_r": settings.get("cw_weights", {}),
         }
 
-        if agent_class == EpsCMAB:
+        if agent_class == EpsRMSPropCMAB:
             channel_params.update(
                 {
                     "epsilon": settings.get("epsilon", 0.1),
                     "decay_rate": settings.get("decay_rate", 0.99),
-                    "alpha_q": settings.get("alpha_q", 0.1),
+                    "eta": settings.get("eta", 0.1),
+                    "gamma": settings.get("gamma", 0.9),
+                    "alpha_ema": settings.get("alpha_ema", 0.1),
                 }
             )
             primary_params.update(
                 {
                     "epsilon": settings.get("epsilon", 0.1),
                     "decay_rate": settings.get("decay_rate", 0.99),
-                    "alpha_q": settings.get("alpha_q", 0.1),
+                    "eta": settings.get("eta", 0.1),
+                    "gamma": settings.get("gamma", 0.9),
+                    "alpha_ema": settings.get("alpha_ema", 0.1),
                 }
             )
             cw_params.update(
                 {
                     "epsilon": settings.get("epsilon", 0.1),
                     "decay_rate": settings.get("decay_rate", 0.99),
-                    "alpha_q": settings.get("alpha_q", 0.1),
+                    "eta": settings.get("eta", 0.1),
+                    "gamma": settings.get("gamma", 0.9),
+                    "alpha_ema": settings.get("alpha_ema", 0.1),
                 }
             )
         elif agent_class == LinUcbCMAB:

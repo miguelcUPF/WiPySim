@@ -198,8 +198,11 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             logger.critical(
                 f"Invalid AGENTS_SETTINGS: '{cfg.AGENTS_SETTINGS}'. It must be a dictionary."
             )
-        if cfg.AGENTS_SETTINGS.get("strategy", None):
-            if cfg.AGENTS_SETTINGS.get("strategy", None) not in [
+        
+        strategy = cfg.AGENTS_SETTINGS.get("strategy", None)
+
+        if strategy:
+            if strategy not in [
                 "linucb",
                 "epsilon_greedy",
                 "decay_epsilon_greedy",
@@ -259,58 +262,50 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 logger.critical(
                     f"Invalid include_prev_decision: '{cfg.AGENTS_SETTINGS.get('include_prev_decision', None)}'. It must be a boolean."
                 ) 
-        if cfg.AGENTS_SETTINGS.get("strategy", None) in [
+        if strategy in [
             "epsilon_greedy",
             "decay_epsilon_greedy",
         ]:
-            if cfg.AGENTS_SETTINGS.get("alpha", None):
-                logger.warning(
-                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use alpha."
-                )
-            if cfg.AGENTS_SETTINGS.get("epsilon", None):
-                if not isinstance(
-                    cfg.AGENTS_SETTINGS.get("epsilon", None), (float, int)
-                ):
-                    logger.critical(
-                        f"Invalid epsilon: '{cfg.AGENTS_SETTINGS.get('epsilon', None)}'. It must be a float or integer."
-                    )
-                if (
-                    cfg.AGENTS_SETTINGS.get("epsilon", None) < 0
-                    or cfg.AGENTS_SETTINGS.get("epsilon", None) > 1
-                ):
-                    logger.critical(
-                        f"Invalid epsilon: '{cfg.AGENTS_SETTINGS.get('epsilon', None)}'. It must be between 0 and 1."
-                    )
-            if cfg.AGENTS_SETTINGS.get("decay_rate", None):
-                if not isinstance(
-                    cfg.AGENTS_SETTINGS.get("decay_rate", None), (float, int)
-                ):
-                    logger.critical(
-                        f"Invalid decay_rate: '{cfg.AGENTS_SETTINGS.get('decay_rate', None)}'. It must be a float or integer."
-                    )
-                if (
-                    cfg.AGENTS_SETTINGS.get("decay_rate", None) < 0
-                    or cfg.AGENTS_SETTINGS.get("decay_rate", None) > 1
-                ):
-                    logger.critical(
-                        f"Invalid decay_rate: '{cfg.AGENTS_SETTINGS.get('decay_rate', None)}'. It must be between 0 and 1."
-                    )
-            if cfg.AGENTS_SETTINGS.get("alpha_q", None):
-                if not isinstance(
-                    cfg.AGENTS_SETTINGS.get("alpha_q", None), (float, int)
-                ):
-                    logger.critical(
-                        f"Invalid alpha_q: '{cfg.AGENTS_SETTINGS.get('alpha_q', None)}'. It must be a float or integer."
-                    )
-                if (
-                    cfg.AGENTS_SETTINGS.get("alpha_q", None) < 0
-                    or cfg.AGENTS_SETTINGS.get("alpha_q", None) > 1
-                ):
-                    logger.critical(
-                        f"Invalid alpha_q: '{cfg.AGENTS_SETTINGS.get('alpha_q', None)}'. It must be between 0 and 1."
-                    )
+            unused_params = ["alpha"]
+
+            for param in unused_params:
+                if cfg.AGENTS_SETTINGS.get(param) is not None:
+                    logger.warning(f"Strategy {strategy} does not use {param}.")
+
+            # Validation rules: (type, min_val, max_val, inclusive_min, inclusive_max)
+            param_validations = {
+                "epsilon": ((float, int), 0, 1, True, True),       # [0, 1]
+                "decay_rate": ((float, int), 0, 1, True, True),    # [0, 1]
+                "eta": ((float, int), 0, None, False, None),       # (0, ∞)
+                "gamma": ((float, int), 0, 1, False, True),        # (0, 1]
+                "alpha_ema": ((float, int), 0, 1, True, False),    # [0, 1)
+            }
+
+            for param, (valid_types, min_val, max_val, inclusive_min, inclusive_max) in param_validations.items():
+                val = cfg.AGENTS_SETTINGS.get(param)
+                if val is None:
+                    continue
+
+                # Type check
+                if not isinstance(val, valid_types):
+                    logger.critical(f"Invalid {param}: '{val}'. It must be a float or integer.")
+                    continue
+
+                # Lower bound check
+                if min_val is not None:
+                    if inclusive_min and val < min_val:
+                        logger.critical(f"Invalid {param}: '{val}'. It must be ≥ {min_val}.")
+                    elif not inclusive_min and val <= min_val:
+                        logger.critical(f"Invalid {param}: '{val}'. It must be > {min_val}.")
+
+                # Upper bound check
+                if max_val is not None:
+                    if inclusive_max and val > max_val:
+                        logger.critical(f"Invalid {param}: '{val}'. It must be ≤ {max_val}.")
+                    elif not inclusive_max and val >= max_val:
+                        logger.critical(f"Invalid {param}: '{val}'. It must be < {max_val}.")
         
-        if cfg.AGENTS_SETTINGS.get("strategy", None) == "linucb":
+        if strategy == "linucb":
             if cfg.AGENTS_SETTINGS.get("alpha", None):
                 if not isinstance(cfg.AGENTS_SETTINGS.get("alpha", None), (float, int)):
                     logger.critical(
@@ -320,18 +315,12 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     logger.critical(
                         f"Invalid alpha: '{cfg.AGENTS_SETTINGS.get('alpha', None)}'. It must be greater than 0."
                     )
-            if cfg.AGENTS_SETTINGS.get("epsilon", None):
-                logger.warning(
-                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use epsilon."
-                )
-            if cfg.AGENTS_SETTINGS.get("decay_rate", None):
-                logger.warning(
-                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use decay_rate."
-                )
-            if cfg.AGENTS_SETTINGS.get("alpha_q", None):
-                logger.warning(
-                    f"Strategy {cfg.AGENTS_SETTINGS.get('strategy', None)} does not use alpha_q."
-                )
+            unused_params = ["epsilon", "decay_rate", "eta", "gamma", "alpha_ema"]
+
+            for param in unused_params:
+                if cfg.AGENTS_SETTINGS.get(param) is not None:
+                    logger.warning(f"Strategy {strategy} does not use {param}.")
+
 
     str_settings = {
         "WANDB_PROJECT_NAME": cfg.WANDB_PROJECT_NAME,
@@ -847,7 +836,9 @@ def wandb_init(cfg: cfg):
             "alpha": cfg.AGENTS_SETTINGS.get("alpha"),
             "epsilon": cfg.AGENTS_SETTINGS.get("epsilon"),
             "decay_rate": cfg.AGENTS_SETTINGS.get("decay_rate"),
-            "alpha_q": cfg.AGENTS_SETTINGS.get("alpha_q"),
+            "eta": cfg.AGENTS_SETTINGS.get("eta"),
+            "gamma": cfg.AGENTS_SETTINGS.get("gamma"),
+            "alpha_ema": cfg.AGENTS_SETTINGS.get("alpha_ema"),
         }
 
         frequency_cfg = {
