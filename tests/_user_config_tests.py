@@ -8,6 +8,7 @@ class UserConfig:
     ENABLE_RL = False
     RL_MODE = 1  # 0: SARL or 1: MARL
     USE_WANDB = False
+    USE_CODECARBON = False
     WANDB_PROJECT_NAME = "marl-802.11"
     WANDB_RUN_NAME = "test_run"
     DISABLE_SIMULTANEOUS_ACTION_SELECTION = True

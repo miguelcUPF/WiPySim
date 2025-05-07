@@ -37,3 +37,6 @@ PRESS_TO_EXIT_MSG = (
 PRESS_TO_CONTINUE_MSG = (
     "\033[93m" + "=" * 19 + "  Press Enter to continue  " + "=" * 19 + "\033[0m"
 )
+
+# Section divider message
+SECTION_DIVIDER_MSG = "\033[93m" + "=" * 50 + "\033[0m"

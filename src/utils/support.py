@@ -114,31 +114,47 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
         x, y, z = pos
         x_lim, y_lim, z_lim = bounds
         return 0 <= x <= x_lim and 0 <= y <= y_lim and 0 <= z <= z_lim
-    
+
     def _param_validation(param_validations: dict):
-        for param, (valid_types, min_val, max_val, inclusive_min, inclusive_max) in param_validations.items():
+        for param, (
+            valid_types,
+            min_val,
+            max_val,
+            inclusive_min,
+            inclusive_max,
+        ) in param_validations.items():
             val = cfg.AGENTS_SETTINGS.get(param)
             if val is None:
                 continue
 
             # Type check
             if not isinstance(val, valid_types):
-                logger.critical(f"Invalid {param}: '{val}'. It must be a {valid_types}.")
+                logger.critical(
+                    f"Invalid {param}: '{val}'. It must be a {valid_types}."
+                )
                 continue
 
             # Lower bound check
             if min_val is not None:
                 if inclusive_min and val < min_val:
-                    logger.critical(f"Invalid {param}: '{val}'. It must be ≥ {min_val}.")
+                    logger.critical(
+                        f"Invalid {param}: '{val}'. It must be ≥ {min_val}."
+                    )
                 elif not inclusive_min and val <= min_val:
-                    logger.critical(f"Invalid {param}: '{val}'. It must be > {min_val}.")
+                    logger.critical(
+                        f"Invalid {param}: '{val}'. It must be > {min_val}."
+                    )
 
             # Upper bound check
             if max_val is not None:
                 if inclusive_max and val > max_val:
-                    logger.critical(f"Invalid {param}: '{val}'. It must be ≤ {max_val}.")
+                    logger.critical(
+                        f"Invalid {param}: '{val}'. It must be ≤ {max_val}."
+                    )
                 elif not inclusive_max and val >= max_val:
-                    logger.critical(f"Invalid {param}: '{val}'. It must be < {max_val}.")  
+                    logger.critical(
+                        f"Invalid {param}: '{val}'. It must be < {max_val}."
+                    )
 
     if not cfg.SIMULATION_TIME_us.is_integer() or cfg.SIMULATION_TIME_us <= 0:
         logger.critical(
@@ -153,6 +169,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
     bool_settings = {
         "ENABLE_RL_AGENTS": cfg.ENABLE_RL,
         "USE_WANDB": cfg.USE_WANDB,
+        "USE_CODECARBON": cfg.USE_CODECARBON,
         "DISABLE_SIMULTANEOUS_ACTION_SELECTION": cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION,
         "ENABLE_REWARD_DECOMPOSITION": cfg.ENABLE_REWARD_DECOMPOSITION,
         "ENABLE_CONSOLE_LOGGING": cfg.ENABLE_CONSOLE_LOGGING,
@@ -223,7 +240,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             logger.critical(
                 f"Invalid AGENTS_SETTINGS: '{cfg.AGENTS_SETTINGS}'. It must be a dictionary."
             )
-        
+
         strategy = cfg.AGENTS_SETTINGS.get("strategy", None)
 
         if strategy:
@@ -288,7 +305,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             ):
                 logger.critical(
                     f"Invalid include_prev_decision: '{cfg.AGENTS_SETTINGS.get('include_prev_decision', None)}'. It must be a boolean."
-                ) 
+                )
         if strategy in [
             "sw_linucb",
             "linucb",
@@ -298,15 +315,15 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             for param in unused_params:
                 if cfg.AGENTS_SETTINGS.get(param) is not None:
                     logger.warning(f"Strategy {strategy} does not use {param}.")
-            
+
             # Validation rules: (type, min_val, max_val, inclusive_min, inclusive_max)
             param_validations = {
-                "alpha": ((float, int), 0, None, False, None),      # (0, ∞)
-                "window_size": ((int, None), 0, None, True, None),       # [0, ∞)
+                "alpha": ((float, int), 0, None, False, None),  # (0, ∞)
+                "window_size": ((int, None), 0, None, True, None),  # [0, ∞)
             }
 
             _param_validation(param_validations)
-        
+
         if strategy in [
             "epsilon_greedy",
             "decay_epsilon_greedy",
@@ -319,11 +336,11 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
 
             # Validation rules: (type, min_val, max_val, inclusive_min, inclusive_max)
             param_validations = {
-                "epsilon": ((float, int), 0, 1, True, True),       # [0, 1]
-                "decay_rate": ((float, int), 0, 1, True, True),    # [0, 1]
-                "eta": ((float, int), 0, None, False, None),       # (0, ∞)
-                "gamma": ((float, int), 0, 1, False, True),        # (0, 1]
-                "alpha_ema": ((float, int), 0, 1, True, False),    # [0, 1)
+                "epsilon": ((float, int), 0, 1, True, True),  # [0, 1]
+                "decay_rate": ((float, int), 0, 1, True, True),  # [0, 1]
+                "eta": ((float, int), 0, None, False, None),  # (0, ∞)
+                "gamma": ((float, int), 0, 1, False, True),  # (0, 1]
+                "alpha_ema": ((float, int), 0, 1, True, False),  # [0, 1)
             }
 
             _param_validation(param_validations)

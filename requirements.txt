@@ -6,3 +6,4 @@ setuptools
 chardet
 tqdm
 wandb
+codecarbon

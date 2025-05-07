@@ -15,6 +15,8 @@ class UserConfig:
     WANDB_PROJECT_NAME = "marl-802.11"
     WANDB_RUN_NAME = "main_run"
 
+    USE_CODECARBON = False  # Enable/disable Codecarbon for emissions tracking. This can significantly slow down the simulation. See .codecarbon.config for Codecarbon configuration. Recommended log_level = ERROR
+
     # If "MARL", it can be set to True to disable simultaneous action selection so that
     # agents select actions in a sequential manner, following the logical protocol execution
     # timeline, and thus, act at the most contextually appropriate step.

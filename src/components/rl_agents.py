@@ -4,6 +4,7 @@ from src.utils.event_logger import get_logger
 from src.components.network import AP
 
 from collections import deque
+from codecarbon import EmissionsTracker
 
 import numpy as np
 import simpy
@@ -347,16 +348,48 @@ class MARLAgentController:
         self.last_primary_context = None
         self.last_cw_context = None
 
+        self.channel_emissions_tracker = None
+        self.primary_emissions_tracker = None
+        self.cw_emissions_tracker = None
+
+        if cfg.USE_CODECARBON:
+            self.channel_emissions_tracker = EmissionsTracker(
+                project_name="channel_agent"
+            )
+            self.primary_emissions_tracker = EmissionsTracker(
+                project_name="primary_agent"
+            )
+            self.cw_emissions_tracker = EmissionsTracker(project_name="cw_agent")
+
     def decide_channel(self, context):
+        (
+            self.channel_emissions_tracker.start()
+            if self.channel_emissions_tracker
+            else None
+        )
+
         self.last_channel_context = context
         action = self.channel_agent.select_action(context)
         self.last_channel_action = action
         self.logger.debug(
             f"{self.node.type} {self.node.id} -> Channel action: {action}"
         )
+
+        (
+            self.channel_emissions_tracker.stop()
+            if self.channel_emissions_tracker
+            else None
+        )
+
         return action
 
     def decide_primary(self, context, allocated_channels):
+        (
+            self.primary_emissions_tracker.start()
+            if self.primary_emissions_tracker
+            else None
+        )
+
         self.last_primary_context = context
         valid_actions = [c - 1 for c in allocated_channels]
         action = self.primary_agent.select_action(context, valid_actions)
@@ -364,13 +397,25 @@ class MARLAgentController:
         self.logger.debug(
             f"{self.node.type} {self.node.id} -> Primary action: {action}"
         )
+
+        (
+            self.primary_emissions_tracker.stop()
+            if self.primary_emissions_tracker
+            else None
+        )
+
         return action
 
     def decide_cw(self, context):
+        self.cw_emissions_tracker.start() if self.cw_emissions_tracker else None
+
         self.last_cw_context = context
         action = self.cw_agent.select_action(context)
         self.last_cw_action = action
         self.logger.debug(f"{self.node.type} {self.node.id} -> CW action: {action}")
+
+        self.cw_emissions_tracker.stop() if self.cw_emissions_tracker else None
+
         return action
 
     def _compute_weighted_reward(self, delay_components: dict, weights: dict):
@@ -392,17 +437,55 @@ class MARLAgentController:
             # Shared reward
             r_ch = r_pr = r_cw = -(sum(delay_components.values()))  # (minimize delay)
 
+        (
+            self.channel_emissions_tracker.start()
+            if self.channel_emissions_tracker
+            else None
+        )
         self.channel_agent.update(
             self.last_channel_context, self.last_channel_action, r_ch
+        )
+        (
+            self.channel_emissions_tracker.stop()
+            if self.channel_emissions_tracker
+            else None
+        )
+
+        (
+            self.primary_emissions_tracker.start()
+            if self.primary_emissions_tracker
+            else None
         )
         self.primary_agent.update(
             self.last_primary_context, self.last_primary_action, r_pr
         )
+        (
+            self.primary_emissions_tracker.stop()
+            if self.primary_emissions_tracker
+            else None
+        )
+
+        self.cw_emissions_tracker.start() if self.cw_emissions_tracker else None
         self.cw_agent.update(self.last_cw_context, self.last_cw_action, r_cw)
+        self.cw_emissions_tracker.stop() if self.cw_emissions_tracker else None
 
         self._log_to_wandb(
             delay_components, {"channel": r_ch, "primary": r_pr, "cw": r_cw}
         )
+
+    def log_emissions_data(self):
+        if wandb.run:
+            wandb.run.summary["channel_emissions"] = self.channel_emissions_tracker.final_emissions_data.__dict__
+            wandb.run.summary["primary_emissions"] = self.primary_emissions_tracker.final_emissions_data.__dict__
+            wandb.run.summary["cw_emissions"] = self.cw_emissions_tracker.final_emissions_data.__dict__
+
+    def get_emissions_data(self):
+        emissions_data = {
+            "channel": self.channel_emissions_tracker.final_emissions_data.__dict__,
+            "primary": self.primary_emissions_tracker.final_emissions_data.__dict__,
+            "cw": self.cw_emissions_tracker.final_emissions_data.__dict__,
+        }
+        return emissions_data
 
     def _log_to_wandb(self, delay_components: dict, reward: dict):
         if wandb.run:
@@ -427,5 +510,13 @@ class MARLAgentController:
                     ],
                     f"node_{self.node.id}/delay/total": sum(delay_components.values()),
                     "env_time_us": self.env.now,
+                }
+            )
+
+    def _log_emissions_to_wandb(self, key: str, emissions):
+        if wandb.run:
+            wandb.log(
+                {
+                    f"node_{self.node.id}/emissions/{key}": emissions,
                 }
             )

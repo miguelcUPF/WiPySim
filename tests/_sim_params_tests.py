@@ -50,6 +50,3 @@ class SimParams:
     SHADOWING_STD_dB = 6.8  # 6.8 considering indoor NLOS environment
 
     MPDU_ERROR_PROBABILITY = 0.1
-
-    # --- RL Parameters --- #
-    CW_OPTIONS = [2, 4, 8, 16, 32]

@@ -8,10 +8,13 @@ from src.utils.messages import (
     TEST_COMPLETED_MSG,
     STARTING_SIMULATION_MSG,
     SIMULATION_TERMINATED_MSG,
+    SECTION_DIVIDER_MSG,
 )
 
-import simpy
+from codecarbon import EmissionsTracker
 
+import simpy
+import json
 
 sparams.CW_MIN = 4
 sparams.CW_MAX = 2**0 * sparams.CW_MIN
@@ -23,6 +26,9 @@ cfg.ENABLE_RL = True
 cfg.RL_MODE = 1
 cfg.USE_WANDB = True
 cfg.WANDB_RUN_NAME = "test_marl"
+
+cfg.USE_CODECARBON = True
+
 cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION = True  # Test: True and False
 cfg.ENABLE_REWARD_DECOMPOSITION = False  # Test: True and False
 
@@ -93,6 +99,12 @@ cfg.BSSs_Advanced = [
     },
 ]
 
+DISPLAY_AGENTS_EMISSIONS = True
+DISPLAY_SIMULATION_EMISSIONS = True
+
+emissions_tracker = (
+    EmissionsTracker(project_name="simulation") if cfg.USE_CODECARBON else None
+)
 
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
@@ -108,7 +120,11 @@ if __name__ == "__main__":
 
     network = initialize_network(cfg, sparams, env)
 
+    emissions_tracker.start() if cfg.USE_CODECARBON else None
+
     env.run(until=cfg.SIMULATION_TIME_us)
+
+    emissions_tracker.stop() if cfg.USE_CODECARBON else None
 
     network.stats.collect_stats()
 
@@ -116,6 +132,26 @@ if __name__ == "__main__":
         logger.info(
             f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}, Channels: [{', '.join(map(str, ap.phy_layer.channels_ids))}], Sensing Channels: {', '.join(map(str, ap.phy_layer.sensing_channels_ids))}"
         )
+        if cfg.USE_CODECARBON:
+            ap.mac_layer.rl_controller.log_emissions_data() if ap.mac_layer.rl_controller else None
+
+
+    if cfg.USE_CODECARBON:
+        if DISPLAY_AGENTS_EMISSIONS:
+            print(SECTION_DIVIDER_MSG)
+            for ap in network.get_aps():      
+                if not ap.mac_layer.rl_controller:
+                    continue
+                emissions_data = ap.mac_layer.rl_controller.get_emissions_data()
+                logger.info(
+                    f"AP {ap.id}:\n{json.dumps(emissions_data, indent=6)}"
+                )
+
+        if DISPLAY_SIMULATION_EMISSIONS:
+            print(SECTION_DIVIDER_MSG)
+            logger.info(
+                f"SIMULATION:\n{json.dumps(emissions_tracker.final_emissions_data.__dict__, indent=6)}"
+            )
 
     print(SIMULATION_TERMINATED_MSG)
     print(TEST_COMPLETED_MSG)
