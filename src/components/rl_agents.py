@@ -24,6 +24,7 @@ class SWLinUCB:
         weights_r: dict[str, float] = None,
         alpha: float = 1.0,
         window_size: int | None = None,
+        negative_rewards: bool = True,
     ):
         self.name = name
         self.n_actions = n_actions
@@ -42,6 +43,8 @@ class SWLinUCB:
         self.time_step = 0
         self.window_size = window_size if window_size is not None else n_actions
         self.E = [deque(maxlen=self.window_size) for _ in range(n_actions)]
+
+        self.negative_rewards = negative_rewards
 
     def _linucb(self, context, valid_actions=None):
         if valid_actions is None:
@@ -70,8 +73,13 @@ class SWLinUCB:
                 p[a] = context @ theta + self.alpha * np.sqrt(context @ A_inv @ context)
             else:
                 occ = sum(self.E[a]) if self.time_step > self.window_size else 0
-                gamma_t = occ / self.window_size
-                # since our rewards are negative, we consider (occ / self.window_size) rather than (1 - occ / self.window_size) to penalize frequently selected actions
+
+                gamma_t = (
+                    1 - (occ / self.window_size)
+                    if not self.negative_rewards
+                    else occ / self.window_size
+                )
+                # gamma is a discount factor that penalizes frequently selected actions; if the reward is positive, gamma should be lower for frequently selected actions; but if the reward is negative, gamma should be higher for frequently selected actions
 
                 p[a] = gamma_t * (context @ theta) + self.alpha * np.sqrt(
                     context @ A_inv @ context
