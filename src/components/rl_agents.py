@@ -281,7 +281,7 @@ class MARLAgentController:
 
         cw_params = {
             "name": "cw_agent",
-            "n_actions": 7,  # 0: {16}, 1: {32}, 2: {64}, 3: {128}, 4: {256}, 5: {512}, 6: {1024} (i.e., 2**(x+4))
+            "n_actions": 7,  # 0: {2}, 1: {4}, 2: {8}, 3: {16}, 4: {32}, 5: {64}, 6: {128} (i.e., 2**(x+1))
             "context_dim": 11
             + padding_ctxt,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size + (prev decision: current cw)
             "strategy": strategy,

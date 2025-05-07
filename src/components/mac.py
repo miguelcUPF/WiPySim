@@ -39,7 +39,7 @@ CHANNEL_MAP = {
     6: {1, 2, 3, 4},
 }
 PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
-CW_MAP = {i: 2**(4 + i) for i in range(7)}
+CW_MAP = {i: 2**(1 + i) for i in range(7)}
 
 
 class MACState:
