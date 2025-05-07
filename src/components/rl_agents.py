@@ -12,6 +12,19 @@ import random
 import wandb
 
 
+CHANNEL_MAP = {
+    0: {1},
+    1: {2},
+    2: {3},
+    3: {4},
+    4: {1, 2},
+    5: {3, 4},
+    6: {1, 2, 3, 4},
+}
+PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
+CW_MAP = {i: 2 ** (1 + i) for i in range(7)}
+
+
 # https://arxiv.org/pdf/1003.0146
 # https://dl.acm.org/doi/abs/10.1145/3297280.3297440?casa_token=eoZgPNBt-AUAAAAA:o80ERr_mN7BeM9GFgjH801INiTUf31_9OYERVQfAnnHPYEC6K9i00knEYUwMpcR_ZQeGwNq6yn9tOMU
 class SWLinUCB:
@@ -223,7 +236,7 @@ class EpsRMSProp:
         self.grad_squared_avg = np.zeros((self.n_actions, self.context_dim))
 
 
-class MARLAgentController:
+class MARLController:
     def __init__(
         self,
         sparams: sparams,
@@ -259,13 +272,10 @@ class MARLAgentController:
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
-        padding_ctxt = 1 if settings.get("include_prev_decision", False) else 0
-
         channel_params = {
             "name": "channel_agent",
             "n_actions": 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
-            "context_dim": 9
-            + padding_ctxt,  # 4x channel contenders + 4x channel busy flags + 1x queue size + (prev decision: current channel (mapped idx))
+            "context_dim": 9,  # 4x channel contenders + 4x channel busy flags + 1x queue size
             "strategy": strategy,
             "weights_r": settings.get("channel_weights", {}),
         }
@@ -273,8 +283,7 @@ class MARLAgentController:
         primary_params = {
             "name": "primary_agent",
             "n_actions": 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            "context_dim": 9
-            + padding_ctxt,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags + (prev decision: current primary (mapped idx))
+            "context_dim": 9,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
             "strategy": strategy,
             "weights_r": settings.get("primary_weights", {}),
         }
@@ -282,8 +291,7 @@ class MARLAgentController:
         cw_params = {
             "name": "cw_agent",
             "n_actions": 7,  # 0: {2}, 1: {4}, 2: {8}, 3: {16}, 4: {32}, 5: {64}, 6: {128} (i.e., 2**(x+1))
-            "context_dim": 11
-            + padding_ctxt,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size + (prev decision: current cw)
+            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
             "strategy": strategy,
             "weights_r": settings.get("cw_weights", {}),
         }
@@ -362,11 +370,8 @@ class MARLAgentController:
             self.cw_emissions_tracker = EmissionsTracker(project_name="cw_agent")
 
     def decide_channel(self, context):
-        (
+        if self.channel_emissions_tracker:
             self.channel_emissions_tracker.start()
-            if self.channel_emissions_tracker
-            else None
-        )
 
         self.last_channel_context = context
         action = self.channel_agent.select_action(context)
@@ -375,20 +380,14 @@ class MARLAgentController:
             f"{self.node.type} {self.node.id} -> Channel action: {action}"
         )
 
-        (
+        if self.channel_emissions_tracker:
             self.channel_emissions_tracker.stop()
-            if self.channel_emissions_tracker
-            else None
-        )
 
         return action
 
     def decide_primary(self, context, allocated_channels):
-        (
+        if self.primary_emissions_tracker:
             self.primary_emissions_tracker.start()
-            if self.primary_emissions_tracker
-            else None
-        )
 
         self.last_primary_context = context
         valid_actions = [c - 1 for c in allocated_channels]
@@ -398,23 +397,22 @@ class MARLAgentController:
             f"{self.node.type} {self.node.id} -> Primary action: {action}"
         )
 
-        (
+        if self.primary_emissions_tracker:
             self.primary_emissions_tracker.stop()
-            if self.primary_emissions_tracker
-            else None
-        )
 
         return action
 
     def decide_cw(self, context):
-        self.cw_emissions_tracker.start() if self.cw_emissions_tracker else None
+        if self.cw_emissions_tracker:
+            self.cw_emissions_tracker.start()
 
         self.last_cw_context = context
         action = self.cw_agent.select_action(context)
         self.last_cw_action = action
         self.logger.debug(f"{self.node.type} {self.node.id} -> CW action: {action}")
 
-        self.cw_emissions_tracker.stop() if self.cw_emissions_tracker else None
+        if self.cw_emissions_tracker:
+            self.cw_emissions_tracker.stop()
 
         return action
 
@@ -437,37 +435,27 @@ class MARLAgentController:
             # Shared reward
             r_ch = r_pr = r_cw = -(sum(delay_components.values()))  # (minimize delay)
 
-        (
+        if self.channel_emissions_tracker:
             self.channel_emissions_tracker.start()
-            if self.channel_emissions_tracker
-            else None
-        )
         self.channel_agent.update(
             self.last_channel_context, self.last_channel_action, r_ch
-        )
-        (
+        )  # update
+        if self.channel_emissions_tracker:
             self.channel_emissions_tracker.stop()
-            if self.channel_emissions_tracker
-            else None
-        )
 
-        (
+        if self.primary_emissions_tracker:
             self.primary_emissions_tracker.start()
-            if self.primary_emissions_tracker
-            else None
-        )
         self.primary_agent.update(
             self.last_primary_context, self.last_primary_action, r_pr
-        )
-        (
+        )  # update
+        if self.primary_emissions_tracker:
             self.primary_emissions_tracker.stop()
-            if self.primary_emissions_tracker
-            else None
-        )
 
-        self.cw_emissions_tracker.start() if self.cw_emissions_tracker else None
-        self.cw_agent.update(self.last_cw_context, self.last_cw_action, r_cw)
-        self.cw_emissions_tracker.stop() if self.cw_emissions_tracker else None
+        if self.cw_emissions_tracker:
+            self.cw_emissions_tracker.start()
+        self.cw_agent.update(self.last_cw_context, self.last_cw_action, r_cw)  # update
+        if self.cw_emissions_tracker:
+            self.cw_emissions_tracker.stop()
 
         self._log_to_wandb(
             delay_components, {"channel": r_ch, "primary": r_pr, "cw": r_cw}
@@ -475,9 +463,15 @@ class MARLAgentController:
 
     def log_emissions_data(self):
         if wandb.run:
-            wandb.run.summary["channel_emissions"] = self.channel_emissions_tracker.final_emissions_data.__dict__
-            wandb.run.summary["primary_emissions"] = self.primary_emissions_tracker.final_emissions_data.__dict__
-            wandb.run.summary["cw_emissions"] = self.cw_emissions_tracker.final_emissions_data.__dict__
+            wandb.run.summary["channel_emissions"] = (
+                self.channel_emissions_tracker.final_emissions_data.__dict__
+            )
+            wandb.run.summary["primary_emissions"] = (
+                self.primary_emissions_tracker.final_emissions_data.__dict__
+            )
+            wandb.run.summary["cw_emissions"] = (
+                self.cw_emissions_tracker.final_emissions_data.__dict__
+            )
 
     def get_emissions_data(self):
         emissions_data = {
@@ -513,10 +507,155 @@ class MARLAgentController:
                 }
             )
 
-    def _log_emissions_to_wandb(self, key: str, emissions):
+
+class SARLController:
+    def __init__(
+        self,
+        sparams: sparams,
+        cfg: cfg,
+        env: simpy.Environment,
+        node: AP,
+        settings: dict,
+    ):
+        self.cfg = cfg
+        self.sparams = sparams
+        self.env = env
+
+        self.name = "SARL"
+
+        self.logger = get_logger(
+            self.name,
+            cfg,
+            sparams,
+            env,
+            True if node.id in self.cfg.EXCLUDED_IDS else False,
+        )
+
+        self.node = node
+
+        self.settings = settings
+
+        strategy = settings.get("strategy", "sw_linucb")
+
+        if strategy in ["sw_linucb", "linucb"]:
+            agent_class = SWLinUCB
+        elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
+            agent_class = EpsRMSProp
+        else:
+            raise ValueError(f"Unknown strategy {strategy}")
+
+        valid_actions = []
+        for c_id, pset in CHANNEL_MAP.items():
+            for p in pset:
+                for cw_id in CW_MAP.keys():
+                    valid_actions.append(
+                        (c_id, p - 1, cw_id)
+                    )  # p-1 because primaries are 0-indexed
+        print(len(valid_actions))
+
+        # Define valid joint actions
+        self.valid_joint_actions = valid_actions  # (channel, primary, cw)
+        self.n_actions = len(self.valid_joint_actions)
+
+        agent_params = {
+            "name": "joint_agent",
+            "n_actions": self.n_actions,
+            "context_dim": 9,  # 4x channel contenders + 4x channel busy flags + 1x queue size
+            "strategy": strategy,
+        }
+
+        if agent_class == EpsRMSProp:
+            agent_params.update(
+                {
+                    "epsilon": settings.get("epsilon", 0.1),
+                    "decay_rate": settings.get("decay_rate", 0.99),
+                    "eta": settings.get("eta", 0.1),
+                    "gamma": settings.get("gamma", 0.9),
+                    "alpha_ema": settings.get("alpha_ema", 0.1),
+                }
+            )
+        elif agent_class == SWLinUCB:
+            agent_params.update(
+                {
+                    "alpha": settings.get("alpha", 1.0),
+                    "window_size": settings.get("window_size", None),
+                }
+            )
+
+        self.joint_agent = agent_class(**agent_params, marl_controller=self)
+
+        self.last_context = None
+
+        self.last_action_idx = None
+        self.last_action_tuple = None
+
+        self.emissions_tracker = (
+            EmissionsTracker(project_name="joint_agent") if cfg.USE_CODECARBON else None
+        )
+
+    def decide_joint_action(self, context):
+        if self.emissions_tracker:
+            self.emissions_tracker.start()
+
+        self.last_context = context
+        action_idx = self.joint_agent.select_action(context)
+        self.last_action_idx = action_idx
+        self.last_action_tuple = self.valid_joint_actions[action_idx]
+
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Joint action: {self.last_action_tuple}"
+        )
+
+        if self.emissions_tracker:
+            self.emissions_tracker.stop()
+
+        return self.last_action_tuple
+
+    def update_agents(self, delay_components: dict):
+        reward = -sum(delay_components.values())
+
+        if self.emissions_tracker:
+            self.emissions_tracker.start()
+
+        self.joint_agent.update(self.last_context, self.last_action_idx, reward)
+
+        if self.emissions_tracker:
+            self.emissions_tracker.stop()
+
+        self._log_to_wandb(delay_components, reward)
+
+    def log_emissions_data(self):
+        if wandb.run:
+            wandb.run.summary["joint_emissions"] = (
+                self.emissions_tracker.final_emissions_data.__dict__
+            )
+
+    def get_emissions_data(self):
+        if not self.emissions_tracker:
+            return {}
+        return {"joint": self.emissions_tracker.final_emissions_data.__dict__}
+
+    def _log_to_wandb(self, delay_components: dict, reward: float):
         if wandb.run:
             wandb.log(
                 {
-                    f"node_{self.node.id}/emissions/{key}": emissions,
+                    f"node_{self.node.id}/action/channel": self.last_action_tuple[0],
+                    f"node_{self.node.id}/action/primary": self.last_action_tuple[1],
+                    f"node_{self.node.id}/action/cw": self.last_action_tuple[2],
+                    f"node_{self.node.id}/reward": reward,
+                    f"node_{self.node.id}/delay/sensing": delay_components.get(
+                        "sensing_delay", 0
+                    ),
+                    f"node_{self.node.id}/delay/backoff": delay_components.get(
+                        "backoff_delay", 0
+                    ),
+                    f"node_{self.node.id}/delay/tx": delay_components.get(
+                        "tx_delay", 0
+                    ),
+                    f"node_{self.node.id}/delay/residual": delay_components.get(
+                        "residual_delay", 0
+                    ),
+                    f"node_{self.node.id}/delay/total": sum(delay_components.values()),
+                    "env_time_us": self.env.now,
                 }
             )

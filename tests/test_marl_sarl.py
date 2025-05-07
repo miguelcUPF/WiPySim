@@ -23,7 +23,7 @@ cfg.SIMULATION_TIME_us = 2e6
 cfg.SEED = 1
 
 cfg.ENABLE_RL = True
-cfg.RL_MODE = 1
+cfg.RL_MODE = 1  # Test 0: SARL, 1: MARL
 cfg.USE_WANDB = True
 cfg.WANDB_RUN_NAME = "test_marl"
 

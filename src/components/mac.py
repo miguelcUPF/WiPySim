@@ -2,7 +2,13 @@ from src.sim_params import SimParams as sparams
 from src.user_config import UserConfig as cfg
 
 from src.components.network import Node
-from src.components.rl_agents import MARLAgentController
+from src.components.rl_agents import (
+    MARLController,
+    SARLController,
+    CHANNEL_MAP,
+    PRIMARY_CHANNEL_MAP,
+    CW_MAP,
+)
 from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.utils.event_logger import get_logger
 from src.utils.statistics import MACStateStats
@@ -27,19 +33,6 @@ CTS_TX_us = round(
     * 1e6
 )
 CTS_TIMEOUT_us = sparams.SIFS_us + sparams.SLOT_TIME_us + CTS_TX_us
-
-
-CHANNEL_MAP = {
-    0: {1},
-    1: {2},
-    2: {3},
-    3: {4},
-    4: {1, 2},
-    5: {3, 4},
-    6: {1, 2, 3, 4},
-}
-PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
-CW_MAP = {i: 2**(1 + i) for i in range(7)}
 
 
 class MACState:
@@ -110,7 +103,7 @@ class MAC:
         self.bo_duration_us = 0
         self.tx_duration_us = 0
 
-        self.cw_current = 8 # lazy init
+        self.cw_current = 8  # lazy init
 
         self.mac_state_stats = MACStateStats()
 
@@ -124,11 +117,18 @@ class MAC:
         )
 
         self.rl_settings = self.cfg.AGENTS_SETTINGS
-        self.rl_controller = (
-            MARLAgentController(sparams, cfg, env, self.node, self.rl_settings)
-            if self.rl_driven and self.sparams.BONDING_MODE == 0
-            else None
-        )  # TODO: MARL or SALR depending on mode
+        self.rl_controller = None
+        self.rl_mode = self.cfg.RL_MODE
+
+        if self.rl_driven and self.sparams.BONDING_MODE == 0:
+            if self.cfg.RL_MODE == 0:
+                self.rl_controller = SARLController(
+                    sparams, cfg, env, self.node, self.rl_settings
+                )
+            else:
+                self.rl_controller = MARLController(
+                    sparams, cfg, env, self.node, self.rl_settings
+                )
 
         self.env.process(self.run())
 
@@ -874,6 +874,7 @@ class MAC:
             and self.backoff_slots == 0
             and self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION
             and not self.cts_timedout
+            and self.rl_mode == 1
         ):
             cw_freq = self.rl_settings.get("cw_frequency", 1)
             if self.tx_counter % cw_freq == 0:
@@ -897,6 +898,42 @@ class MAC:
                 )
             yield self.env.process(self.transmit_ampdu())
 
+    def _run_joint_agent(self):
+        current_channel = self.node.phy_layer.channels_ids
+        contenders_per_channel = [
+            (
+                c
+                if i + 1 not in current_channel
+                else c - 1 - len(self.node.associated_stas)
+            )
+            for i, c in enumerate(self.node.phy_layer.get_contender_count())
+        ]  # do not count itself nor associated STAs as contenders
+        normalized_contenders = [
+            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
+            for c in contenders_per_channel
+        ]
+        busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
+        queue_size = len(self.tx_queue.items)
+
+        joint_ctx = [
+            *normalized_contenders,  # normalized in range [0, 1]
+            *busy_flags_per_channel,  # already in range [0, 1]
+            queue_size
+            / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
+        ]
+
+        joint_action = self.rl_controller.decide_joint_action(np.array(joint_ctx))
+
+        self.node.phy_layer.set_channels(CHANNEL_MAP[joint_action[0]])
+
+        self.node.phy_layer.set_sensing_channels(PRIMARY_CHANNEL_MAP[joint_action[1]])
+
+        self.cw_current = CW_MAP[joint_action[1]]
+
+        self.logger.debug(
+            f"{self.node.type} {self.node.id} -> Agent selected action {joint_action}, channel changed to {CHANNEL_MAP[joint_action[0]]}, primary channel changed to {PRIMARY_CHANNEL_MAP[joint_action[1]]}, CW size changed to {self.cw_current}"
+        )
+
     def _run_channel_agent(self):
         current_channel = self.node.phy_layer.channels_ids
         contenders_per_channel = [
@@ -914,21 +951,12 @@ class MAC:
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
-        channel_key = next(
-            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
-        )
-
         ch_ctx = [
             *normalized_contenders,  # normalized in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
-        (
-            ch_ctx.append(channel_key / len(CHANNEL_MAP))
-            if self.rl_settings.get("include_prev_decision", False)
-            else None
-        )
         ch_action = self.rl_controller.decide_channel(np.array((ch_ctx)))
 
         self.node.phy_layer.set_channels(CHANNEL_MAP[ch_action])
@@ -939,7 +967,6 @@ class MAC:
 
     def _run_primary_agent(self):
         current_channel = self.node.phy_layer.channels_ids
-        current_primary = self.node.phy_layer.sensing_channels_ids
         contenders_per_channel = [
             (
                 c
@@ -957,20 +984,12 @@ class MAC:
         channel_key = next(
             (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
         )
-        primary_key = next(
-            (k for k, v in PRIMARY_CHANNEL_MAP.items() if v == current_primary), None
-        )
 
         primary_ctx = [
             channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
             *normalized_contenders,  # normalized in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
         ]
-        (
-            primary_ctx.append(primary_key / len(PRIMARY_CHANNEL_MAP))
-            if self.rl_settings.get("include_prev_decision", False)
-            else None
-        )
         primary_action = self.rl_controller.decide_primary(
             np.array(primary_ctx), current_channel
         )
@@ -1014,11 +1033,6 @@ class MAC:
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
-        (
-            cw_ctx.append(self.cw_current / len(CW_MAP))
-            if self.rl_settings.get("include_prev_decision", False)
-            else None
-        )
         cw_action = self.rl_controller.decide_cw(np.array(cw_ctx))
 
         self.cw_current = CW_MAP[cw_action]
@@ -1082,11 +1096,7 @@ class MAC:
                     else None
                 )
             if self.tx_queue.items:
-                if (
-                    self.rl_driven
-                    and self.backoff_slots == 0
-                    and not self.cts_timedout
-                ):
+                if self.rl_driven and self.backoff_slots == 0 and not self.cts_timedout:
                     (
                         self._update_rl_agents()
                         if self.tx_attempt_time_us is not None
@@ -1097,22 +1107,28 @@ class MAC:
                     self.bo_duration_us = 0
                     self.tx_duration_us = 0
 
-                    ch_freq = self.rl_settings.get("channel_frequency", 1)
-                    prim_freq = self.rl_settings.get("primary_frequency", 1)
-                    cw_freq = self.rl_settings.get("cw_frequency", 1)
+                    if self.rl_mode == 1:
+                        ch_freq = self.rl_settings.get("channel_frequency", 1)
+                        prim_freq = self.rl_settings.get("primary_frequency", 1)
+                        cw_freq = self.rl_settings.get("cw_frequency", 1)
 
-                    if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
-                        if self.tx_counter % ch_freq == 0:
-                            self._run_channel_agent()
-                        if self.tx_counter % prim_freq == 0:
-                            self._run_primary_agent()
-                        if self.tx_counter % cw_freq == 0:
-                            self._run_cw_agent()
+                        if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
+                            if self.tx_counter % ch_freq == 0:
+                                self._run_channel_agent()
+                            if self.tx_counter % prim_freq == 0:
+                                self._run_primary_agent()
+                            if self.tx_counter % cw_freq == 0:
+                                self._run_cw_agent()
+                        else:
+                            if self.tx_counter % ch_freq == 0:
+                                self._run_channel_agent()
+                            if self.tx_counter % prim_freq == 0:
+                                self._run_primary_agent()
                     else:
-                        if self.tx_counter % ch_freq == 0:
-                            self._run_channel_agent()
-                        if self.tx_counter % prim_freq == 0:
-                            self._run_primary_agent()
+                        joint_freq = self.rl_settings.get("joint_frequency", 1)
+
+                        if self.tx_counter % joint_freq == 0:
+                            self._run_joint_agent()
 
                 yield self.env.process(self._csma_ca())
 

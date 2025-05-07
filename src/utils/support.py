@@ -196,7 +196,27 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
     if cfg.RL_MODE not in [0, 1]:
         logger.critical(f"Invalid RL_MODE: '{cfg.RL_MODE}'. It must be 0 or 1.")
 
-    if cfg.ENABLE_RL:
+    if cfg.ENABLE_RL and cfg.RL_MODE != 1:
+        if cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
+            logger.warning(
+                "RL_MODE is {cfg.RL_MODE}, ignoring DISABLE_SIMULTANEOUS_ACTION_SELECTION..."
+            )
+        if cfg.ENABLE_REWARD_DECOMPOSITION:
+            logger.warning(
+                "RL_MODE is {cfg.RL_MODE}, ignoring ENABLE_REWARD_DECOMPOSITION..."
+            )
+        for name, val in zip(
+            ["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"],
+            [
+                cfg.CHANNEL_AGENT_WEIGHTS,
+                cfg.PRIMARY_AGENT_WEIGHTS,
+                cfg.CW_AGENT_WEIGHTS,
+            ],
+        ):
+            if val is not None:
+                logger.warning(f"RL_MODE is {cfg.RL_MODE}, ignoring {name}...")
+
+    if cfg.ENABLE_RL and cfg.RL_MODE == 1:
         for name, val in zip(
             ["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"],
             [
@@ -255,57 +275,82 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 )
 
         if cfg.AGENTS_SETTINGS.get("channel_frequency", None):
-            if not isinstance(cfg.AGENTS_SETTINGS.get("channel_frequency", None), int):
-                logger.critical(
-                    f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be an integer."
+            if cfg.RL_MODE != 1:
+                logger.warning(
+                    "RL_MODE is {cfg.RL_MODE}, ignoring channel_frequency..."
                 )
-            if cfg.AGENTS_SETTINGS.get("channel_frequency", None) < 0:
-                logger.critical(
-                    f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be a positive integer."
-                )
+            else:
+                if not isinstance(cfg.AGENTS_SETTINGS.get("channel_frequency", None), int):
+                    logger.critical(
+                        f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be an integer."
+                    )
+                if cfg.AGENTS_SETTINGS.get("channel_frequency", None) < 0:
+                    logger.critical(
+                        f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be a positive integer."
+                    )
+
         if cfg.AGENTS_SETTINGS.get("primary_frequency", None):
-            if not isinstance(cfg.AGENTS_SETTINGS.get("primary_frequency", None), int):
-                logger.critical(
-                    f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be an integer."
+            if cfg.RL_MODE != 1:
+                logger.warning(
+                    "RL_MODE is {cfg.RL_MODE}, ignoring primary_frequency..."
                 )
-            if cfg.AGENTS_SETTINGS.get("primary_frequency", None) < 0:
-                logger.critical(
-                    f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be a positive integer."
-                )
-            if cfg.AGENTS_SETTINGS.get("channel_frequency", None) is None:
-                logger.critical(
-                    f"Channel frequency must be set when primary frequency is set."
-                )
-            if cfg.AGENTS_SETTINGS.get(
-                "primary_frequency", None
-            ) > cfg.AGENTS_SETTINGS.get("channel_frequency", None):
-                logger.critical(
-                    f"Primary frequency must be less than or equal to channel frequency."
-                )
-            if (
-                cfg.AGENTS_SETTINGS.get("channel_frequency", None)
-                % cfg.AGENTS_SETTINGS.get("primary_frequency", None)
-                != 0
-            ):
-                logger.critical(
-                    f"Channel frequency must be a multiple of primary frequency."
-                )
+            else:
+                if not isinstance(cfg.AGENTS_SETTINGS.get("primary_frequency", None), int):
+                    logger.critical(
+                        f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be an integer."
+                    )
+                if cfg.AGENTS_SETTINGS.get("primary_frequency", None) < 0:
+                    logger.critical(
+                        f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be a positive integer."
+                    )
+                if cfg.AGENTS_SETTINGS.get("channel_frequency", None) is None:
+                    logger.critical(
+                        f"Channel frequency must be set when primary frequency is set."
+                    )
+                if cfg.AGENTS_SETTINGS.get(
+                    "primary_frequency", None
+                ) > cfg.AGENTS_SETTINGS.get("channel_frequency", None):
+                    logger.critical(
+                        f"Primary frequency must be less than or equal to channel frequency."
+                    )
+                if (
+                    cfg.AGENTS_SETTINGS.get("channel_frequency", None)
+                    % cfg.AGENTS_SETTINGS.get("primary_frequency", None)
+                    != 0
+                ):
+                    logger.critical(
+                        f"Channel frequency must be a multiple of primary frequency."
+                    )
+
         if cfg.AGENTS_SETTINGS.get("cw_frequency", None):
-            if not isinstance(cfg.AGENTS_SETTINGS.get("cw_frequency", None), int):
-                logger.critical(
-                    f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be an integer."
+            if cfg.RL_MODE != 1:
+                logger.warning("RL_MODE is {cfg.RL_MODE}, ignoring cw_frequency...")
+            else:
+                if not isinstance(cfg.AGENTS_SETTINGS.get("cw_frequency", None), int):
+                    logger.critical(
+                        f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be an integer."
+                    )
+                if cfg.AGENTS_SETTINGS.get("cw_frequency", None) < 0:
+                    logger.critical(
+                        f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be a positive integer."
+                    )
+
+        if cfg.AGENTS_SETTINGS.get("joint_frequency", None):
+            if cfg.RL_MODE != 0:
+                logger.warning(
+                    "RL_MODE is 1, ignoring joint_frequency..."
                 )
-            if cfg.AGENTS_SETTINGS.get("cw_frequency", None) < 0:
-                logger.critical(
-                    f"Invalid cw_frequency: '{cfg.AGENTS_SETTINGS.get('cw_frequency', None)}'. It must be a positive integer."
-                )
-        if cfg.AGENTS_SETTINGS.get("include_prev_decision", None):
-            if not isinstance(
-                cfg.AGENTS_SETTINGS.get("include_prev_decision", None), (bool)
-            ):
-                logger.critical(
-                    f"Invalid include_prev_decision: '{cfg.AGENTS_SETTINGS.get('include_prev_decision', None)}'. It must be a boolean."
-                )
+            else:
+                if not isinstance(cfg.AGENTS_SETTINGS.get("joint_frequency", None), int):
+                    logger.critical(
+                        f"Invalid joint_frequency: '{cfg.AGENTS_SETTINGS.get('joint_frequency', None)}'. It must be an integer."
+                    )
+                if cfg.AGENTS_SETTINGS.get("joint_frequency", None) < 0:
+                    logger.critical(
+                        f"Invalid joint_frequency: '{cfg.AGENTS_SETTINGS.get('joint_frequency', None)}'. It must be a positive integer."
+                    )
+
+
         if strategy in [
             "sw_linucb",
             "linucb",

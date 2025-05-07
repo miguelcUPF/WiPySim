@@ -8,7 +8,8 @@ class UserConfig:
     ENABLE_RL = (
         False  # Enable/disable RL-driven agents (NUM_CHANNELS in sim_params must be 4)
     )
-    RL_MODE = 1  # 0: SARL or 1: MARL # TODO SARL
+    RL_MODE = 1  # 0: SARL or 1: MARL
+
     USE_WANDB = (
         True  # Enable/disable Weights & Biases logging or hyperparameter optimization
     )
@@ -22,11 +23,11 @@ class UserConfig:
     # timeline, and thus, act at the most contextually appropriate step.
     DISABLE_SIMULTANEOUS_ACTION_SELECTION = True
 
-    # Whether to decompose the reward (average packet delay per transmission)
+    # If "MARL", whether to decompose the reward (average packet delay per transmission)
     # into distinct components for each agent (sensing delay, backoff delay, transmission delay, residual delay)
     ENABLE_REWARD_DECOMPOSITION = False
 
-    ## --- Agents settings --- ##
+    ## --- Agents settings (only if "MARL") --- ##
     # Agents' weights for decomposed reward. Keys:
     # - "sensing_delay": time in microseconds to spent on average by every tramsmitted packet due to waiting for primary channel to become idle
     # - "backoff_delay": time in microseconds to spent on average by every tramsmitted packet due to reducing backoff slots
@@ -56,17 +57,25 @@ class UserConfig:
 
     # Algorithm settings for each agent. Keys:
     # - strategy (optional): "sw_linucb" or "linucb" or "epsilon_greedy" or "decay_epsilon_greedy". Default: "sw_linucb"
+
+    # only if "sw_linucb" or "linucb":
+    # - alpha (optional): confidence bound parameter for LinUCB. Default: 1
+    # - window_size (optional): window size for LinUCB. If None, it will be set to the number of actions. Default: Noneç
+
+    # only if "epsilon_greedy" or "decay_epsilon_greedy":
+    # - epsilon (optional): epsilon value for epsilon-greedy strategy. Default: 0.1
+    # - decay_rate (optional): decay rate for decay epsilon-greedy strategy. Default: 0.99
+    # - eta (optional): learning rate. Default: 0.1
+    # - gamma (optional): RMSProp decay factor. Default: 0.9
+    # - alpha_ema (optional): EMA smoothing factor. Default: 0.1
+
+    # only if "MARL":
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - cw_frequency (optional): frequency of the cw agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
-    # - include_prev_decision (optional): whether to include the previous action in the state. Default: False
-    # - alpha (optional, only if strategy is "sw_linucb" or "linucb"): confidence bound parameter for LinUCB. Default: 1
-    # - window_size (optional, only if strategy is "sw_linucb" or "linucb"): window size for LinUCB. If None, it will be set to the number of actions. Default: None
-    # - epsilon (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): epsilon value for epsilon-greedy strategy. Default: 0.1
-    # - decay_rate (optional, only if strategy is "decay_epsilon_greedy"): decay rate for decay epsilon-greedy strategy. Default: 0.99
-    # - eta (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): learning rate. Default: 0.1
-    # - gamma (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): RMSProp decay factor. Default: 0.9
-    # - alpha_ema (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): EMA smoothing factor. Default: 0.1
+
+    # only if "SARL":
+    # - joint_frequency (optional): frequency of the joint agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     AGENTS_SETTINGS = {
         "strategy": "sw_linucb",
         "channel_frequency": 8,
