@@ -1,5 +1,5 @@
-from tests._user_config_tests import UserConfig as cfg
-from tests._sim_params_tests import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg_module
+from tests._sim_params_tests import SimParams as sparams_module
 
 from src.utils.event_logger import get_logger
 from src.utils.support import initialize_network, validate_settings
@@ -12,11 +12,11 @@ from src.utils.messages import (
 
 import simpy
 
-sparams.NUM_CHANNELS = 1
+sparams_module.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e5
+cfg_module.SIMULATION_TIME_us = 2e5
 
-cfg.EXCLUDED_LOGS = {
+cfg_module.EXCLUDED_LOGS = {
     "NETWORK": ["ALL"],
     "NODE": ["ALL"],
     "GEN": ["ALL"],
@@ -29,12 +29,12 @@ cfg.EXCLUDED_LOGS = {
     "STATS": [],
 }
 
-cfg.ENABLE_STATS_COLLECTION = True
-cfg.STATS_SAVE_PATH = "data/statistics"
+cfg_module.ENABLE_STATS_COLLECTION = True
+cfg_module.STATS_SAVE_PATH = "data/statistics"
 
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
+cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
-cfg.BSSs_Advanced = [
+cfg_module.BSSs_Advanced = [
     {
         "id": 1,  # A BSS
         "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
@@ -63,17 +63,17 @@ cfg.BSSs_Advanced = [
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
-    logger = get_logger("TEST", cfg, sparams)
+    logger = get_logger("TEST", cfg_module, sparams_module)
 
-    validate_settings(cfg, sparams, logger)
+    validate_settings(cfg_module, sparams_module, logger)
 
     print(STARTING_SIMULATION_MSG)
 
     env = simpy.Environment()
 
-    network = initialize_network(cfg, sparams, env)
+    network = initialize_network(cfg_module, sparams_module, env)
 
-    env.run(until=cfg.SIMULATION_TIME_us)
+    env.run(until=cfg_module.SIMULATION_TIME_us)
 
     network.stats.collect_stats()
     network.stats.display_stats()

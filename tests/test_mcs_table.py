@@ -1,5 +1,5 @@
-from tests._user_config_tests import UserConfig as cfg
-from tests._sim_params_tests import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg_module
+from tests._sim_params_tests import SimParams as sparams_module
 
 
 from src.utils.mcs_table import calculate_data_rate_bps
@@ -19,7 +19,7 @@ TEST_CASES = [
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
-    logger = get_logger("TEST", cfg, sparams)
+    logger = get_logger("TEST", cfg_module, sparams_module)
 
     for (
         mcs_index,

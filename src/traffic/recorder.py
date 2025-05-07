@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.utils.data_units import Packet
 from src.utils.file_manager import get_project_root, clean_folder
@@ -12,7 +12,7 @@ import csv
 class TrafficRecorder:
     """Handles recording of network traffic events in Wireshark-style CSV format."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, node_id=None, save_name="traffic_trace", save_format="csv"):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, node_id=None, save_name="traffic_trace", save_format="csv"):
         self.cfg = cfg
         self.sparams = sparams
         self.node_id = node_id

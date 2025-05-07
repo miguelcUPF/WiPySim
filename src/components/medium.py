@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.utils.event_logger import get_logger
 from src.components.network import Network, Node
@@ -28,7 +28,7 @@ VALID_BONDS = {
 class Channel20MHz:
     """Represents a single 20 MHz wireless channel."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment, id: int):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, id: int):
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
@@ -166,7 +166,7 @@ class Channel20MHz:
 
 class Medium:
     def __init__(
-        self, cfg: cfg, sparams: sparams, env: simpy.Environment, network: Network
+        self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, network: Network
     ):
         self.cfg = cfg
         self.sparams = sparams
@@ -308,7 +308,7 @@ class Medium:
         self.occupy_channels(self.network.get_node(ppdu.src_id), channels_ids)
 
         tx_duration_us = get_tx_duration_us(
-            sparams,
+            sparams_module,
             mcs_index,
             len(channels_ids) * 20,
             ppdu.size_bytes,

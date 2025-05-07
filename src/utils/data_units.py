@@ -1,4 +1,4 @@
-from src.sim_params import SimParams as sparams
+from src.sim_params import SimParams as sparams_module
 
 
 class DataUnit:
@@ -78,11 +78,11 @@ class MPDU(DataUnit):
         """
         super().__init__(
             creation_time_us,
-            sparams.MAC_HEADER_SIZE_bytes
+            sparams_module.MAC_HEADER_SIZE_bytes
             + packet.size_bytes
-            + sparams.FCS_SIZE_bytes
-            + sparams.MDPU_DELIMITER_SIZE_bytes  # already accounted the size of the delimiter and padding that surround each MPDU inside an aggregate
-            + sparams.MPDU_PADDING_SIZE_bytes,
+            + sparams_module.FCS_SIZE_bytes
+            + sparams_module.MDPU_DELIMITER_SIZE_bytes  # already accounted the size of the delimiter and padding that surround each MPDU inside an aggregate
+            + sparams_module.MPDU_PADDING_SIZE_bytes,
             packet.src_id,
             packet.dst_id,
         )
@@ -135,7 +135,7 @@ class RTS(DataUnit):
             dst_id (int): The destination node ID.
             creation_time_us (float): The time of creation in microseconds.
         """
-        super().__init__(creation_time_us, sparams.RTS_SIZE_bytes, src_id, dst_id)
+        super().__init__(creation_time_us, sparams_module.RTS_SIZE_bytes, src_id, dst_id)
 
         self.is_mgmt_ctrl_frame: bool = True
 
@@ -155,7 +155,7 @@ class CTS(DataUnit):
             dst_id (int): The destination node ID.
             creation_time_us (float): The time of creation in microseconds.
         """
-        super().__init__(creation_time_us, sparams.CTS_SIZE_bytes, src_id, dst_id)
+        super().__init__(creation_time_us, sparams_module.CTS_SIZE_bytes, src_id, dst_id)
 
         self.is_mgmt_ctrl_frame: bool = True
 
@@ -178,7 +178,7 @@ class BACK(DataUnit):
         """
         super().__init__(
             creation_time_us,
-            sparams.BACK_SIZE_PER_MPDU_bytes * len(ampdu.mpdus),
+            sparams_module.BACK_SIZE_PER_MPDU_bytes * len(ampdu.mpdus),
             src_id,
             dst_id,
         )
@@ -219,7 +219,7 @@ class PPDU(DataUnit):
         """
         super().__init__(
             creation_time_us,
-            data_unit.size_bytes + sparams.PHY_HEADER_SIZE_bytes,  # Add PHY header
+            data_unit.size_bytes + sparams_module.PHY_HEADER_SIZE_bytes,  # Add PHY header
             data_unit.src_id,
             data_unit.dst_id,
         )

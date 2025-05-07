@@ -1,5 +1,5 @@
-from tests._user_config_tests import UserConfig as cfg
-from tests._sim_params_tests import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg_module
+from tests._sim_params_tests import SimParams as sparams_module
 
 from src.utils.data_units import MPDU, Packet
 from src.utils.plotters import TrafficPlotter
@@ -19,13 +19,13 @@ import matplotlib.pyplot as plt
 import simpy
 
 
-cfg.SIMULATION_TIME_us = 2e5
+cfg_module.SIMULATION_TIME_us = 2e5
 
-cfg.ENABLE_FIGS_DISPLAY = True
+cfg_module.ENABLE_FIGS_DISPLAY = True
 
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
+cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
-cfg.BSSs_Advanced = [
+cfg_module.BSSs_Advanced = [
     {
         "id": 1,  # A BSS
         "ap": {"id": 1, "pos": (0, 0, 0)},  # BSS Access Point (AP)
@@ -58,7 +58,7 @@ cfg.BSSs_Advanced = [
 
 
 class DummyMAC:
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment):
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
@@ -78,25 +78,25 @@ class DummyMAC:
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
-    logger = get_logger("TEST", cfg, sparams)
+    logger = get_logger("TEST", cfg_module, sparams_module)
 
-    validate_settings(cfg, sparams, logger)
+    validate_settings(cfg_module, sparams_module, logger)
 
     print(STARTING_SIMULATION_MSG)
 
     env = simpy.Environment()
 
-    network = initialize_network(cfg, sparams, env)
+    network = initialize_network(cfg_module, sparams_module, env)
 
     for node in network.get_nodes():
-        node.mac_layer = DummyMAC(cfg, sparams, env)
+        node.mac_layer = DummyMAC(cfg_module, sparams_module, env)
 
-    env.run(until=cfg.SIMULATION_TIME_us)
+    env.run(until=cfg_module.SIMULATION_TIME_us)
 
     for ap in network.get_aps():
         mac_layer = cast(DummyMAC, ap.mac_layer)
         logger.info(
-            f"AP {ap.id} -> DL Load: {mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(mac_layer.load_bits*1e-6) / (cfg.SIMULATION_TIME_us*1e-6):.2f} Mbps"
+            f"AP {ap.id} -> DL Load: {mac_layer.load_bits*1e-6:.2f} Mbits \t DL Rate: {(mac_layer.load_bits*1e-6) / (cfg_module.SIMULATION_TIME_us*1e-6):.2f} Mbps"
         )
 
         mac_layer.plotter.plot_generation(title=f"Traffic AP {ap.id}")

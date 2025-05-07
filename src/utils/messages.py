@@ -14,6 +14,9 @@ STARTING_TEST_MSG = "\033[93m" + "=" * 24 + "  STARTING TEST  " + "=" * 24 + "\0
 # Test completed message
 TEST_COMPLETED_MSG = "\033[93m" + "=" * 23 + "  TEST COMPLETED  " + "=" * 23 + "\033[0m"
 
+# Results message
+RESULTS_MSG = "\033[93m" + "=" * 23 + "  RESULTS  " + "=" * 23 + "\033[0m"
+
 # Simulation terminated message
 SIMULATION_TERMINATED_MSG = (
     "\033[93m" + "=" * 20 + "  SIMULATION TERMINATED  " + "=" * 20 + "\033[0m"

@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg_module
+from src.sim_params import SimParams as sparams_module
 
 from src.utils.event_logger import get_logger
 from src.utils.statistics import TransmissionStats, ReceptionStats, NetworkStats
@@ -14,8 +14,8 @@ import simpy
 class Node:
     def __init__(
         self,
-        cfg: cfg,
-        sparams: sparams,
+        cfg: cfg_module,
+        sparams: sparams_module,
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
@@ -68,8 +68,8 @@ class Node:
 class STA(Node):
     def __init__(
         self,
-        cfg: cfg,
-        sparams: sparams,
+        cfg: cfg_module,
+        sparams: sparams_module,
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
@@ -108,8 +108,8 @@ class STA(Node):
 class AP(Node):
     def __init__(
         self,
-        cfg: cfg,
-        sparams: sparams,
+        cfg: cfg_module,
+        sparams: sparams_module,
         env: simpy.Environment,
         id: int,
         position: tuple[float, float, float],
@@ -150,7 +150,7 @@ class AP(Node):
 
 
 class Network:
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment):
         from src.components.medium import Medium
 
         self.env = env

@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.utils.messages import EXECUTION_TERMINATED_MSG
 
@@ -76,7 +76,7 @@ logging.Logger.default = default
 logging.Logger.ignore = ignore
 
 
-def initialize_log_file(cfg: cfg, log_file: str) -> None:
+def initialize_log_file(cfg: cfg_module, log_file: str) -> None:
     """
     Initialize a log file in the specified path.
 
@@ -94,14 +94,15 @@ def initialize_log_file(cfg: cfg, log_file: str) -> None:
         json.dump(log_data, file, indent=4)
 
 
-LOGS_RECORDING_FILE = os.path.join(cfg.LOGS_RECORDING_PATH, "session_logs.json")
-initialize_log_file(cfg, LOGS_RECORDING_FILE)
+LOGS_RECORDING_FILE = os.path.join(cfg_module.LOGS_RECORDING_PATH, "session_logs.json")
+if cfg_module.ENABLE_LOGS_RECORDING:
+    initialize_log_file(cfg_module, LOGS_RECORDING_FILE)
 
 
 class ConfigFilter(logging.Filter):
     """Filters log messages based on configuration settings."""
 
-    def __init__(self, cfg: cfg, sparams: sparams):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module):
         """
         Initialize a ConfigFilter object.
 
@@ -135,7 +136,7 @@ class ConfigFilter(logging.Filter):
 class ConsoleFormatter(logging.Formatter):
     """Custom formatter for console with optional color formatting."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment = None):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment = None):
         """
         Initialize a ConsoleFormatter object.
 
@@ -237,7 +238,7 @@ class JSONFileHandler(logging.Handler):
 
 
 def get_logger(
-    module_name: str, cfg: cfg, sparams: sparams, env: simpy.Environment = None, dummy: bool = False
+    module_name: str, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment = None, dummy: bool = False
 ) -> logging.Logger:
     """
     Get a logger instance with the specified module name.

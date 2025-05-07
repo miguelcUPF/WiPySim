@@ -1,5 +1,5 @@
-from tests._user_config_tests import UserConfig as cfg
-from tests._sim_params_tests import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg_module
+from tests._sim_params_tests import SimParams as sparams_module
 
 from src.utils.event_logger import get_logger
 from src.utils.plotters import DelayPerLoadPlotter
@@ -20,18 +20,18 @@ import pandas as pd
 import simpy
 import os
 
-sparams.MAX_TX_QUEUE_SIZE_pkts = 50
+sparams_module.MAX_TX_QUEUE_SIZE_pkts = 50
 
-sparams.NUM_CHANNELS = 1
+sparams_module.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e6
+cfg_module.SIMULATION_TIME_us = 2e6
 
-cfg.ENABLE_CONSOLE_LOGGING = False
+cfg_module.ENABLE_CONSOLE_LOGGING = False
 
-cfg.ENABLE_FIGS_DISPLAY = True
-cfg.ENABLE_FIGS_SAVING = True
+cfg_module.ENABLE_FIGS_DISPLAY = True
+cfg_module.ENABLE_FIGS_SAVING = True
 
-cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
+cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
 LOADS_kbps = [
     2e3,
@@ -54,7 +54,7 @@ LOADS_kbps = [
 ]
 
 
-def run_simulation(cfg: cfg, sparams: sparams, load_kbps: float) -> tuple:
+def run_simulation(cfg: cfg_module, sparams: sparams_module, load_kbps: float) -> tuple:
     cfg.BSSs_Advanced = [
         {
             "id": 1,  # A BSS
@@ -92,15 +92,15 @@ def run_simulation(cfg: cfg, sparams: sparams, load_kbps: float) -> tuple:
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
-    logger = get_logger("TEST", cfg, sparams)
+    logger = get_logger("TEST", cfg_module, sparams_module)
 
-    validate_settings(cfg, sparams, logger)
+    validate_settings(cfg_module, sparams_module, logger)
 
     print(STARTING_SIMULATION_MSG)
 
     results_flat = {load_kbps: {} for load_kbps in LOADS_kbps}
 
-    params_list = [(cfg, sparams, load_kbps) for load_kbps in LOADS_kbps]
+    params_list = [(cfg_module, sparams_module, load_kbps) for load_kbps in LOADS_kbps]
 
     batch_size = 5  # Adjust batch size based on available CPU cores
     with concurrent.futures.ProcessPoolExecutor(
@@ -147,7 +147,7 @@ if __name__ == "__main__":
                     )
 
     save_name = f"mean_delay_vs_load"
-    DelayPerLoadPlotter(cfg, sparams).plot_mean_delay(
+    DelayPerLoadPlotter(cfg_module, sparams_module).plot_mean_delay(
         results_flat, LOADS_kbps, save_name
     )
 

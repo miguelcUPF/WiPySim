@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.utils.data_units import Packet
 from src.utils.event_logger import get_logger
@@ -24,8 +24,8 @@ FPS = 90
 class TrafficGenerator:
     def __init__(
         self,
-        cfg: cfg,
-        sparams: sparams,
+        cfg: cfg_module,
+        sparams: sparams_module,
         env: simpy.Environment,
         node: Node,
         dst_id: int,

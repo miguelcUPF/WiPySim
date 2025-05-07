@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.components.network import Node, AP, STA
 from src.utils.event_logger import get_logger
@@ -16,8 +16,8 @@ import simpy
 class PHY:
     def __init__(
         self,
-        cfg: cfg,
-        sparams: sparams,
+        cfg: cfg_module,
+        sparams: sparams_module,
         env: simpy.Environment,
         node: Node,
         channels: set,

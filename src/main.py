@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg_module
+from src.sim_params import SimParams as sparams_module
 
 from src.utils.plotters import NetworkPlotter
 from src.utils.support import initialize_network, validate_settings
@@ -19,16 +19,16 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     print(STARTING_EXECUTION_MSG)
 
-    logger = get_logger("MAIN", cfg, sparams)
+    logger = get_logger("MAIN", cfg_module, sparams_module)
 
-    validate_settings(cfg, sparams, logger)
+    validate_settings(cfg_module, sparams_module, logger)
 
     print(STARTING_SIMULATION_MSG)
 
     env = simpy.Environment()
-    network = initialize_network(cfg, sparams, env)
+    network = initialize_network(cfg_module, sparams_module, env)
 
-    env.run(until=cfg.SIMULATION_TIME_us)
+    env.run(until=cfg_module.SIMULATION_TIME_us)
 
     for ap in network.get_aps():
         logger.info(
@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     print(SIMULATION_TERMINATED_MSG)
 
-    plotter = NetworkPlotter(cfg, sparams, env)
+    plotter = NetworkPlotter(cfg_module, sparams_module, env)
     plotter.plot_network(network)
 
     if len(plt.get_fignums()) > 0:

@@ -1,5 +1,5 @@
-from tests._user_config_tests import UserConfig as cfg
-from tests._sim_params_tests import SimParams as sparams
+from tests._user_config_tests import UserConfig as cfg_module
+from tests._sim_params_tests import SimParams as sparams_module
 
 from src.utils.event_logger import get_logger
 from src.utils.support import initialize_network, validate_settings
@@ -22,16 +22,16 @@ import simpy
 import os
 
 
-sparams.NUM_CHANNELS = 1
+sparams_module.NUM_CHANNELS = 1
 
-cfg.SIMULATION_TIME_us = 2e5
+cfg_module.SIMULATION_TIME_us = 2e5
 
-cfg.ENABLE_CONSOLE_LOGGING = False
+cfg_module.ENABLE_CONSOLE_LOGGING = False
 
-cfg.ENABLE_FIGS_DISPLAY = True
-cfg.ENABLE_FIGS_SAVING = True
+cfg_module.ENABLE_FIGS_DISPLAY = True
+cfg_module.ENABLE_FIGS_SAVING = True
 
-cfg.TRAFFIC_LOAD_kbps = 300e3
+cfg_module.TRAFFIC_LOAD_kbps = 300e3
 
 
 N = range(1, 21)
@@ -39,7 +39,7 @@ M = [0, 1, 2, 3, 4]
 CW_MIN = [4]  # test values: 4, 8, 16, 32, 64
 
 
-def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> tuple:
+def run_simulation(cfg: cfg_module, sparams: sparams_module, n: int, m: int, cw_min: int) -> tuple:
     sparams.CW_MIN = cw_min
     sparams.CW_MAX = 2**m * cw_min
 
@@ -73,16 +73,16 @@ def run_simulation(cfg: cfg, sparams: sparams, n: int, m: int, cw_min: int) -> t
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
-    logger = get_logger("TEST", cfg, sparams)
+    logger = get_logger("TEST", cfg_module, sparams_module)
 
-    validate_settings(cfg, sparams, logger)
+    validate_settings(cfg_module, sparams_module, logger)
 
     print(STARTING_SIMULATION_MSG)
 
     col_prob_results = {cw_min: {m: {} for m in M} for cw_min in CW_MIN}
 
     params_list = [
-        (cfg(), sparams(), n, m, cw_min) for n in N for m in M for cw_min in CW_MIN
+        (cfg_module(), sparams_module(), n, m, cw_min) for n in N for m in M for cw_min in CW_MIN
     ]
 
     batch_size = 5  # Adjust batch size based on available CPU cores
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     save_name = (
         f"collision_prob_cw_min_{CW_MIN[0]}" if len(CW_MIN) == 1 else "collision_prob"
     )
-    CollisionProbPlotter(cfg, sparams).plot_prob(
+    CollisionProbPlotter(cfg_module, sparams_module).plot_prob(
         col_prob_results, M, CW_MIN, save_name=save_name
     )
 

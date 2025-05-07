@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.utils.file_manager import get_project_root
 from src.utils.event_logger import get_logger
@@ -64,7 +64,7 @@ class Arrow3D(FancyArrowPatch):
 class BasePlotter:
     """Base class for all plotters, handling saving and displaying plots."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment = None):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment = None):
         """
         Initialize a BasePlotter object.
 
@@ -102,7 +102,7 @@ class BasePlotter:
 class NetworkPlotter(BasePlotter):
     """Plotter for network visualization."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment = None):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment = None):
         """
         Initialize a NetworkPlotter object.
 
@@ -306,8 +306,8 @@ class TrafficPlotter(BasePlotter):
 
     def __init__(
         self,
-        cfg: cfg,
-        sparams: sparams,
+        cfg: cfg_module,
+        sparams: sparams_module,
         env: simpy.Environment = None,
         max_data_units: int = 500,
     ):
@@ -467,7 +467,7 @@ class TrafficPlotter(BasePlotter):
 class CollisionProbPlotter(BasePlotter):
     """Plotter for collision probabilities."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment = None):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment = None):
         """
         Initializes a CollisionProbPlotter object.
 
@@ -664,7 +664,7 @@ class CollisionProbPlotter(BasePlotter):
 class DelayPerLoadPlotter(BasePlotter):
     """Plotter for mean delay vs load."""
 
-    def __init__(self, cfg: cfg, sparams: sparams, env: simpy.Environment = None):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment = None):
         """
         Initialize a DelayPerLoadPlotter object.
 

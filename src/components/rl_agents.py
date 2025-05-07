@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 from src.utils.event_logger import get_logger
 from src.components.network import AP
 
@@ -239,8 +239,8 @@ class EpsRMSProp:
 class MARLController:
     def __init__(
         self,
-        sparams: sparams,
-        cfg: cfg,
+        sparams: sparams_module,
+        cfg: cfg_module,
         env: simpy.Environment,
         node: AP,
         settings: dict,
@@ -369,6 +369,8 @@ class MARLController:
             )
             self.cw_emissions_tracker = EmissionsTracker(project_name="cw_agent")
 
+        self.results = []
+
     def decide_channel(self, context):
         if self.channel_emissions_tracker:
             self.channel_emissions_tracker.start()
@@ -461,6 +463,8 @@ class MARLController:
             delay_components, {"channel": r_ch, "primary": r_pr, "cw": r_cw}
         )
 
+        self.results.append(sum(delay_components.values()))
+
     def log_emissions_data(self):
         if wandb.run:
             wandb.run.summary["channel_emissions"] = (
@@ -511,8 +515,8 @@ class MARLController:
 class SARLController:
     def __init__(
         self,
-        sparams: sparams,
-        cfg: cfg,
+        sparams: sparams_module,
+        cfg: cfg_module,
         env: simpy.Environment,
         node: AP,
         settings: dict,
@@ -593,6 +597,9 @@ class SARLController:
             EmissionsTracker(project_name="joint_agent") if cfg.USE_CODECARBON else None
         )
 
+        self.results = []
+
+
     def decide_joint_action(self, context):
         if self.emissions_tracker:
             self.emissions_tracker.start()
@@ -624,6 +631,8 @@ class SARLController:
 
         self._log_to_wandb(delay_components, reward)
 
+        self.results.append(sum(delay_components.values()))
+        
     def log_emissions_data(self):
         if wandb.run:
             wandb.run.summary["joint_emissions"] = (

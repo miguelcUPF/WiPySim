@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.components.network import Node
 from src.components.rl_agents import (
@@ -27,12 +27,12 @@ import math
 
 BACK_TIMEOUT_us = 281
 CTS_TX_us = round(
-    (sparams.CTS_SIZE_bytes + sparams.PHY_HEADER_SIZE_bytes)
+    (sparams_module.CTS_SIZE_bytes + sparams_module.PHY_HEADER_SIZE_bytes)
     * 8
     / calculate_data_rate_bps(0, 20, 1, 0.8)
     * 1e6
 )
-CTS_TIMEOUT_us = sparams.SIFS_us + sparams.SLOT_TIME_us + CTS_TX_us
+CTS_TIMEOUT_us = sparams_module.SIFS_us + sparams_module.SLOT_TIME_us + CTS_TX_us
 
 
 class MACState:
@@ -50,8 +50,8 @@ class MAC:
 
     def __init__(
         self,
-        cfg: cfg,
-        sparams: sparams,
+        cfg: cfg_module,
+        sparams: sparams_module,
         env: simpy.Environment,
         node: Node,
         rl_driven: bool = False,
@@ -189,7 +189,7 @@ class MAC:
         while True:
             self.node.phy_layer.reset_busy_event(ch_id)
             self.node.phy_layer.reset_idle_event(ch_id)
-
+           
             # Wait for channel to become idle
             if not self.node.phy_layer.is_channel_idle(ch_id):
                 channel_idle_event = self.node.phy_layer.get_idle_event(ch_id)
@@ -205,7 +205,7 @@ class MAC:
                     )
                     return
 
-            remaining_time = duration_us - (self.env.now - wait_start_time)
+            remaining_time = duration_us - (self.env.now - wait_start_time) if (self.env.now - wait_start_time) < duration_us else 0
 
             # Channel is now idle, start timing
             timeout = self.env.timeout(remaining_time)
@@ -294,12 +294,12 @@ class MAC:
                     (
                         ch_duration_us
                         if isinstance(ch_duration_us, int)
-                        else ch_duration_us[ch_id]
+                        else ch_duration_us[ch_id] if ch_duration_us[ch_id] > 0 else 0
                     ),
                     (
                         ch_waited_time_us
                         if isinstance(ch_waited_time_us, int)
-                        else ch_waited_time_us[ch_id]
+                        else ch_waited_time_us[ch_id] if ch_waited_time_us[ch_id] > 0 else 0
                     ),
                 )
             )

@@ -1,5 +1,5 @@
-from src.sim_params import SimParams as sparams
-from src.user_config import UserConfig as cfg
+from src.sim_params import SimParams as sparams_module
+from src.user_config import UserConfig as cfg_module
 
 from src.utils.data_units import Packet
 from src.utils.event_logger import get_logger
@@ -149,7 +149,7 @@ class MediumStats:
 
 
 class NetworkStats:
-    def __init__(self, cfg: cfg, sparams: sparams, network):
+    def __init__(self, cfg: cfg_module, sparams: sparams_module, network):
         from src.components.network import Network
 
         self.cfg = cfg

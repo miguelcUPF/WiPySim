@@ -1,4 +1,4 @@
-from src.sim_params import SimParams as sparams
+from src.sim_params import SimParams as sparams_module
 from src.utils.mcs_table import calculate_data_rate_bps
 
 
@@ -6,7 +6,7 @@ import math
 import random
 
 
-def get_path_loss_dB(sparams: sparams, distance_m: float) -> float:
+def get_path_loss_dB(sparams: sparams_module, distance_m: float) -> float:
     """
     Calculate the path loss (in dB) given the distance (in meters) according to the free-space log-distance path loss model.
 
@@ -35,7 +35,7 @@ def get_path_loss_dB(sparams: sparams, distance_m: float) -> float:
 
 
 def get_tx_duration_us(
-    sparams: sparams,
+    sparams: sparams_module,
     mcs_index: int,
     channel_width: int,
     size_bytes: int,
@@ -69,7 +69,7 @@ def get_tx_duration_us(
     return round(tx_duration_us)
 
 
-def get_rssi_dbm(sparams: sparams, distance_m: float) -> float:
+def get_rssi_dbm(sparams: sparams_module, distance_m: float) -> float:
     """
     Calculates the RSSI in dBm for a given distance in meters.
 

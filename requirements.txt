@@ -7,3 +7,7 @@ chardet
 tqdm
 wandb
 codecarbon
+optuna
+optuna[visualization]
+plotly
+scikit-learn

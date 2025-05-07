@@ -60,7 +60,8 @@ class UserConfig:
 
     # only if "sw_linucb" or "linucb":
     # - alpha (optional): confidence bound parameter for LinUCB. Default: 1
-    # - window_size (optional): window size for LinUCB. If None, it will be set to the number of actions. Default: Noneç
+    # only if "sw_linucb":
+    # - window_size (optional): window size for SW-LinUCB. If None, it will be set to the number of actions. Default: None
 
     # only if "epsilon_greedy" or "decay_epsilon_greedy":
     # - epsilon (optional): epsilon value for epsilon-greedy strategy. Default: 0.1
@@ -89,7 +90,7 @@ class UserConfig:
     USE_COLORS_IN_LOGS = True  # Enable/disable colored logs
 
     ENABLE_LOGS_RECORDING = (
-        True  # Enable/disable recording logs (may affect performance)
+        False  # Enable/disable recording logs (may affect performance)
     )
     LOGS_RECORDING_PATH = "data/events"  # Path to the directory where logs will be recorded. A subfolder can be created for each simulation
 

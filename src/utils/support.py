@@ -1,5 +1,5 @@
-from src.user_config import UserConfig as cfg
-from src.sim_params import SimParams as sparams
+from src.user_config import UserConfig as cfg_module
+from src.sim_params import SimParams as sparams_module
 
 from src.components.network import Network
 from src.components.medium import VALID_BONDS
@@ -14,7 +14,7 @@ import logging
 import wandb
 
 
-def validate_params(sparams: sparams, logger: logging.Logger):
+def validate_params(sparams: sparams_module, logger: logging.Logger):
     bool_params = {
         "ENABLE_RTS_CTS": sparams.ENABLE_RTS_CTS,
         "ENABLE_SHADOWING": sparams.ENABLE_SHADOWING,
@@ -104,7 +104,7 @@ def validate_params(sparams: sparams, logger: logging.Logger):
     logger.success("Simulation parameters validated.")
 
 
-def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
+def validate_config(cfg: cfg_module, sparams: sparams_module, logger: logging.Logger) -> None:
     def _is_valid_pos(pos) -> bool:
         if isinstance(pos, tuple) and len(pos) == 3:
             return all(isinstance(x, (int, float)) for x in pos)
@@ -280,7 +280,9 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     "RL_MODE is {cfg.RL_MODE}, ignoring channel_frequency..."
                 )
             else:
-                if not isinstance(cfg.AGENTS_SETTINGS.get("channel_frequency", None), int):
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("channel_frequency", None), int
+                ):
                     logger.critical(
                         f"Invalid channel_frequency: '{cfg.AGENTS_SETTINGS.get('channel_frequency', None)}'. It must be an integer."
                     )
@@ -295,7 +297,9 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     "RL_MODE is {cfg.RL_MODE}, ignoring primary_frequency..."
                 )
             else:
-                if not isinstance(cfg.AGENTS_SETTINGS.get("primary_frequency", None), int):
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("primary_frequency", None), int
+                ):
                     logger.critical(
                         f"Invalid primary_frequency: '{cfg.AGENTS_SETTINGS.get('primary_frequency', None)}'. It must be an integer."
                     )
@@ -337,11 +341,11 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
 
         if cfg.AGENTS_SETTINGS.get("joint_frequency", None):
             if cfg.RL_MODE != 0:
-                logger.warning(
-                    "RL_MODE is 1, ignoring joint_frequency..."
-                )
+                logger.warning("RL_MODE is 1, ignoring joint_frequency...")
             else:
-                if not isinstance(cfg.AGENTS_SETTINGS.get("joint_frequency", None), int):
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("joint_frequency", None), int
+                ):
                     logger.critical(
                         f"Invalid joint_frequency: '{cfg.AGENTS_SETTINGS.get('joint_frequency', None)}'. It must be an integer."
                     )
@@ -349,7 +353,6 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     logger.critical(
                         f"Invalid joint_frequency: '{cfg.AGENTS_SETTINGS.get('joint_frequency', None)}'. It must be a positive integer."
                     )
-
 
         if strategy in [
             "sw_linucb",
@@ -368,6 +371,10 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
             }
 
             _param_validation(param_validations)
+
+        if strategy == "linucb":
+            if cfg.AGENTS_SETTINGS.get("window_size") is not None:
+                logger.warning(f"Strategy {strategy} does not use window_size.")
 
         if strategy in [
             "epsilon_greedy",
@@ -729,7 +736,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
     logger.success("User configuration validated.")
 
 
-def warn_overwriting_enabled_paths(cfg: cfg, logger: logging.Logger):
+def warn_overwriting_enabled_paths(cfg: cfg_module, logger: logging.Logger):
     path_settings = {
         "logs": cfg.ENABLE_LOGS_RECORDING,
         "figures": cfg.ENABLE_FIGS_SAVING,
@@ -752,14 +759,14 @@ def warn_overwriting_enabled_paths(cfg: cfg, logger: logging.Logger):
     input(PRESS_TO_CONTINUE_MSG)
 
 
-def validate_settings(cfg: cfg, sparams: sparams, logger: logging.Logger):
+def validate_settings(cfg: cfg_module, sparams: sparams_module, logger: logging.Logger):
     validate_params(sparams, logger)
     validate_config(cfg, sparams, logger)
     warn_overwriting_enabled_paths(cfg, logger)
 
 
 def initialize_network(
-    cfg: cfg, sparams: sparams, env: simpy.Environment, network: Network = None
+    cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, network: Network = None
 ) -> Network:
     def _get_unique_position(bounds: tuple, used_positions: set) -> tuple:
         """Generate a unique random position within bounds."""
@@ -897,7 +904,7 @@ def add_bss_automatically(BSSs, num_bss: int = 0, last_node_id: int = 0):
     return BSSs
 
 
-def wandb_init(cfg: cfg):
+def wandb_init(cfg: cfg_module):
     if cfg.USE_WANDB and cfg.ENABLE_RL:
         agent_cfg = {
             "strategy": cfg.AGENTS_SETTINGS["strategy"],
