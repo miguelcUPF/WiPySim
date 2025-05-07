@@ -3,6 +3,8 @@ from src.user_config import UserConfig as cfg
 from src.utils.event_logger import get_logger
 from src.components.network import AP
 
+from collections import deque
+
 import numpy as np
 import simpy
 import random
@@ -10,16 +12,18 @@ import wandb
 
 
 # https://arxiv.org/pdf/1003.0146
-class LinUcbCMAB:
+# https://dl.acm.org/doi/abs/10.1145/3297280.3297440?casa_token=eoZgPNBt-AUAAAAA:o80ERr_mN7BeM9GFgjH801INiTUf31_9OYERVQfAnnHPYEC6K9i00knEYUwMpcR_ZQeGwNq6yn9tOMU
+class SWLinUCB:
     def __init__(
         self,
         name: str,
         n_actions: int,
         context_dim: int,
         marl_controller,
-        strategy: str = "linucb",
+        strategy: str = "sw_linucb",
         weights_r: dict[str, float] = None,
         alpha: float = 1.0,
+        window_size: int | None = None,
     ):
         self.name = name
         self.n_actions = n_actions
@@ -28,11 +32,16 @@ class LinUcbCMAB:
         self.marl_controller = marl_controller
 
         self.strategy = strategy
-        self.alpha = alpha  # Confidence bound parameter for LinUCB
+        self.alpha = alpha
         self.weights_r = weights_r or {}
 
         self.A = [np.identity(context_dim) for _ in range(n_actions)]
         self.b = [np.zeros(context_dim) for _ in range(n_actions)]
+
+        # SW-LinUCB
+        self.time_step = 0
+        self.window_size = window_size if window_size is not None else n_actions
+        self.E = [deque(maxlen=self.window_size) for _ in range(n_actions)]
 
     def _linucb(self, context, valid_actions=None):
         if valid_actions is None:
@@ -43,11 +52,40 @@ class LinUcbCMAB:
             A_inv = np.linalg.inv(self.A[a])
             theta = A_inv @ self.b[a]
             p[a] = context @ theta + self.alpha * np.sqrt(context @ A_inv @ context)
-        return np.argmax(p)
+        action = np.argmax(p)
+        return action
+
+    def _sw_linucb(self, context, valid_actions=None):
+        self.time_step += 1
+        if valid_actions is None:
+            valid_actions = list(range(self.n_actions))
+
+        p = np.full(self.n_actions, -np.inf)
+        for a in valid_actions:
+            A_inv = np.linalg.inv(self.A[a])
+            theta = A_inv @ self.b[a]
+
+            if self.window_size == 0:
+                # Act like LinUCB: ignore gamma_t
+                p[a] = context @ theta + self.alpha * np.sqrt(context @ A_inv @ context)
+            else:
+                occ = sum(self.E[a]) if self.time_step > self.window_size else 0
+                gamma_t = (occ / self.window_size) 
+                # since our rewards are negative, we consider (occ / self.window_size) rather than (1 - occ / self.window_size) to penalize frequently selected actions
+
+                p[a] = gamma_t * (context @ theta) + self.alpha * np.sqrt(
+                    context @ A_inv @ context
+                )
+        action = np.argmax(p)
+        for a in range(self.n_actions):
+            self.E[a].append(1 if a == action else 0)
+        return action
 
     def select_action(self, context, valid_actions=None):
         if self.strategy == "linucb":
             return self._linucb(context, valid_actions)
+        elif self.strategy == "sw_linucb":
+            return self._sw_linucb(context, valid_actions)
         else:
             raise ValueError(f"Unknown strategy {self.strategy}")
 
@@ -59,9 +97,11 @@ class LinUcbCMAB:
     def reset(self):
         self.A = [np.identity(self.context_dim) for _ in range(self.n_actions)]
         self.b = [np.zeros(self.context_dim) for _ in range(self.n_actions)]
+        self.E = [deque(maxlen=self.window_size) for _ in range(self.n_actions)]
+        self.time_step = 0
 
 
-class EpsRMSPropCMAB:
+class EpsRMSProp:
     """
     Epsilon-greedy Contextual Multi-Armed Bandit with linear reward approximation
     and RMSProp-based weight updates.
@@ -127,7 +167,7 @@ class EpsRMSPropCMAB:
             masked_preds = np.full_like(preds, -np.inf)
             for a in valid_actions:
                 masked_preds[a] = preds[a]
-            action = np.argmax(masked_preds)  # Exploit
+            return np.argmax(masked_preds)  # Exploit
         return action
 
     def _decay_epsilon_greedy(self, context, valid_actions=None):
@@ -201,12 +241,12 @@ class MARLAgentController:
         self.settings = settings
 
         # Select agent types based on the strategy setting
-        strategy = settings.get("strategy", "linucb")
+        strategy = settings.get("strategy", "sw_linucb")
 
-        if strategy == "linucb":
-            agent_class = LinUcbCMAB
+        if strategy in ["sw_linucb", "linucb"]:
+            agent_class = SWLinUCB
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
-            agent_class = EpsRMSPropCMAB
+            agent_class = EpsRMSProp
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
@@ -239,7 +279,7 @@ class MARLAgentController:
             "weights_r": settings.get("cw_weights", {}),
         }
 
-        if agent_class == EpsRMSPropCMAB:
+        if agent_class == EpsRMSProp:
             channel_params.update(
                 {
                     "epsilon": settings.get("epsilon", 0.1),
@@ -267,20 +307,23 @@ class MARLAgentController:
                     "alpha_ema": settings.get("alpha_ema", 0.1),
                 }
             )
-        elif agent_class == LinUcbCMAB:
+        elif agent_class == SWLinUCB:
             channel_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
+                    "window_size": settings.get("window_size", None),
                 }
             )
             primary_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
+                    "window_size": settings.get("window_size", None),
                 }
             )
             cw_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
+                    "window_size": settings.get("window_size", None),
                 }
             )
 

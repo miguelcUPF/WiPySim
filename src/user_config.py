@@ -53,19 +53,20 @@ class UserConfig:
     }
 
     # Algorithm settings for each agent. Keys:
-    # - strategy (optional): "linucb" or "epsilon_greedy" or "decay_epsilon_greedy". Default: "linucb"
+    # - strategy (optional): "sw_linucb" or "linucb" or "epsilon_greedy" or "decay_epsilon_greedy". Default: "sw_linucb"
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - cw_frequency (optional): frequency of the cw agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
-    # - include_prev_decision: whether to include the previous action in the state. Default: False
-    # - alpha (optional, only if strategy is "linucb"): confidence bound parameter for LinUCB. Default: 1
+    # - include_prev_decision (optional): whether to include the previous action in the state. Default: False
+    # - alpha (optional, only if strategy is "sw_linucb" or "linucb"): confidence bound parameter for LinUCB. Default: 1
+    # - window_size (optional, only if strategy is "sw_linucb" or "linucb"): window size for LinUCB. If None, it will be set to the number of actions. Default: None
     # - epsilon (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): epsilon value for epsilon-greedy strategy. Default: 0.1
     # - decay_rate (optional, only if strategy is "decay_epsilon_greedy"): decay rate for decay epsilon-greedy strategy. Default: 0.99
     # - eta (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): learning rate. Default: 0.1
     # - gamma (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): RMSProp decay factor. Default: 0.9
     # - alpha_ema (optional, only if strategy is "epsilon_greedy" or "decay_epsilon_greedy"): EMA smoothing factor. Default: 0.1
     AGENTS_SETTINGS = {
-        "strategy": "linucb",
+        "strategy": "sw_linucb",
         "channel_frequency": 8,
         "primary_frequency": 4,
         "cw_frequency": 1,

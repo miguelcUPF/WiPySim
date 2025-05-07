@@ -114,6 +114,31 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
         x, y, z = pos
         x_lim, y_lim, z_lim = bounds
         return 0 <= x <= x_lim and 0 <= y <= y_lim and 0 <= z <= z_lim
+    
+    def _param_validation(param_validations: dict):
+        for param, (valid_types, min_val, max_val, inclusive_min, inclusive_max) in param_validations.items():
+            val = cfg.AGENTS_SETTINGS.get(param)
+            if val is None:
+                continue
+
+            # Type check
+            if not isinstance(val, valid_types):
+                logger.critical(f"Invalid {param}: '{val}'. It must be a {valid_types}.")
+                continue
+
+            # Lower bound check
+            if min_val is not None:
+                if inclusive_min and val < min_val:
+                    logger.critical(f"Invalid {param}: '{val}'. It must be ≥ {min_val}.")
+                elif not inclusive_min and val <= min_val:
+                    logger.critical(f"Invalid {param}: '{val}'. It must be > {min_val}.")
+
+            # Upper bound check
+            if max_val is not None:
+                if inclusive_max and val > max_val:
+                    logger.critical(f"Invalid {param}: '{val}'. It must be ≤ {max_val}.")
+                elif not inclusive_max and val >= max_val:
+                    logger.critical(f"Invalid {param}: '{val}'. It must be < {max_val}.")  
 
     if not cfg.SIMULATION_TIME_us.is_integer() or cfg.SIMULATION_TIME_us <= 0:
         logger.critical(
@@ -203,13 +228,15 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
 
         if strategy:
             if strategy not in [
+                "sw_linucb",
                 "linucb",
                 "epsilon_greedy",
                 "decay_epsilon_greedy",
             ]:
                 logger.critical(
-                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'linucb', 'epsilon_greedy' or 'decay_epsilon_greedy'."
+                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy' or 'decay_epsilon_greedy'."
                 )
+
         if cfg.AGENTS_SETTINGS.get("channel_frequency", None):
             if not isinstance(cfg.AGENTS_SETTINGS.get("channel_frequency", None), int):
                 logger.critical(
@@ -263,10 +290,28 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                     f"Invalid include_prev_decision: '{cfg.AGENTS_SETTINGS.get('include_prev_decision', None)}'. It must be a boolean."
                 ) 
         if strategy in [
+            "sw_linucb",
+            "linucb",
+        ]:
+            unused_params = ["epsilon", "decay_rate", "eta" "gamma", "alpha_ema"]
+
+            for param in unused_params:
+                if cfg.AGENTS_SETTINGS.get(param) is not None:
+                    logger.warning(f"Strategy {strategy} does not use {param}.")
+            
+            # Validation rules: (type, min_val, max_val, inclusive_min, inclusive_max)
+            param_validations = {
+                "alpha": ((float, int), 0, None, False, None),      # (0, ∞)
+                "window_size": ((int, None), 0, None, True, None),       # [0, ∞)
+            }
+
+            _param_validation(param_validations)
+        
+        if strategy in [
             "epsilon_greedy",
             "decay_epsilon_greedy",
         ]:
-            unused_params = ["alpha"]
+            unused_params = ["alpha", "window_size"]
 
             for param in unused_params:
                 if cfg.AGENTS_SETTINGS.get(param) is not None:
@@ -281,46 +326,7 @@ def validate_config(cfg: cfg, sparams: sparams, logger: logging.Logger) -> None:
                 "alpha_ema": ((float, int), 0, 1, True, False),    # [0, 1)
             }
 
-            for param, (valid_types, min_val, max_val, inclusive_min, inclusive_max) in param_validations.items():
-                val = cfg.AGENTS_SETTINGS.get(param)
-                if val is None:
-                    continue
-
-                # Type check
-                if not isinstance(val, valid_types):
-                    logger.critical(f"Invalid {param}: '{val}'. It must be a float or integer.")
-                    continue
-
-                # Lower bound check
-                if min_val is not None:
-                    if inclusive_min and val < min_val:
-                        logger.critical(f"Invalid {param}: '{val}'. It must be ≥ {min_val}.")
-                    elif not inclusive_min and val <= min_val:
-                        logger.critical(f"Invalid {param}: '{val}'. It must be > {min_val}.")
-
-                # Upper bound check
-                if max_val is not None:
-                    if inclusive_max and val > max_val:
-                        logger.critical(f"Invalid {param}: '{val}'. It must be ≤ {max_val}.")
-                    elif not inclusive_max and val >= max_val:
-                        logger.critical(f"Invalid {param}: '{val}'. It must be < {max_val}.")
-        
-        if strategy == "linucb":
-            if cfg.AGENTS_SETTINGS.get("alpha", None):
-                if not isinstance(cfg.AGENTS_SETTINGS.get("alpha", None), (float, int)):
-                    logger.critical(
-                        f"Invalid alpha: '{cfg.AGENTS_SETTINGS.get('alpha', None)}'. It must be a float or integer."
-                    )
-                if cfg.AGENTS_SETTINGS.get("alpha", None) <= 0:
-                    logger.critical(
-                        f"Invalid alpha: '{cfg.AGENTS_SETTINGS.get('alpha', None)}'. It must be greater than 0."
-                    )
-            unused_params = ["epsilon", "decay_rate", "eta", "gamma", "alpha_ema"]
-
-            for param in unused_params:
-                if cfg.AGENTS_SETTINGS.get(param) is not None:
-                    logger.warning(f"Strategy {strategy} does not use {param}.")
-
+            _param_validation(param_validations)
 
     str_settings = {
         "WANDB_PROJECT_NAME": cfg.WANDB_PROJECT_NAME,
@@ -834,6 +840,7 @@ def wandb_init(cfg: cfg):
         agent_cfg = {
             "strategy": cfg.AGENTS_SETTINGS["strategy"],
             "alpha": cfg.AGENTS_SETTINGS.get("alpha"),
+            "window_size": cfg.AGENTS_SETTINGS.get("window_size"),
             "epsilon": cfg.AGENTS_SETTINGS.get("epsilon"),
             "decay_rate": cfg.AGENTS_SETTINGS.get("decay_rate"),
             "eta": cfg.AGENTS_SETTINGS.get("eta"),

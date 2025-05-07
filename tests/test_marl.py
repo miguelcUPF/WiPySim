@@ -45,11 +45,12 @@ cfg.CW_AGENT_WEIGHTS = {
     "residual_delay": 0.3,
 }
 cfg.AGENTS_SETTINGS = {
-    "strategy": "linucb",
+    "strategy": "sw_linucb",
     "channel_frequency": 8,
     "primary_frequency": 4,
     "cw_frequency": 1,
     "epsilon": 0.1,
+    "window_size": 0,
 }
 
 cfg.ENABLE_CONSOLE_LOGGING = False
