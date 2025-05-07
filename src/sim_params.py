@@ -53,8 +53,7 @@ class SimParams:
     #    - Pause backoff only if all channels are busy.
     #    - Transmit on the available subset of idle channels.
     #    - No need to follow IEEE 802.11 standardized channelization. Channels also do not need to be contiguous.
-  
-    
+
     # --- Channel Parameters --- #
     FREQUENCY_GHz = 5
 
@@ -66,6 +65,3 @@ class SimParams:
     SHADOWING_STD_dB = 6.8  # 6.8 considering indoor NLOS environment
 
     MPDU_ERROR_PROBABILITY = 0.1
-
-    # --- RL Parameters --- #
-    CW_OPTIONS = [2, 4, 8, 16, 32]

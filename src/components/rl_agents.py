@@ -70,7 +70,7 @@ class SWLinUCB:
                 p[a] = context @ theta + self.alpha * np.sqrt(context @ A_inv @ context)
             else:
                 occ = sum(self.E[a]) if self.time_step > self.window_size else 0
-                gamma_t = (occ / self.window_size) 
+                gamma_t = occ / self.window_size
                 # since our rewards are negative, we consider (occ / self.window_size) rather than (1 - occ / self.window_size) to penalize frequently selected actions
 
                 p[a] = gamma_t * (context @ theta) + self.alpha * np.sqrt(
@@ -272,7 +272,7 @@ class MARLAgentController:
 
         cw_params = {
             "name": "cw_agent",
-            "n_actions": 3,  # 0: decrease, 1: maintain, 2: increase
+            "n_actions": 7,  # 0: {16}, 1: {32}, 2: {64}, 3: {128}, 4: {256}, 5: {512}, 6: {1024} (i.e., 2**(x+4))
             "context_dim": 11
             + padding_ctxt,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size + (prev decision: current cw)
             "strategy": strategy,

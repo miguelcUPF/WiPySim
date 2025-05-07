@@ -39,7 +39,7 @@ CHANNEL_MAP = {
     6: {1, 2, 3, 4},
 }
 PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
-CW_MAP = {0: "decrease", 1: "maintain", 2: "increase"}
+CW_MAP = {i: 2**(4 + i) for i in range(7)}
 
 
 class MACState:
@@ -110,7 +110,7 @@ class MAC:
         self.bo_duration_us = 0
         self.tx_duration_us = 0
 
-        self.cw_current = self.sparams.CW_OPTIONS[0]
+        self.cw_current = 8 # lazy init
 
         self.mac_state_stats = MACStateStats()
 
@@ -1015,20 +1015,16 @@ class MAC:
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
         (
-            cw_ctx.append(self.cw_current / len(self.sparams.CW_OPTIONS))
+            cw_ctx.append(self.cw_current / len(CW_MAP))
             if self.rl_settings.get("include_prev_decision", False)
             else None
         )
         cw_action = self.rl_controller.decide_cw(np.array(cw_ctx))
 
-        index = self.sparams.CW_OPTIONS.index(self.cw_current)
-        if cw_action == 0 and index > 0:
-            self.cw_current = self.sparams.CW_OPTIONS[index - 1]
-        elif cw_action == 2 and index < len(self.sparams.CW_OPTIONS) - 1:
-            self.cw_current = self.sparams.CW_OPTIONS[index + 1]
+        self.cw_current = CW_MAP[cw_action]
 
         self.logger.debug(
-            f"{self.node.type} {self.node.id} -> CW agent selected action {cw_action} ({CW_MAP[cw_action]}), CW size changed to {self.cw_current}"
+            f"{self.node.type} {self.node.id} -> CW agent selected action {cw_action}, CW size changed to {self.cw_current}"
         )
 
     def _log_to_wandb_delays(self, delay_components: dict):
