@@ -825,7 +825,7 @@ class MAC:
                 f"{self.node.type} {self.node.id} -> MAC state: {self.state} ({state_name})"
             )
 
-    def _get_channel_durations(self):
+    def _get_channel_durations(self, had_nothing_to_send=False):
         ch_duration_us = {}
         ch_waited_times = {}
 
@@ -833,9 +833,13 @@ class MAC:
             ch_duration_us[ch_id] = self.sparams.DIFS_us
             ch_waited_times[ch_id] = 0
 
+        # If it had no packets to send, it should start contending now; thus, no waited time sould be considered; duration should be DIFS
+        if had_nothing_to_send:
+            return ch_duration_us, ch_waited_times
+
         # If an AMDPU/RTS collision occured while not contending it should be sensed during EIFS
         # This happens when an RTS and AMPDU (sent due to size smaller than RTS_THRESHOLD_SIZE) collide
-        # The RTS sender does not count the channel as idle during the time elapsed from the delivery of the AMPDU until its CTS timeout occurs.
+        # The RTS sender does not count the channel as idle during the time elapsed from the delivery of the AMPDU until its CTS timeout occurs loosing 'coordination'.
         for ch_id in self.node.phy_layer.get_ampdu_collisions_channels_ids():
             waited_time_us = self.env.now - self.node.phy_layer.get_last_collision_time(
                 ch_id
@@ -850,8 +854,8 @@ class MAC:
 
         return ch_duration_us, ch_waited_times
 
-    def _csma_ca(self):
-        ch_duration_us, ch_waited_times = self._get_channel_durations()
+    def _csma_ca(self, had_nothing_to_send=False):
+        ch_duration_us, ch_waited_times = self._get_channel_durations(had_nothing_to_send)
 
         self.node.phy_layer.reset_collision_events()
         idle_channels = None
@@ -1085,6 +1089,7 @@ class MAC:
 
     def run(self):
         """Handles channel access, contention, and transmission"""
+        had_nothing_to_send = True
         while True:
             if (
                 self.non_full_event is not None
@@ -1130,7 +1135,9 @@ class MAC:
                         if self.tx_counter % joint_freq == 0:
                             self._run_joint_agent()
 
-                yield self.env.process(self._csma_ca())
+                yield self.env.process(self._csma_ca(had_nothing_to_send))
+
+                had_nothing_to_send = False
 
                 if self.backoff_slots > 0 or self.backoff_slots == -1:
                     continue
@@ -1141,3 +1148,4 @@ class MAC:
             else:
                 self.tx_queue_event = self.env.event()
                 yield self.tx_queue_event
+                had_nothing_to_send = True
