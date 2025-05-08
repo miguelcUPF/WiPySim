@@ -14,16 +14,22 @@ import random
 import os
 
 
-def generate_training_scenarios(seed: int = None, num_scenarios: int = 25):
+def generate_training_scenarios(num_scenarios: int = 25, sim_time_us_list=None, seed=None):
     from src.utils.scenario_gen import generate_random_scenario
-
-    random.seed(seed)
 
     training_scenarios = []
 
+    rng = random.Random(seed)
+
     for i in range(num_scenarios):
+        if sim_time_us_list is not None:
+            if i >= len(sim_time_us_list):
+                raise ValueError("sim_time_us_list must be as long as num_scenarios")
+            sim_time_us = sim_time_us_list[i]
+        else:
+            sim_time_us = None
         training_scenarios.append(
-            generate_random_scenario(seed=i, num_bss=random.randint(2, 6), num_rl_bss=1)
+            generate_random_scenario(seed=i, num_bss=rng.randint(2, 6), num_rl_bss=1, sim_time_us=sim_time_us, disable_start_end=True)
         )
 
     return training_scenarios
@@ -46,7 +52,9 @@ def objective(
         sparams = sparams_module()
 
         cfg.SIMULATION_TIME_us = scenario["sim_time_us"]
+
         cfg.SEED = scenario["seed"]
+
         cfg.ENABLE_RL = True
         cfg.RL_MODE = rl_mode
 
@@ -58,6 +66,8 @@ def objective(
         cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
         cfg.BSSs_Advanced = scenario["bsss_advanced"]
 
+        cfg.ENABLE_STATS_COMPUTATION = False
+
         agents_settings = {"strategy": strategy}
 
         if strategy in ["sw_linucb", "linucb"]:
@@ -67,8 +77,8 @@ def objective(
 
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
             agents_settings["epsilon"] = trial.suggest_float("epsilon", 0.01, 0.5)
-            agents_settings["eta"] = trial.suggest_float("eta", 0.01, 0.5)
-            agents_settings["gamma"] = trial.suggest_float("gamma", 0.5, 0.99)
+            agents_settings["eta"] = trial.suggest_float("eta", 1e-5, 1e-1, log=True)
+            agents_settings["gamma"] = trial.suggest_float("gamma", 0.7, 0.99)
             agents_settings["alpha_ema"] = trial.suggest_float("alpha_ema", 0.01, 0.3)
             if strategy == "decay_epsilon_greedy":
                 agents_settings["decay_rate"] = trial.suggest_float(
@@ -84,7 +94,11 @@ def objective(
 
             for ap in network.get_aps():
                 if ap.id == 1:
-                    result = np.mean(ap.mac_layer.rl_controller.results)
+                    results = ap.mac_layer.rl_controller.results
+                    if len(results) == 0:
+                        result = np.inf
+                        break
+                    result = np.mean(results)
                     break
 
             runs.append(result)
@@ -96,12 +110,13 @@ def objective(
     return np.mean(runs)
 
 
-N_TRIALS = 5
-N_SCENARIOS = 2
+N_TRIALS = 1
+N_SCENARIOS = 1
 SEED = 1
 RL_MODE = 1
 STRATEGY = "sw_linucb"
 CLEANUP_STUDY = True
+DISPLAY_STUDY_FIGS = False
 
 if CLEANUP_STUDY:
     if os.path.exists("tuning_study.db"):
@@ -111,7 +126,7 @@ if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
     training_scenarios = generate_training_scenarios(
-        seed=SEED, num_scenarios=N_SCENARIOS
+        num_scenarios=N_SCENARIOS, seed=SEED
     )
 
     study = optuna.create_study(
@@ -130,7 +145,7 @@ if __name__ == "__main__":
             rl_mode=RL_MODE,
         ),
         n_trials=N_TRIALS,
-        n_jobs=-1,
+        n_jobs=1,
         show_progress_bar=True,
     )
     print(TEST_COMPLETED_MSG)
@@ -161,11 +176,12 @@ if __name__ == "__main__":
         f"  Failed: {sum(t.state == optuna.trial.TrialState.FAIL for t in study.trials)}"
     )
 
-    vis.plot_optimization_history(study).show()
-    if len(study.trials) > 1:
-        vis.plot_param_importances(study).show()
-    vis.plot_parallel_coordinate(study).show()
-    vis.plot_edf(study)
+    if DISPLAY_STUDY_FIGS:
+        vis.plot_optimization_history(study).show()
+        if len(study.trials) > 1:
+            vis.plot_param_importances(study).show()
+        vis.plot_parallel_coordinate(study).show()
+        vis.plot_edf(study)
 
-    input(PRESS_TO_EXIT_MSG)
+        input(PRESS_TO_EXIT_MSG)
     

@@ -6,7 +6,7 @@ import math
 import random
 
 
-def get_path_loss_dB(sparams: sparams_module, distance_m: float) -> float:
+def get_path_loss_dB(sparams: sparams_module, distance_m: float, seed=None) -> float:
     """
     Calculate the path loss (in dB) given the distance (in meters) according to the free-space log-distance path loss model.
 
@@ -17,6 +17,7 @@ def get_path_loss_dB(sparams: sparams_module, distance_m: float) -> float:
     Returns:
         float: The path loss in dB.
     """
+    rng = random.Random(seed)
     # Path loss at reference distance (1 meter) assuming free space
     path_loss_1m_dB = (
         20 * math.log10(1) + 20 * math.log10(sparams.FREQUENCY_GHz * 1e9) - 147.55
@@ -28,7 +29,7 @@ def get_path_loss_dB(sparams: sparams_module, distance_m: float) -> float:
 
     # Add a random shadowing component if enabled
     if sparams.ENABLE_SHADOWING:
-        shadowing_dB = random.gauss(0, sparams.SHADOWING_STD_dB)
+        shadowing_dB = rng.gauss(0, sparams.SHADOWING_STD_dB)
         path_loss += shadowing_dB
 
     return path_loss
@@ -69,7 +70,7 @@ def get_tx_duration_us(
     return round(tx_duration_us)
 
 
-def get_rssi_dbm(sparams: sparams_module, distance_m: float) -> float:
+def get_rssi_dbm(sparams: sparams_module, distance_m: float, seed=None) -> float:
     """
     Calculates the RSSI in dBm for a given distance in meters.
 
@@ -85,7 +86,7 @@ def get_rssi_dbm(sparams: sparams_module, distance_m: float) -> float:
         sparams.TX_POWER_dBm
         + sparams.TX_GAIN_dB
         + sparams.RX_GAIN_dB
-        - get_path_loss_dB(sparams, distance_m)
+        - get_path_loss_dB(sparams, distance_m, seed=seed)
     )
 
     return rssi_dbm

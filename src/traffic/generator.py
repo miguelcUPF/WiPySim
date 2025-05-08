@@ -66,6 +66,8 @@ class TrafficGenerator:
 
         self.active_processes = []
 
+        self.rng = random.Random(cfg.SEED)
+
         self.env.process(self._delayed_run())
 
     def _delayed_run(self):
@@ -117,7 +119,7 @@ class TrafficGenerator:
         try:
             while True:
                 inter_arrival_time_us = (
-                    random.expovariate(1 / avg_inter_pkt_time_us)
+                    self.rng.expovariate(1 / avg_inter_pkt_time_us)
                     if avg_inter_pkt_time_us > 0
                     else 1
                 )
@@ -143,7 +145,7 @@ class TrafficGenerator:
         try:
             while True:
                 inter_burst_time_us = (
-                    random.expovariate(1 / avg_inter_burst_time_us)
+                    self.rng.expovariate(1 / avg_inter_burst_time_us)
                     if avg_inter_burst_time_us > 0
                     else 1
                 )
@@ -160,7 +162,7 @@ class TrafficGenerator:
 
                 inter_pkt_time_us = min(
                     (
-                        random.expovariate(1 / self.avg_inter_packet_time_us)
+                        self.rng.expovariate(1 / self.avg_inter_packet_time_us)
                         if self.avg_inter_packet_time_us > 0
                         else 1
                     ),
@@ -207,7 +209,7 @@ class TrafficGenerator:
 
                 inter_pkt_time_us = min(
                     (
-                        random.expovariate(1 / self.avg_inter_packet_time_us)
+                        self.rng.expovariate(1 / self.avg_inter_packet_time_us)
                         if self.avg_inter_packet_time_us > 0
                         else 1
                     ),

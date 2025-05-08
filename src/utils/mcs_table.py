@@ -1,6 +1,3 @@
-from src.utils.event_logger import COLORS
-
-
 """
 802.11ax MCS Table (OFDM) - Modulation, Coding Rate, and Sensitivity Levels
 Reference: https://semfionetworks.com/blog/mcs-table-updated-with-80211ax-data-rates/
@@ -145,7 +142,7 @@ def get_min_sensitivity_dBm(mcs_index: int, channel_width_mhz: int) -> float:
 
 
 def get_highest_mcs_index(
-    rssi_dbm: float, channel_width_mhz: int, ap_id: int = None, sta_id: int = None
+    rssi_dbm: float, channel_width_mhz: int
 ) -> int:
     """
     Retrieve the highest MCS index that can be supported given the eceived signal strength indicator (RSSI) and channel width.
@@ -160,7 +157,7 @@ def get_highest_mcs_index(
 
     if channel_width_mhz not in N_SD:
         raise ValueError(f"Invalid channel width: {channel_width_mhz}")
-
+    
     if rssi_dbm < MCS_min_sensitivity[0][f"{channel_width_mhz}MHz"]:
         return -1
 

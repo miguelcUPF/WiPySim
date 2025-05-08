@@ -125,6 +125,7 @@ class UserConfig:
     TRAFFIC_GEN_RECORDING_PATH = "data/sim_traces/run_1"
 
     # --- Statistics Collection --- #
+    ENABLE_STATS_COMPUTATION = False  # Enable/disable computing tx/rx statistics (can affect performance)
     ENABLE_STATS_COLLECTION = False  # Enable/disable collecting statistics
     STATS_SAVE_PATH = "data/statistics"
 

@@ -9,7 +9,7 @@ from typing import cast
 import networkx as nx
 import math
 import simpy
-
+import random
 
 class Node:
     def __init__(
@@ -47,13 +47,16 @@ class Node:
         self.mac_layer = MAC(cfg, sparams, env, self, rl_driven)
         self.phy_layer = PHY(cfg, sparams, env, self, channels, sensing_channels)
 
-        self.tx_stats = TransmissionStats()
-        self.rx_stats = ReceptionStats()
+        self.tx_stats = TransmissionStats(disabled=not cfg.ENABLE_STATS_COMPUTATION)
+        self.rx_stats = ReceptionStats(disabled=not cfg.ENABLE_STATS_COMPUTATION)
 
         self.traffic_flows = []
 
         self.name = "NODE"
         self.logger = get_logger(self.name, cfg, sparams, env)
+
+        self.rng = random.Random(cfg.SEED)
+
 
     def add_traffic_flow(self, traffic_flow):
         self.traffic_flows.append(traffic_flow)
@@ -168,6 +171,8 @@ class Network:
 
         self.name = "NETWORK"
         self.logger = get_logger(self.name, cfg, sparams, env)
+
+        self.rng = random.Random(cfg.SEED)
 
     @staticmethod
     def _calculate_distance(

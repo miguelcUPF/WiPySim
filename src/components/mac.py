@@ -105,7 +105,7 @@ class MAC:
 
         self.cw_current = 8  # lazy init
 
-        self.mac_state_stats = MACStateStats()
+        self.mac_state_stats = MACStateStats(disabled=not cfg.ENABLE_STATS_COMPUTATION)
 
         self.name = "MAC"
         self.logger = get_logger(
@@ -129,6 +129,8 @@ class MAC:
                 self.rl_controller = MARLController(
                     sparams, cfg, env, self.node, self.rl_settings
                 )
+
+        self.rng = random.Random(cfg.SEED)
 
         self.env.process(self.run())
 
@@ -330,10 +332,10 @@ class MAC:
             return
 
         if self.rl_driven:
-            self.backoff_slots = random.randint(0, self.cw_current - 1)
+            self.backoff_slots = self.rng.randint(0, self.cw_current - 1)
         else:
             cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
-            self.backoff_slots = random.randint(0, max(0, cw - 1))
+            self.backoff_slots = self.rng.randint(0, max(0, cw - 1))
         if not self.is_first_tx:
             self.backoff_slots += 1
 
@@ -458,7 +460,7 @@ class MAC:
         if valid_idle_bonds:
             max_len = max(len(b) for b in valid_idle_bonds)
             longest_bonds = [b for b in valid_idle_bonds if len(b) == max_len]
-            selected = set(random.choice(longest_bonds))
+            selected = set(self.rng.choice(longest_bonds))
         else:
             selected = {primary}
         self.logger.debug(

@@ -39,6 +39,7 @@ class SWLinUCB:
         alpha: float = 1.0,
         window_size: int | None = None,
         negative_rewards: bool = True,
+        seed=None,
     ):
         self.name = name
         self.n_actions = n_actions
@@ -59,6 +60,8 @@ class SWLinUCB:
         self.E = [deque(maxlen=self.window_size) for _ in range(n_actions)]
 
         self.negative_rewards = negative_rewards
+
+        self.rng = random.Random(seed)
 
     def _linucb(self, context, valid_actions=None):
         if valid_actions is None:
@@ -142,6 +145,7 @@ class EpsRMSProp:
         eta: float = 0.1,
         gamma: float = 0.9,
         alpha_ema: float = 0.1,  # EMA factor
+        seed=None,
     ):
 
         self.name = name
@@ -172,6 +176,8 @@ class EpsRMSProp:
         # RMSProp: moving average of squared gradients
         self.grad_squared_avg = np.zeros((n_actions, context_dim))
 
+        self.rng = random.Random(seed)
+
     def _epsilon_greedy(self, context, valid_actions=None):
         """
         Epsilon-greedy algorithm:
@@ -181,8 +187,8 @@ class EpsRMSProp:
         if valid_actions is None:
             valid_actions = list(range(self.n_actions))
 
-        if random.random() < self.epsilon:
-            action = random.choice(valid_actions)  # Explore
+        if self.rng.random() < self.epsilon:
+            action = self.rng.choice(valid_actions)  # Explore
         else:
             preds = self.weight_matrix_ema @ context
             # Create a masked array with -inf for invalid actions to prevent them from being selected
@@ -344,9 +350,9 @@ class MARLController:
                 }
             )
 
-        self.channel_agent = agent_class(**channel_params, marl_controller=self)
-        self.primary_agent = agent_class(**primary_params, marl_controller=self)
-        self.cw_agent = agent_class(**cw_params, marl_controller=self)
+        self.channel_agent = agent_class(**channel_params, marl_controller=self, seed=cfg.SEED)
+        self.primary_agent = agent_class(**primary_params, marl_controller=self, seed=cfg.SEED)
+        self.cw_agent = agent_class(**cw_params, marl_controller=self, seed=cfg.SEED)
 
         self.last_channel_action = None
         self.last_primary_action = None
@@ -586,7 +592,7 @@ class SARLController:
                 }
             )
 
-        self.joint_agent = agent_class(**agent_params, marl_controller=self)
+        self.joint_agent = agent_class(**agent_params, marl_controller=self, seed=cfg.SEED)
 
         self.last_context = None
 

@@ -11,7 +11,7 @@ from src.utils.transmission import get_rssi_dbm
 from typing import cast
 
 import simpy
-
+import random
 
 class PHY:
     def __init__(
@@ -61,6 +61,8 @@ class PHY:
 
         self.set_channels(channels)
         self.set_sensing_channels(sensing_channels)
+
+        self.rng = random.Random(cfg.SEED)
 
         self.env.process(self.run())
 
@@ -180,11 +182,11 @@ class PHY:
     def select_mcs_index(self, id: int):
         # RSSI
         distance_m = self.node.network.get_distance_between_nodes(self.node.id, id)
-        rssi_dbm = get_rssi_dbm(self.sparams, distance_m)
+        rssi_dbm = get_rssi_dbm(self.sparams, distance_m, seed=self.cfg.SEED)
 
         # Get the highest MCS index that can be supported
         mcs_index = get_highest_mcs_index(
-            rssi_dbm, len(self.channels_ids) * 20, self.node.id, id
+            rssi_dbm, len(self.channels_ids) * 20
         )
 
         # If no MCS index can be supported, select MCS 0

@@ -10,10 +10,10 @@ import pandas as pd
 import json
 import os
 import wandb
-
+import random
 
 class TransmissionStats:
-    def __init__(self):
+    def __init__(self, disabled: bool = False):
         self.first_tx_attempt_us = None
         self.last_tx_attempt_us = None
 
@@ -46,7 +46,11 @@ class TransmissionStats:
             columns=["timestamp_us", "queue_len"], data=[[0.0, 0]]
         )
 
+        self.disabled = disabled
+
     def add_to_tx_queue_history(self, timestamp_us: int, queue_len: int):
+        if self.disabled:
+            return
         # a packet is added every time a MPDU is enqueued or dequeued
         new_row = pd.DataFrame([{"timestamp_us": timestamp_us, "queue_len": queue_len}])
         self.tx_queue_len_history = pd.concat(
@@ -57,13 +61,17 @@ class TransmissionStats:
 
 
 class MACStateStats:
-    def __init__(self):
+    def __init__(self, disabled: bool = False):
         self.prev_mac_state_us = 0
         self.mac_states_history = pd.DataFrame(
             columns=["timestamp_us", "duration_us", "state"], data=[[0.0, 0.0, "IDLE"]]
         )
 
+        self.disabled = disabled
+
     def add_to_mac_state_history(self, timestamp_us: int, state: str):
+        if self.disabled:
+            return
         duration_us = timestamp_us - self.prev_mac_state_us
         new_row = pd.DataFrame(
             [{"timestamp_us": timestamp_us, "duration_us": duration_us, "state": state}]
@@ -75,7 +83,7 @@ class MACStateStats:
 
 
 class ReceptionStats:
-    def __init__(self):
+    def __init__(self, disabled: bool = False):
         self.first_rx_time_us = None
         self.last_rx_time_us = None
 
@@ -107,7 +115,11 @@ class ReceptionStats:
             ]
         )
 
+        self.disabled = disabled
+
     def add_packet_to_history(self, packet: Packet):
+        if self.disabled:
+            return
         new_row = pd.DataFrame(
             [
                 {
@@ -187,6 +199,8 @@ class NetworkStats:
 
         self.name = "STATS"
         self.logger = get_logger(self.name, cfg, sparams, self.network.env)
+
+        self.rng = random.Random(cfg.SEED)
 
     def collect_stats(self):
         from src.components.network import Node

@@ -65,6 +65,7 @@ class UserConfig:
     TRAFFIC_GEN_RECORDING_PATH = "tests/sim_traces"
 
     # --- Statistics Collection --- #
+    ENABLE_STATS_COMPUTATION = True
     ENABLE_STATS_COLLECTION = False
     STATS_SAVE_PATH = "tests/statistics"
 
