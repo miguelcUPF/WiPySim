@@ -27,7 +27,7 @@ cfg_module.RL_MODE = 1  # Test 0: SARL, 1: MARL
 cfg_module.USE_WANDB = True
 cfg_module.WANDB_RUN_NAME = "test_marl"
 
-cfg_module.USE_CODECARBON = True
+cfg_module.USE_CODECARBON = False
 
 cfg_module.DISABLE_SIMULTANEOUS_ACTION_SELECTION = True  # Test: True and False
 cfg_module.ENABLE_REWARD_DECOMPOSITION = False  # Test: True and False

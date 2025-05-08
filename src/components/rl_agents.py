@@ -37,8 +37,8 @@ class SWLinUCB:
         strategy: str = "sw_linucb",
         weights_r: dict[str, float] = None,
         alpha: float = 1.0,
+        min_val: float = -10e3,
         window_size: int | None = None,
-        negative_rewards: bool = True,
         seed=None,
     ):
         self.name = name
@@ -59,7 +59,9 @@ class SWLinUCB:
         self.window_size = window_size if window_size is not None else n_actions
         self.E = [deque(maxlen=self.window_size) for _ in range(n_actions)]
 
-        self.negative_rewards = negative_rewards
+        # Normalization
+        self.min_val = min_val
+        self.max_val = 0
 
         self.rng = random.Random(seed)
 
@@ -91,13 +93,8 @@ class SWLinUCB:
             else:
                 occ = sum(self.E[a]) if self.time_step > self.window_size else 0
 
-                gamma_t = (
-                    1 - (occ / self.window_size)
-                    if not self.negative_rewards
-                    else occ / self.window_size
-                )
-                # gamma is a discount factor that penalizes frequently selected actions; if the reward is positive, gamma should be lower for frequently selected actions; but if the reward is negative, gamma should be higher for frequently selected actions
-
+                gamma_t = 1 - (occ / self.window_size)
+                    
                 p[a] = gamma_t * (context @ theta) + self.alpha * np.sqrt(
                     context @ A_inv @ context
                 )
@@ -105,6 +102,15 @@ class SWLinUCB:
         for a in range(self.n_actions):
             self.E[a].append(1 if a == action else 0)
         return action
+    
+    def _normalize_reward(self,reward):
+        # Clipping
+        clipped_reward = max(min(reward, self.max_val), self.min_val)
+        
+        # Normalize the reward to the range [0, 1]
+        normalized_reward = (clipped_reward - self.min_val) / (self.max_val - self.min_val)
+
+        return normalized_reward
 
     def select_action(self, context, valid_actions=None):
         if self.strategy == "linucb":
@@ -117,7 +123,7 @@ class SWLinUCB:
     def update(self, context, action, reward):
         x = context
         self.A[action] += np.outer(x, x)
-        self.b[action] += reward * x
+        self.b[action] += self._normalize_reward(reward) * x
 
     def reset(self):
         self.A = [np.identity(self.context_dim) for _ in range(self.n_actions)]
@@ -334,18 +340,21 @@ class MARLController:
             channel_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
+                    "min_val": settings.get("min_val", -10e3),
                     "window_size": settings.get("window_size", None),
                 }
             )
             primary_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
+                    "min_val": settings.get("min_val", -10e3),
                     "window_size": settings.get("window_size", None),
                 }
             )
             cw_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
+                    "min_val": settings.get("min_val", -10e3),
                     "window_size": settings.get("window_size", None),
                 }
             )
@@ -588,6 +597,7 @@ class SARLController:
             agent_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
+                    "min_val": settings.get("min_val", -10e3),
                     "window_size": settings.get("window_size", None),
                 }
             )
