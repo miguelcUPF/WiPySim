@@ -38,6 +38,7 @@ class SWLinUCB:
         weights_r: dict[str, float] = None,
         alpha: float = 1.0,
         min_val: float = -10e3,
+        max_val: float = 0,
         window_size: int | None = None,
         seed=None,
     ):
@@ -61,7 +62,7 @@ class SWLinUCB:
 
         # Normalization
         self.min_val = min_val
-        self.max_val = 0
+        self.max_val = -max_val
 
         self.rng = random.Random(seed)
 
@@ -341,6 +342,7 @@ class MARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
+                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24), # Te+Tsifs+Tdifs+Tback(1)
                     "window_size": settings.get("window_size", None),
                 }
             )
@@ -348,6 +350,7 @@ class MARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
+                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24),
                     "window_size": settings.get("window_size", None),
                 }
             )
@@ -355,6 +358,7 @@ class MARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
+                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24),
                     "window_size": settings.get("window_size", None),
                 }
             )
@@ -598,6 +602,7 @@ class SARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
+                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24),
                     "window_size": settings.get("window_size", None),
                 }
             )
