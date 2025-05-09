@@ -22,7 +22,7 @@ CHANNEL_MAP = {
     6: {1, 2, 3, 4},
 }
 PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
-CW_MAP = {i: 2 ** (1 + i) for i in range(7)}
+CW_MAP = {i: 2 ** (4 + i) for i in range(7)}
 
 
 # https://arxiv.org/pdf/1003.0146
@@ -303,7 +303,7 @@ class MARLController:
 
         cw_params = {
             "name": "cw_agent",
-            "n_actions": 7,  # 0: {2}, 1: {4}, 2: {8}, 3: {16}, 4: {32}, 5: {64}, 6: {128} (i.e., 2**(x+1))
+            "n_actions": 7,  # 0: {16}, 1: {32}, 2: {64}, 3: {128}, 4: {256}, 5: {512}, 6: {1024} (i.e., 2**(x+4))
             "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel utilization + 4x channel busy flags + 1x queue size
             "strategy": strategy,
             "weights_r": settings.get("cw_weights", {}),
