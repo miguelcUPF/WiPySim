@@ -16,8 +16,8 @@ from codecarbon import EmissionsTracker
 import simpy
 import json
 
-sparams_module.CW_MIN = 4
-sparams_module.CW_MAX = 2**0 * sparams_module.CW_MIN
+sparams_module.CW_MIN = 16
+sparams_module.CW_MAX = 16**6 * sparams_module.CW_MIN
 
 cfg_module.SIMULATION_TIME_us = 2e6
 cfg_module.SEED = 1
@@ -77,7 +77,7 @@ cfg_module.BSSs_Advanced = [
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 3, "pos": (5, 5, 1)},
+        "ap": {"id": 3, "pos": (5, 5, 1), "channels": [1, 2], "primary_channel": 1},
         "stas": [{"id": 4, "pos": (1, 2, 1)}],
         "traffic_flows": [
             {
@@ -88,7 +88,7 @@ cfg_module.BSSs_Advanced = [
     },
     {
         "id": 3,  # Another BSS
-        "ap": {"id": 5, "pos": (2, 3, 1)},
+        "ap": {"id": 5, "pos": (2, 3, 1), "channels": [3], "primary_channel": 3},
         "stas": [{"id": 6, "pos": (1, 0, 1)}],
         "traffic_flows": [
             {

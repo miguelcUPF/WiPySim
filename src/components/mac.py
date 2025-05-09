@@ -905,24 +905,12 @@ class MAC:
             yield self.env.process(self.transmit_ampdu())
 
     def _run_joint_agent(self):
-        current_channel = self.node.phy_layer.channels_ids
-        contenders_per_channel = [
-            (
-                c
-                if i + 1 not in current_channel
-                else c - 1 - len(self.node.associated_stas)
-            )
-            for i, c in enumerate(self.node.phy_layer.get_contender_count())
-        ]  # do not count itself nor associated STAs as contenders
-        normalized_contenders = [
-            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
-            for c in contenders_per_channel
-        ]
+        channels_utilization = self.node.phy_layer.get_channels_utilization()
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
         joint_ctx = [
-            *normalized_contenders,  # normalized in range [0, 1]
+            *channels_utilization,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
@@ -941,24 +929,12 @@ class MAC:
         )
 
     def _run_channel_agent(self):
-        current_channel = self.node.phy_layer.channels_ids
-        contenders_per_channel = [
-            (
-                c
-                if i + 1 not in current_channel
-                else c - 1 - len(self.node.associated_stas)
-            )
-            for i, c in enumerate(self.node.phy_layer.get_contender_count())
-        ]  # do not count itself nor associated STAs as contenders
-        normalized_contenders = [
-            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
-            for c in contenders_per_channel
-        ]
+        channels_utilization = self.node.phy_layer.get_channels_utilization()
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
         ch_ctx = [
-            *normalized_contenders,  # normalized in range [0, 1]
+            *channels_utilization,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
@@ -973,18 +949,7 @@ class MAC:
 
     def _run_primary_agent(self):
         current_channel = self.node.phy_layer.channels_ids
-        contenders_per_channel = [
-            (
-                c
-                if i + 1 not in current_channel
-                else c - 1 - len(self.node.associated_stas)
-            )
-            for i, c in enumerate(self.node.phy_layer.get_contender_count())
-        ]  # do not count itself nor associated STAs as contenders
-        normalized_contenders = [
-            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
-            for c in contenders_per_channel
-        ]
+        channels_utilization = self.node.phy_layer.get_channels_utilization()
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
 
         channel_key = next(
@@ -993,7 +958,7 @@ class MAC:
 
         primary_ctx = [
             channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
-            *normalized_contenders,  # normalized in range [0, 1]
+            *channels_utilization,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
         ]
         primary_action = self.rl_controller.decide_primary(
@@ -1009,18 +974,7 @@ class MAC:
     def _run_cw_agent(self):
         current_channel = self.node.phy_layer.channels_ids
         current_primary = self.node.phy_layer.sensing_channels_ids
-        contenders_per_channel = [
-            (
-                c
-                if i + 1 not in current_channel
-                else c - 1 - len(self.node.associated_stas)
-            )
-            for i, c in enumerate(self.node.phy_layer.get_contender_count())
-        ]  # do not count itself nor associated STAs as contenders
-        normalized_contenders = [
-            c / sum(contenders_per_channel) if sum(contenders_per_channel) > 0 else 0
-            for c in contenders_per_channel
-        ]
+        channels_utilization = self.node.phy_layer.get_channels_utilization()
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
@@ -1034,7 +988,7 @@ class MAC:
         cw_ctx = [
             channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
             primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
-            *normalized_contenders,  # normalized in range [0, 1]
+            *channels_utilization,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]

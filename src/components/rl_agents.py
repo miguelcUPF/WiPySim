@@ -288,7 +288,7 @@ class MARLController:
         channel_params = {
             "name": "channel_agent",
             "n_actions": 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
-            "context_dim": 9,  # 4x channel contenders + 4x channel busy flags + 1x queue size
+            "context_dim": 9,  # 4x channel utilization + 4x channel busy flags + 1x queue size
             "strategy": strategy,
             "weights_r": settings.get("channel_weights", {}),
         }
@@ -296,7 +296,7 @@ class MARLController:
         primary_params = {
             "name": "primary_agent",
             "n_actions": 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            "context_dim": 9,  # 1x current channel (mapped idx) + 4x channel contenders + 4x channel busy flags
+            "context_dim": 9,  # 1x current channel (mapped idx) + 4x channel utilization + 4x channel busy flags
             "strategy": strategy,
             "weights_r": settings.get("primary_weights", {}),
         }
@@ -304,7 +304,7 @@ class MARLController:
         cw_params = {
             "name": "cw_agent",
             "n_actions": 7,  # 0: {2}, 1: {4}, 2: {8}, 3: {16}, 4: {32}, 5: {64}, 6: {128} (i.e., 2**(x+1))
-            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel contenders + 4x channel busy flags + 1x queue size
+            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel utilization + 4x channel busy flags + 1x queue size
             "strategy": strategy,
             "weights_r": settings.get("cw_weights", {}),
         }
@@ -583,7 +583,7 @@ class SARLController:
         agent_params = {
             "name": "joint_agent",
             "n_actions": self.n_actions,
-            "context_dim": 9,  # 4x channel contenders + 4x channel busy flags + 1x queue size
+            "context_dim": 9,  # 4x channel utilization + 4x channel busy flags + 1x queue size
             "strategy": strategy,
         }
 

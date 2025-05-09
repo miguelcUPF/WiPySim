@@ -40,6 +40,8 @@ class UserConfig:
         "epsilon": 0.1,
     }
 
+    UTILIZATION_WINDOW_DURATION_US = 100e3
+    
     # --- Logging Configuration --- #
     ENABLE_CONSOLE_LOGGING = True
     USE_COLORS_IN_LOGS = True

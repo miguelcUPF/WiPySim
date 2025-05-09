@@ -556,9 +556,9 @@ class NetworkStats:
                 node = cast(AP, node)
                 _display_node_stats(node, stats)
                 displayed_nodes.add(node_id)
-                if node.associated_stas:
+                if node.get_stas():
                     print("\033[93m" + "    Associated STAs:" + "\033[0m")
-                    for sta in node.associated_stas:
+                    for sta in node.get_stas():
                         sta = cast(STA, sta)
                         if sta.id not in displayed_nodes:
                             sta = self.network.get_node(sta.id)

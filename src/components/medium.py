@@ -25,10 +25,76 @@ VALID_BONDS = {
 }
 
 
+class UtilizationTracker:
+    def __init__(self, ch_id: int, window_duration_us: float):
+        self.ch_id = ch_id
+        self.window_duration_us = window_duration_us
+        self.events = []  # list of (start_time, duration, node_id)
+
+    def record_busy_start(self, time_start: float, node_id: int):
+        """Record a busy period for a given channel (considering other BSSs)."""
+        self.events.append((time_start, None, node_id))
+
+    def record_busy_end(self, time_end: float, node_id: int):
+        for i in reversed(range(len(self.events))):
+            start, end, n_id = self.events[i]
+            if n_id == node_id and end is None:
+                self.events[i] = (start, time_end, node_id)
+                return
+
+    def cleanup(self, current_time: float):
+        """Remove outdated events based on the window duration."""
+        threshold = current_time - self.window_duration_us
+        self.events = [
+            (start, end, n_id)
+            for (start, end, n_id) in self.events
+            if end is None or end >= threshold
+        ]
+
+    def get_utilization(self, current_time: float, ignore_nodes: set[int]) -> float:
+        """Compute the utilization of the channel, excluding certain nodes."""
+        self.cleanup(current_time)
+        window_start = max(0.0, current_time - self.window_duration_us)
+        intervals = []
+
+        for start, end, n_id in self.events:
+            if n_id in ignore_nodes:
+                continue
+            if end is None:
+                end = current_time
+            overlap_start = max(start, window_start)
+            overlap_end = min(end, current_time)
+            if overlap_end > overlap_start:
+                intervals.append((overlap_start, overlap_end))
+
+        if not intervals:
+            return 0.0
+
+        # Merge overlapping intervals to avoid double counting
+        intervals.sort(key=lambda x: x[0])
+        merged = []
+        current_start, current_end = intervals[0]
+
+        for start, end in intervals[1:]:
+            if start <= current_end:
+                current_end = max(current_end, end)
+            else:
+                merged.append((current_start, current_end))
+                current_start, current_end = start, end
+        merged.append((current_start, current_end))
+
+        busy_total = sum(end - start for start, end in merged)
+        elapsed = min(current_time, self.window_duration_us)
+
+        return busy_total / elapsed if elapsed > 0 else 0.0
+
+
 class Channel20MHz:
     """Represents a single 20 MHz wireless channel."""
 
-    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, id: int):
+    def __init__(
+        self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, id: int
+    ):
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
@@ -38,7 +104,7 @@ class Channel20MHz:
         self.nodes: dict[int, Node] = {}  # Nodes assigned to the channel
         self.nodes_sensing: dict[int, Node] = (
             {}
-        )  # Nodes currently sensing the channel (idle/busy)
+        )  # Nodes using the channel for carrier sensing
         self.nodes_transmitting: dict[int, Node] = {}  # Nodes currently transmitting
 
         self.nav_occupied = (
@@ -54,6 +120,10 @@ class Channel20MHz:
         self.busy_start_time = None
 
         self.stats = ChannelStats()
+
+        self.utilization_tracker = UtilizationTracker(
+            self.id, self.cfg.UTILIZATION_WINDOW_DURATION_US
+        )
 
         self.name = "CHANNEL"
         self.logger = get_logger(self.name, cfg, sparams, env)
@@ -86,6 +156,8 @@ class Channel20MHz:
     def occupy(self, node: Node):
         """Marks the channel as busy by a node and checks for collisions."""
         self.logger.debug(f"Channel {self.id} -> Occupied by {node.type} {node.id}")
+
+        self.utilization_tracker.record_busy_start(self.env.now, node.id)
 
         self.idle_start_time = None
 
@@ -135,6 +207,8 @@ class Channel20MHz:
         self.logger.debug(f"Channel {self.id} -> Unoccupied by {node.type} {node.id}")
         self.nodes_transmitting.pop(node.id, None)
 
+        self.utilization_tracker.record_busy_end(self.env.now, node.id)
+
         if len(self.nodes_transmitting) == 0:
             self.stats.airtime_us += self.env.now - self.busy_start_time
             self.busy_start_time = None
@@ -165,10 +239,17 @@ class Channel20MHz:
             if node.mac_layer.state != MACState.TX:
                 node.phy_layer.successful_transmission_detected(self.id)
 
+    def get_utilization(self, current_time: float, ignore_nodes: set[int]):
+        return self.utilization_tracker.get_utilization(current_time, ignore_nodes)
+
 
 class Medium:
     def __init__(
-        self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, network: Network
+        self,
+        cfg: cfg_module,
+        sparams: sparams_module,
+        env: simpy.Environment,
+        network: Network,
     ):
         self.cfg = cfg
         self.sparams = sparams
@@ -282,9 +363,15 @@ class Medium:
 
     def get_contender_count(self):
         return [len(ch.nodes) for ch in self.channels.values()]
-    
+
     def get_busy_flags(self):
         return [not ch.is_idle() for ch in self.channels.values()]
+
+    def get_channels_utilization(self, ignore_nodes: set[int]):
+        return [
+            ch.get_utilization(self.env.now, ignore_nodes)
+            for ch in self.channels.values()
+        ]
 
     def rts_collision_detected(self, channels_ids: set[int]):
         for ch_id in channels_ids:

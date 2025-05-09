@@ -85,6 +85,9 @@ class UserConfig:
         "epsilon": 0.1,
     }
 
+    ### --- Context settings --- ###
+    UTILIZATION_WINDOW_DURATION_US = 100e3 # Duration of the utilization sliding window in microseconds
+
     # --- Logging Configuration --- #
     ENABLE_CONSOLE_LOGGING = True  # Enable/disable displaying logs in the console (useful for debugging, may affect performance)
     USE_COLORS_IN_LOGS = True  # Enable/disable colored logs
