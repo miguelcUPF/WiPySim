@@ -14,22 +14,28 @@ import random
 import os
 
 
-def generate_training_scenarios(num_scenarios: int = 25, sim_time_us_list=None, seed=None):
+def generate_training_scenarios(
+    sim_time_choices: list, num_bss_choices: list, seed=None
+):
     from src.utils.scenario_gen import generate_random_scenario
-
-    training_scenarios = []
 
     rng = random.Random(seed)
 
-    for i in range(num_scenarios):
-        if sim_time_us_list is not None:
-            if i >= len(sim_time_us_list):
-                raise ValueError("sim_time_us_list must be as long as num_scenarios")
-            sim_time_us = sim_time_us_list[i]
-        else:
-            sim_time_us = None
+    training_scenarios = []
+
+    # Create all combinations
+    scenario_pool = [(t, b) for t in sim_time_choices for b in num_bss_choices]
+    rng.shuffle(scenario_pool)
+
+    for i, (sim_time_us, num_bss) in enumerate(scenario_pool):
         training_scenarios.append(
-            generate_random_scenario(seed=i, num_bss=rng.randint(2, 6), num_rl_bss=1, sim_time_us=sim_time_us, disable_start_end=True)
+            generate_random_scenario(
+                seed=i,
+                num_bss=num_bss,
+                num_rl_bss=1,
+                sim_time_us=sim_time_us,
+                disable_start_end=True,
+            )
         )
 
     return training_scenarios
@@ -111,13 +117,15 @@ def objective(
     return np.mean(runs)
 
 
-N_TRIALS = 1
-N_SCENARIOS = 1
-SEED = 1
+N_TRIALS = 200
+SEED = 1  # or None
 RL_MODE = 1
 STRATEGY = "sw_linucb"
 CLEANUP_STUDY = True
-DISPLAY_STUDY_FIGS = False
+DISPLAY_STUDY_FIGS = True
+
+SIM_TIME_CHOICES = [1_000_000, 2_000_000, 4_000_000, 6_000_000, 8_000_000, 10_000_000]
+NUM_BSS_CHOICES = [2, 3, 4, 5, 6]
 
 if CLEANUP_STUDY:
     if os.path.exists("tuning_study.db"):
@@ -127,7 +135,7 @@ if __name__ == "__main__":
     print(STARTING_TEST_MSG)
 
     training_scenarios = generate_training_scenarios(
-        num_scenarios=N_SCENARIOS, seed=SEED
+        SIM_TIME_CHOICES, NUM_BSS_CHOICES, seed=SEED
     )
 
     study = optuna.create_study(
@@ -185,4 +193,3 @@ if __name__ == "__main__":
         vis.plot_edf(study)
 
         input(PRESS_TO_EXIT_MSG)
-    
