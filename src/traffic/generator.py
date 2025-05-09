@@ -66,7 +66,7 @@ class TrafficGenerator:
 
         self.active_processes = []
 
-        self.rng = random.Random(cfg.SEED)
+        self.rng = env.rng
 
         self.env.process(self._delayed_run())
 

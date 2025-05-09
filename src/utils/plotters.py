@@ -21,7 +21,6 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.lines as mlines
-import random
 
 rcParams["font.family"] = "serif"
 rcParams["font.serif"] = ["DejaVu Serif"]
@@ -79,8 +78,6 @@ class BasePlotter:
 
         self.name: str = "PLOTTER"
         self.logger: logging.Logger = get_logger(self.name, cfg, sparams, env)
-
-        self.rng = random.Random(cfg.SEED)
 
     def save_plot(self, figure: plt.Figure, save_name: str, save_format: str) -> None:
         """

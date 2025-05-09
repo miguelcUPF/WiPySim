@@ -7,7 +7,6 @@ from src.utils.file_manager import get_project_root, clean_folder
 
 import os
 import csv
-import random
 
 class TrafficRecorder:
     """Handles recording of network traffic events in Wireshark-style CSV format."""
@@ -20,8 +19,6 @@ class TrafficRecorder:
         self.save_format = save_format
 
         self.filepath = None
-
-        self.rng = random.Random(cfg.SEED)
 
     def is_enabled(self):
         return self.cfg.ENABLE_TRAFFIC_GEN_RECORDING

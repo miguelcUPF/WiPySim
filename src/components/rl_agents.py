@@ -40,7 +40,7 @@ class SWLinUCB:
         min_val: float = -10e3,
         max_val: float = 0,
         window_size: int | None = None,
-        seed=None,
+        rng: random.Random | None = None,
     ):
         self.name = name
         self.n_actions = n_actions
@@ -64,7 +64,7 @@ class SWLinUCB:
         self.min_val = min_val
         self.max_val = -max_val
 
-        self.rng = random.Random(seed)
+        self.rng = rng
 
     def _linucb(self, context, valid_actions=None):
         if valid_actions is None:
@@ -95,7 +95,7 @@ class SWLinUCB:
                 occ = sum(self.E[a]) if self.time_step > self.window_size else 0
 
                 gamma_t = 1 - (occ / self.window_size)
-                    
+
                 p[a] = gamma_t * (context @ theta) + self.alpha * np.sqrt(
                     context @ A_inv @ context
                 )
@@ -103,13 +103,15 @@ class SWLinUCB:
         for a in range(self.n_actions):
             self.E[a].append(1 if a == action else 0)
         return action
-    
-    def _normalize_reward(self,reward):
+
+    def _normalize_reward(self, reward):
         # Clipping
         clipped_reward = max(min(reward, self.max_val), self.min_val)
-        
+
         # Normalize the reward to the range [0, 1]
-        normalized_reward = (clipped_reward - self.min_val) / (self.max_val - self.min_val)
+        normalized_reward = (clipped_reward - self.min_val) / (
+            self.max_val - self.min_val
+        )
 
         return normalized_reward
 
@@ -141,6 +143,7 @@ class EpsRMSProp:
 
     def __init__(
         self,
+        rng: random.Random,
         name: str,
         n_actions: int,
         context_dim: int,
@@ -152,7 +155,6 @@ class EpsRMSProp:
         eta: float = 0.1,
         gamma: float = 0.9,
         alpha_ema: float = 0.1,  # EMA factor
-        seed=None,
     ):
 
         self.name = name
@@ -183,7 +185,7 @@ class EpsRMSProp:
         # RMSProp: moving average of squared gradients
         self.grad_squared_avg = np.zeros((n_actions, context_dim))
 
-        self.rng = random.Random(seed)
+        self.rng = rng
 
     def _epsilon_greedy(self, context, valid_actions=None):
         """
@@ -342,7 +344,9 @@ class MARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
-                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24), # Te+Tsifs+Tdifs+Tback(1)
+                    "max_val": -(
+                        sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24
+                    ),  # Te+Tsifs+Tdifs+Tback(1)
                     "window_size": settings.get("window_size", None),
                 }
             )
@@ -350,7 +354,9 @@ class MARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
-                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24),
+                    "max_val": -(
+                        sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24
+                    ),
                     "window_size": settings.get("window_size", None),
                 }
             )
@@ -358,14 +364,20 @@ class MARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
-                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24),
+                    "max_val": -(
+                        sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24
+                    ),
                     "window_size": settings.get("window_size", None),
                 }
             )
 
-        self.channel_agent = agent_class(**channel_params, marl_controller=self, seed=cfg.SEED)
-        self.primary_agent = agent_class(**primary_params, marl_controller=self, seed=cfg.SEED)
-        self.cw_agent = agent_class(**cw_params, marl_controller=self, seed=cfg.SEED)
+        self.channel_agent = agent_class(
+            **channel_params, marl_controller=self, rng=env.rng
+        )
+        self.primary_agent = agent_class(
+            **primary_params, marl_controller=self, rng=env.rng
+        )
+        self.cw_agent = agent_class(**cw_params, marl_controller=self, rng=env.rng)
 
         self.last_channel_action = None
         self.last_primary_action = None
@@ -602,12 +614,16 @@ class SARLController:
                 {
                     "alpha": settings.get("alpha", 1.0),
                     "min_val": settings.get("min_val", -10e3),
-                    "max_val": -(sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24),
+                    "max_val": -(
+                        sparams.SLOT_TIME_us + sparams.SIFS_us + sparams.DIFS_us + 24
+                    ),
                     "window_size": settings.get("window_size", None),
                 }
             )
 
-        self.joint_agent = agent_class(**agent_params, marl_controller=self, seed=cfg.SEED)
+        self.joint_agent = agent_class(
+            **agent_params, marl_controller=self, rng=env.rng
+        )
 
         self.last_context = None
 
@@ -619,7 +635,6 @@ class SARLController:
         )
 
         self.results = []
-
 
     def decide_joint_action(self, context):
         if self.emissions_tracker:
@@ -653,7 +668,7 @@ class SARLController:
         self._log_to_wandb(delay_components, reward)
 
         self.results.append(sum(delay_components.values()))
-        
+
     def log_emissions_data(self):
         if wandb.run:
             wandb.run.summary["joint_emissions"] = (

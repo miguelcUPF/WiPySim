@@ -130,7 +130,7 @@ class MAC:
                     sparams, cfg, env, self.node, self.rl_settings
                 )
 
-        self.rng = random.Random(cfg.SEED)
+        self.rng: random.Random = env.rng
 
         self.env.process(self.run())
 
@@ -191,7 +191,7 @@ class MAC:
         while True:
             self.node.phy_layer.reset_busy_event(ch_id)
             self.node.phy_layer.reset_idle_event(ch_id)
-           
+
             # Wait for channel to become idle
             if not self.node.phy_layer.is_channel_idle(ch_id):
                 channel_idle_event = self.node.phy_layer.get_idle_event(ch_id)
@@ -207,7 +207,11 @@ class MAC:
                     )
                     return
 
-            remaining_time = duration_us - (self.env.now - wait_start_time) if (self.env.now - wait_start_time) < duration_us else 0
+            remaining_time = (
+                duration_us - (self.env.now - wait_start_time)
+                if (self.env.now - wait_start_time) < duration_us
+                else 0
+            )
 
             # Channel is now idle, start timing
             timeout = self.env.timeout(remaining_time)
@@ -301,7 +305,11 @@ class MAC:
                     (
                         ch_waited_time_us
                         if isinstance(ch_waited_time_us, int)
-                        else ch_waited_time_us[ch_id] if ch_waited_time_us[ch_id] > 0 else 0
+                        else (
+                            ch_waited_time_us[ch_id]
+                            if ch_waited_time_us[ch_id] > 0
+                            else 0
+                        )
                     ),
                 )
             )
@@ -857,7 +865,9 @@ class MAC:
         return ch_duration_us, ch_waited_times
 
     def _csma_ca(self, had_nothing_to_send=False):
-        ch_duration_us, ch_waited_times = self._get_channel_durations(had_nothing_to_send)
+        ch_duration_us, ch_waited_times = self._get_channel_durations(
+            had_nothing_to_send
+        )
 
         self.node.phy_layer.reset_collision_events()
         idle_channels = None

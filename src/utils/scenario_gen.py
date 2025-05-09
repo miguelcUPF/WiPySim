@@ -73,13 +73,14 @@ def generate_random_network_deployment(
     return bsss
 
 
-def generate_random_scenario(seed=None, num_bss=6, num_rl_bss=1, sim_time_us=None, disable_start_end=False):
+def generate_random_scenario(rng=None, seed=None, num_bss=6, num_rl_bss=1, sim_time_us=None, disable_start_end=False):
     if num_bss <= 1:
         raise ValueError("num_bss must be > 1")
     if num_rl_bss < 0:
         raise ValueError("num_rl_bss must be >= 0")
-
-    rng = random.Random(seed)
+    
+    if rng is None:
+        rng = random.Random(seed)
 
     if sim_time_us is None:
         sim_time_us = rng.randint(1_000_000, 10_000_000)  # 1s to 10s

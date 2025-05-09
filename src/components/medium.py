@@ -128,8 +128,6 @@ class Channel20MHz:
         self.name = "CHANNEL"
         self.logger = get_logger(self.name, cfg, sparams, env)
 
-        self.rng = random.Random(cfg.SEED)
-
     def assign(self, node: Node):
         self.nodes[node.id] = node
 
@@ -269,7 +267,7 @@ class Medium:
         self.name = "MEDIUM"
         self.logger = get_logger(self.name, cfg, sparams, env)
 
-        self.rng = random.Random(cfg.SEED)
+        self.rng: random.Random = env.rng
 
     def get_valid_bonds(self) -> list:
         available_channels = set(self.channels.keys())  # Extract available channel IDs
@@ -443,7 +441,7 @@ class Medium:
     ):
         distance_m = self.network.get_distance_between_nodes(ppdu.src_id, ppdu.dst_id)
 
-        rssi_dbm = get_rssi_dbm(self.sparams, distance_m, self.cfg.SEED)
+        rssi_dbm = get_rssi_dbm(self.sparams, distance_m, self.rng)
         min_sensitivity_dbm = get_min_sensitivity_dBm(mcs_index, len(channels_ids) * 20)
 
         if rssi_dbm < min_sensitivity_dbm:  # this does nothing if there is no mobility

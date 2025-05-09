@@ -6,7 +6,6 @@ from src.traffic.recorder import TrafficRecorder
 from src.utils.data_units import Packet
 
 import simpy
-import random
 
 class APP:
     def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, node: Node):
@@ -19,8 +18,6 @@ class APP:
         self.recorder = TrafficRecorder(cfg, sparams, self.node.id)
 
         self.name = "APP"
-
-        self.rng = random.Random(cfg.SEED)
 
     def packet_to_mac(self, packet: Packet):
         """Receives a packet from a traffic source and forwards it to MAC."""

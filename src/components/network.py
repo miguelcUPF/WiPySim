@@ -9,7 +9,6 @@ from typing import cast
 import networkx as nx
 import math
 import simpy
-import random
 
 class Node:
     def __init__(
@@ -54,9 +53,6 @@ class Node:
 
         self.name = "NODE"
         self.logger = get_logger(self.name, cfg, sparams, env)
-
-        self.rng = random.Random(cfg.SEED)
-
 
     def add_traffic_flow(self, traffic_flow):
         self.traffic_flows.append(traffic_flow)
@@ -171,8 +167,6 @@ class Network:
 
         self.name = "NETWORK"
         self.logger = get_logger(self.name, cfg, sparams, env)
-
-        self.rng = random.Random(cfg.SEED)
 
     @staticmethod
     def _calculate_distance(

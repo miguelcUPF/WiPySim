@@ -10,7 +10,6 @@ import pandas as pd
 import json
 import os
 import wandb
-import random
 
 class TransmissionStats:
     def __init__(self, disabled: bool = False):
@@ -199,8 +198,6 @@ class NetworkStats:
 
         self.name = "STATS"
         self.logger = get_logger(self.name, cfg, sparams, self.network.env)
-
-        self.rng = random.Random(cfg.SEED)
 
     def collect_stats(self):
         from src.components.network import Node

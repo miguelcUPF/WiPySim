@@ -9,7 +9,6 @@ import os
 import simpy
 import chardet
 import pandas as pd
-import random
 
 class TrafficLoader:
     def __init__(
@@ -41,8 +40,6 @@ class TrafficLoader:
         self.logger = get_logger(self.name, cfg, sparams, env, True if node.id in self.cfg.EXCLUDED_IDS else False)
 
         self.active_processes = []
-
-        self.rng = random.Random(cfg.SEED)
 
         self.env.process(self._delayed_run()) if self.traffic_data is not None else None
 

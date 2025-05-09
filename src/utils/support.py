@@ -768,10 +768,8 @@ def validate_settings(cfg: cfg_module, sparams: sparams_module, logger: logging.
 def initialize_network(
     cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, network: Network = None
 ) -> Network:
-    def _get_unique_position(bounds: tuple, used_positions: set, seed=None) -> tuple:
+    def _get_unique_position(bounds: tuple, used_positions: set, rng: random.Random) -> tuple:
         """Generate a unique random position within bounds."""
-        rng = random.Random(seed)
-
         while True:
             x_lim, y_lim, z_lim = bounds
             pos = (
@@ -783,9 +781,7 @@ def initialize_network(
                 used_positions.add(pos)
                 return pos
 
-    def _get_random_channels(sparams, seed=None) -> list:
-        rng = random.Random(seed)
-
+    def _get_random_channels(sparams: sparams_module, rng: random.Random) -> list:
         valid_channel_bonds = []
         for bw, bond_list in VALID_BONDS.items():
             if bw <= sparams.NUM_CHANNELS * 20:
@@ -798,7 +794,8 @@ def initialize_network(
                     valid_channel_bonds.append(bond) if not invalid_bond else None
         return list(rng.choice(valid_channel_bonds))
     
-    rng = random.Random(cfg.SEED)
+    env.rng = random.Random(cfg.SEED)
+    rng = env.rng
 
     if not network:
         network = Network(cfg, sparams, env)
@@ -812,8 +809,8 @@ def initialize_network(
             # Assign AP ID and increment the counter
             last_id += 1
             ap_id = last_id
-            ap_pos = _get_unique_position(bounds, used_positions, cfg.SEED)
-            channels = _get_random_channels(sparams,  cfg.SEED)
+            ap_pos = _get_unique_position(bounds, used_positions, rng)
+            channels = _get_random_channels(sparams,  rng)
             sensing_channels = (
                 rng.choice(channels) if sparams.BONDING_MODE in [0, 1] else channels
             )
@@ -828,7 +825,7 @@ def initialize_network(
             # Create associated STAs
             last_id += 1
             sta_id = last_id
-            sta_pos = _get_unique_position(bounds, used_positions, cfg.SEED)
+            sta_pos = _get_unique_position(bounds, used_positions, rng)
             network.add_sta(sta_id, sta_pos, bss_index + 1, ap)
 
             traffic_generator = TrafficGenerator(
@@ -853,8 +850,8 @@ def initialize_network(
 
             # Create the AP
             ap_id = bss["ap"]["id"]
-            ap_pos = bss["ap"].get("pos", _get_unique_position(bounds, used_positions, cfg.SEED))
-            channels = bss["ap"].get("channels", _get_random_channels(sparams, cfg.SEED))
+            ap_pos = bss["ap"].get("pos", _get_unique_position(bounds, used_positions, rng))
+            channels = bss["ap"].get("channels", _get_random_channels(sparams, rng))
             sensing_channels = (
                 bss["ap"].get("primary_channel", rng.choice(channels))
                 if sparams.BONDING_MODE in [0, 1]
@@ -868,7 +865,7 @@ def initialize_network(
             # Create associated STAs
             for sta in bss.get("stas", []):
                 sta_id = sta["id"]
-                sta_pos = sta.get("pos", _get_unique_position(bounds, used_positions, cfg.SEED))
+                sta_pos = sta.get("pos", _get_unique_position(bounds, used_positions, rng))
                 network.add_sta(sta_id, sta_pos, bss_id, ap)
 
             for flow in bss.get("traffic_flows", []):
