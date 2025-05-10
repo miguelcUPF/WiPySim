@@ -78,7 +78,6 @@ def objective(
 
         if strategy in ["sw_linucb", "linucb"]:
             agents_settings["alpha"] = trial.suggest_float("alpha", 0.1, 2.0)
-            agents_settings["min_val"] = trial.suggest_float("min_val", -10e4, -1e3)
             if strategy == "sw_linucb":
                 agents_settings["window_size"] = trial.suggest_int("window_size", 0, 20)
 
