@@ -17,7 +17,7 @@ def generate_random_network_deployment(
     for bss_id in range(1, num_bss + 1):
         is_rl = bss_id in rl_bss_ids
 
-        traffic_model = rng.choice(["Poisson", "Bursty", "VR"])
+        traffic_model = rng.choice(["Poisson", "Bursty", "VR", "Full"])
         traffic = {
             "name": traffic_model,
             "traffic_load_kbps": rng.uniform(10_000, 500_000),
