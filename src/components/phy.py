@@ -179,10 +179,10 @@ class PHY:
     def get_busy_flags(self):
         return self.node.medium.get_busy_flags()
 
-    def get_channels_utilization(self):
+    def get_channels_occupancy_ratio(self):
         if isinstance(self.node, AP):
             ignore_nodes = {self.node.id} | {sta.id for sta in self.node.get_stas()}
-            return self.node.medium.get_channels_utilization(ignore_nodes)
+            return self.node.medium.get_channels_occupancy_ratio(ignore_nodes)
         return
 
     def select_mcs_index(self, id: int):

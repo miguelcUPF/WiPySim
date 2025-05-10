@@ -25,7 +25,7 @@ VALID_BONDS = {
 }
 
 
-class UtilizationTracker:
+class OccupancyTracker:
     def __init__(self, ch_id: int, window_duration_us: float):
         self.ch_id = ch_id
         self.window_duration_us = window_duration_us
@@ -51,8 +51,8 @@ class UtilizationTracker:
             if end is None or end >= threshold
         ]
 
-    def get_utilization(self, current_time: float, ignore_nodes: set[int]) -> float:
-        """Compute the utilization of the channel, excluding certain nodes."""
+    def get_occupancy(self, current_time: float, ignore_nodes: set[int]) -> float:
+        """Compute the occupancy ratio of the channel, excluding certain nodes."""
         self.cleanup(current_time)
         window_start = max(0.0, current_time - self.window_duration_us)
         intervals = []
@@ -121,8 +121,8 @@ class Channel20MHz:
 
         self.stats = ChannelStats()
 
-        self.utilization_tracker = UtilizationTracker(
-            self.id, self.cfg.UTILIZATION_WINDOW_DURATION_US
+        self.occupancy_tracker = OccupancyTracker(
+            self.id, self.cfg.OCCUPANCY_RATIO_WINDOW_DURATION_US
         )
 
         self.name = "CHANNEL"
@@ -155,7 +155,7 @@ class Channel20MHz:
         """Marks the channel as busy by a node and checks for collisions."""
         self.logger.debug(f"Channel {self.id} -> Occupied by {node.type} {node.id}")
 
-        self.utilization_tracker.record_busy_start(self.env.now, node.id)
+        self.occupancy_tracker.record_busy_start(self.env.now, node.id)
 
         self.idle_start_time = None
 
@@ -205,7 +205,7 @@ class Channel20MHz:
         self.logger.debug(f"Channel {self.id} -> Unoccupied by {node.type} {node.id}")
         self.nodes_transmitting.pop(node.id, None)
 
-        self.utilization_tracker.record_busy_end(self.env.now, node.id)
+        self.occupancy_tracker.record_busy_end(self.env.now, node.id)
 
         if len(self.nodes_transmitting) == 0:
             self.stats.airtime_us += self.env.now - self.busy_start_time
@@ -237,8 +237,8 @@ class Channel20MHz:
             if node.mac_layer.state != MACState.TX:
                 node.phy_layer.successful_transmission_detected(self.id)
 
-    def get_utilization(self, current_time: float, ignore_nodes: set[int]):
-        return self.utilization_tracker.get_utilization(current_time, ignore_nodes)
+    def get_occupancy_ratio(self, current_time: float, ignore_nodes: set[int]):
+        return self.occupancy_tracker.get_occupancy(current_time, ignore_nodes)
 
 
 class Medium:
@@ -365,9 +365,9 @@ class Medium:
     def get_busy_flags(self):
         return [not ch.is_idle() for ch in self.channels.values()]
 
-    def get_channels_utilization(self, ignore_nodes: set[int]):
+    def get_channels_occupancy_ratio(self, ignore_nodes: set[int]):
         return [
-            ch.get_utilization(self.env.now, ignore_nodes)
+            ch.get_occupancy_ratio(self.env.now, ignore_nodes)
             for ch in self.channels.values()
         ]
 

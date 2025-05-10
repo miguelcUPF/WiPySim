@@ -86,7 +86,7 @@ class UserConfig:
     }
 
     ### --- Context settings --- ###
-    UTILIZATION_WINDOW_DURATION_US = 100e3 # Duration of the utilization sliding window in microseconds
+    OCCUPANCY_RATIO_WINDOW_DURATION_US = 100e3 # Duration of the channels occupation ratio sliding window in microseconds
 
     # --- Logging Configuration --- #
     ENABLE_CONSOLE_LOGGING = True  # Enable/disable displaying logs in the console (useful for debugging, may affect performance)

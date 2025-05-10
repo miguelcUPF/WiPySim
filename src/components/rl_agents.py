@@ -290,7 +290,7 @@ class MARLController:
         channel_params = {
             "name": "channel_agent",
             "n_actions": 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
-            "context_dim": 9,  # 4x channel utilization + 4x channel busy flags + 1x queue size
+            "context_dim": 9,  # 4x channel occupation ratio + 4x channel busy flags + 1x queue size
             "strategy": strategy,
             "weights_r": settings.get("channel_weights", {}),
         }
@@ -298,7 +298,7 @@ class MARLController:
         primary_params = {
             "name": "primary_agent",
             "n_actions": 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            "context_dim": 9,  # 1x current channel (mapped idx) + 4x channel utilization + 4x channel busy flags
+            "context_dim": 9,  # 1x current channel (mapped idx) + 4x channel occupation ratio + 4x channel busy flags
             "strategy": strategy,
             "weights_r": settings.get("primary_weights", {}),
         }
@@ -306,7 +306,7 @@ class MARLController:
         cw_params = {
             "name": "cw_agent",
             "n_actions": 7,  # 0: {16}, 1: {32}, 2: {64}, 3: {128}, 4: {256}, 5: {512}, 6: {1024} (i.e., 2**(x+4))
-            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel utilization + 4x channel busy flags + 1x queue size
+            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel occupation ratio + 4x channel busy flags + 1x queue size
             "strategy": strategy,
             "weights_r": settings.get("cw_weights", {}),
         }
@@ -595,7 +595,7 @@ class SARLController:
         agent_params = {
             "name": "joint_agent",
             "n_actions": self.n_actions,
-            "context_dim": 9,  # 4x channel utilization + 4x channel busy flags + 1x queue size
+            "context_dim": 9,  # 4x channel occupation ratio + 4x channel busy flags + 1x queue size
             "strategy": strategy,
         }
 

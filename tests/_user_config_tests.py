@@ -40,7 +40,7 @@ class UserConfig:
         "epsilon": 0.1,
     }
 
-    UTILIZATION_WINDOW_DURATION_US = 100e3
+    OCCUPANCY_RATIO_WINDOW_DURATION_US = 100e3
     
     # --- Logging Configuration --- #
     ENABLE_CONSOLE_LOGGING = True
