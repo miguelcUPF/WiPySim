@@ -88,7 +88,7 @@ class MAC:
 
         self.last_collision_time_us = None
         self.prev_rx_time_us = self.env.now
-        self.ema_goodput_mbps = 0
+        self.ema_goodput_mbps = None
 
         self.is_first_tx = True
         self.is_first_rx = True
@@ -712,6 +712,8 @@ class MAC:
             # Time-weighted EMA
             ema_tau = 0.2
             alpha = 1 - math.exp(-delta_t_sec / ema_tau)
+            if self.ema_goodput_mbps is None:
+                self.ema_goodput_mbps = instant_goodput_mbps
             self.ema_goodput_mbps = (
                 alpha * instant_goodput_mbps + (1 - alpha) * self.ema_goodput_mbps
             )
