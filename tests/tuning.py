@@ -79,7 +79,10 @@ def objective(
         if strategy in ["sw_linucb", "linucb"]:
             agents_settings["alpha"] = trial.suggest_float("alpha", 0.1, 2.0)
             if strategy == "sw_linucb":
-                agents_settings["window_size"] = trial.suggest_int("window_size", 0, 20)
+                agents_settings["window_size"] = trial.suggest_int("window_size", -1, 84)
+
+        if agents_settings["window_size"] == -1:
+            agents_settings["window_size"] = None
 
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
             agents_settings["epsilon"] = trial.suggest_float("epsilon", 0.01, 0.5)
