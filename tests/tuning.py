@@ -1,7 +1,6 @@
 from src.utils.messages import (
     STARTING_TEST_MSG,
     TEST_COMPLETED_MSG,
-    PRESS_TO_EXIT_MSG,
     RESULTS_MSG,
 )
 
@@ -12,6 +11,43 @@ import optuna
 import optuna.visualization as vis
 import random
 import os
+
+
+def style_plotly_as_matplotlib(fig, small_fonts=False):
+    fig.update_layout(
+        font=dict(
+            family="DejaVu Serif",
+            size=10 if small_fonts else 16,
+            color="black"
+        ),
+        title=None,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5
+        )
+    )
+    fig.update_xaxes(
+        showline=True,
+        linewidth=1,
+        linecolor='black',
+        mirror=False,
+        ticks='outside',
+        showgrid=False
+    )
+    fig.update_yaxes(
+        showline=True,
+        linewidth=1,
+        linecolor='black',
+        mirror=False,
+        ticks='outside',
+        showgrid=False
+    )
+    return fig
 
 
 def generate_training_scenarios(
@@ -188,10 +224,15 @@ if __name__ == "__main__":
     )
 
     if DISPLAY_STUDY_FIGS:
-        vis.plot_optimization_history(study).show()
-        if len(study.trials) > 1:
-            vis.plot_param_importances(study).show()
-        vis.plot_parallel_coordinate(study).show()
-        vis.plot_edf(study)
+        fig1 = style_plotly_as_matplotlib(vis.plot_optimization_history(study))
+        fig1.show()
 
-        input(PRESS_TO_EXIT_MSG)
+        if len(study.trials) > 1:
+            fig2 = style_plotly_as_matplotlib(vis.plot_param_importances(study))
+            fig2.show()
+
+        fig3 = style_plotly_as_matplotlib(vis.plot_parallel_coordinate(study), small_fonts=True)
+        fig3.show()
+
+        fig4 = style_plotly_as_matplotlib(vis.plot_edf(study))
+        fig4.show()
