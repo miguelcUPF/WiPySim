@@ -141,7 +141,7 @@ def objective(
 
             trial.report(result, step)
 
-            print(f"Trial {trial.number} step {step}completed: {result}")
+            print(f"Trial {trial.number} step {step} completed: {result}")
         except Exception as e:
             print(f"Trial {trial.number} step {step} failed: {e}")
 
