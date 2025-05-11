@@ -15,37 +15,27 @@ import os
 
 def style_plotly_as_matplotlib(fig, small_fonts=False):
     fig.update_layout(
-        font=dict(
-            family="DejaVu Serif",
-            size=10 if small_fonts else 16,
-            color="black"
-        ),
+        font=dict(family="DejaVu Serif", size=10 if small_fonts else 16, color="black"),
         title=None,
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="center",
-            x=0.5
-        )
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
     )
     fig.update_xaxes(
         showline=True,
         linewidth=1,
-        linecolor='black',
+        linecolor="black",
         mirror=False,
-        ticks='outside',
-        showgrid=False
+        ticks="outside",
+        showgrid=False,
     )
     fig.update_yaxes(
         showline=True,
         linewidth=1,
-        linecolor='black',
+        linecolor="black",
         mirror=False,
-        ticks='outside',
-        showgrid=False
+        ticks="outside",
+        showgrid=False,
     )
     return fig
 
@@ -89,6 +79,28 @@ def objective(
 
     runs = []
 
+    agents_settings = {"strategy": strategy}
+
+    if strategy in ["sw_linucb", "linucb"]:
+        agents_settings["alpha"] = trial.suggest_float("alpha", 0.1, 2.0)
+        if strategy == "sw_linucb":
+            agents_settings["window_size"] = trial.suggest_int("window_size", 0, 84)
+
+    if agents_settings["window_size"] == -1:
+        agents_settings["window_size"] = None
+
+    elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
+        agents_settings["epsilon"] = trial.suggest_float("epsilon", 0.01, 0.5)
+        agents_settings["eta"] = trial.suggest_float("eta", 1e-5, 1e-1, log=True)
+        agents_settings["gamma"] = trial.suggest_float("gamma", 0.7, 0.99)
+        agents_settings["alpha_ema"] = trial.suggest_float("alpha_ema", 0.01, 0.3)
+        if strategy == "decay_epsilon_greedy":
+            agents_settings["decay_rate"] = trial.suggest_float("decay_rate", 0.8, 1.0)
+
+        agents_settings["channel_frequency"] = 1
+        agents_settings["primary_frequency"] = 1
+        agents_settings["cw_frequency"] = 1
+
     for step, scenario in enumerate(training_scenarios):
         cfg = cfg_module()
         sparams = sparams_module()
@@ -110,26 +122,6 @@ def objective(
 
         cfg.ENABLE_STATS_COMPUTATION = False
 
-        agents_settings = {"strategy": strategy}
-
-        if strategy in ["sw_linucb", "linucb"]:
-            agents_settings["alpha"] = trial.suggest_float("alpha", 0.1, 2.0)
-            if strategy == "sw_linucb":
-                agents_settings["window_size"] = trial.suggest_int("window_size", -1, 84)
-
-        if agents_settings["window_size"] == -1:
-            agents_settings["window_size"] = None
-
-        elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
-            agents_settings["epsilon"] = trial.suggest_float("epsilon", 0.01, 0.5)
-            agents_settings["eta"] = trial.suggest_float("eta", 1e-5, 1e-1, log=True)
-            agents_settings["gamma"] = trial.suggest_float("gamma", 0.7, 0.99)
-            agents_settings["alpha_ema"] = trial.suggest_float("alpha_ema", 0.01, 0.3)
-            if strategy == "decay_epsilon_greedy":
-                agents_settings["decay_rate"] = trial.suggest_float(
-                    "decay_rate", 0.8, 1.0
-                )
-
         cfg.AGENTS_SETTINGS = agents_settings
 
         try:
@@ -141,8 +133,7 @@ def objective(
                 if ap.id == 1:
                     results = ap.mac_layer.rl_controller.results
                     if len(results) == 0:
-                        result = np.inf
-                        break
+                        raise ValueError("No results")
                     result = np.mean(results)
                     break
 
@@ -150,12 +141,12 @@ def objective(
 
             trial.report(result, step)
         except Exception as e:
-            print(f"Trial {trial.number} failed: {e}")
+            print(f"Trial {trial.number} step {step} failed: {e}")
 
     return np.mean(runs)
 
 
-N_TRIALS = 200
+N_TRIALS = 100
 SEED = 1  # or None
 RL_MODE = 1
 STRATEGY = "sw_linucb"
@@ -231,7 +222,9 @@ if __name__ == "__main__":
             fig2 = style_plotly_as_matplotlib(vis.plot_param_importances(study))
             fig2.show()
 
-        fig3 = style_plotly_as_matplotlib(vis.plot_parallel_coordinate(study), small_fonts=True)
+        fig3 = style_plotly_as_matplotlib(
+            vis.plot_parallel_coordinate(study), small_fonts=True
+        )
         fig3.show()
 
         fig4 = style_plotly_as_matplotlib(vis.plot_edf(study))
