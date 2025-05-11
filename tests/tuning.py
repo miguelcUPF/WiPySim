@@ -150,15 +150,10 @@ N_TRIALS = 100
 SEED = 1  # or None
 RL_MODE = 1
 STRATEGY = "sw_linucb"
-CLEANUP_STUDY = True
 DISPLAY_STUDY_FIGS = True
 
 SIM_TIME_CHOICES = [1_000_000, 2_000_000, 5_000_000, 7_500_000, 10_000_000]
 NUM_BSS_CHOICES = [2, 3, 4, 5, 6]
-
-if CLEANUP_STUDY:
-    if os.path.exists("tuning_study.db"):
-        os.remove("tuning_study.db")
 
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
@@ -169,9 +164,7 @@ if __name__ == "__main__":
 
     study = optuna.create_study(
         direction="minimize",
-        storage="sqlite:///tuning_study.db",
         study_name=f"{RL_MODE}_{STRATEGY}",
-        load_if_exists=True,
         sampler=optuna.samplers.TPESampler(seed=SEED),
     )  # minimize delay
 
