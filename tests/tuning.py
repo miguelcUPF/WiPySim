@@ -140,6 +140,8 @@ def objective(
             runs.append(result)
 
             trial.report(result, step)
+
+            print(f"Trial {trial.number} step {step}completed: {result}")
         except Exception as e:
             print(f"Trial {trial.number} step {step} failed: {e}")
 
@@ -152,8 +154,8 @@ RL_MODE = 1
 STRATEGY = "sw_linucb"
 DISPLAY_STUDY_FIGS = True
 
-SIM_TIME_CHOICES = [1_000_000, 2_000_000, 5_000_000, 7_500_000, 10_000_000]
-NUM_BSS_CHOICES = [2, 3, 4, 5, 6]
+SIM_TIME_CHOICES = [1_000_000, 2_000_000, 5_000_000, 10_000_000]
+NUM_BSS_CHOICES = [3, 4, 5]
 
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
