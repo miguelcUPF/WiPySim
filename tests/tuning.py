@@ -156,7 +156,7 @@ if __name__ == "__main__":
             rl_mode=RL_MODE,
         ),
         n_trials=N_TRIALS,
-        n_jobs=1,
+        n_jobs=-1,
         show_progress_bar=True,
     )
     print(TEST_COMPLETED_MSG)
