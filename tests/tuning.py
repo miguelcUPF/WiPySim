@@ -130,7 +130,7 @@ def objective(
             env.run(until=cfg.SIMULATION_TIME_us)
 
             for ap in network.get_aps():
-                if ap.id == 1:
+                if ap.mac_layer.rl_driven is not None:
                     results = ap.mac_layer.rl_controller.results
                     if len(results) == 0:
                         raise ValueError("No results")
@@ -155,7 +155,7 @@ STRATEGY = "sw_linucb"
 DISPLAY_STUDY_FIGS = True
 
 SIM_TIME_CHOICES = [1_000_000, 2_000_000, 5_000_000, 10_000_000]
-NUM_BSS_CHOICES = [3, 4, 5]
+NUM_BSS_CHOICES = [2, 3, 4]
 
 if __name__ == "__main__":
     print(STARTING_TEST_MSG)
