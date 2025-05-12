@@ -134,6 +134,7 @@ class UserConfig:
 
     # --- Network Configuration --- #
     NETWORK_BOUNDS_m = (10, 10, 2)  # spatial limits of the network in meters (x, y, z)
+    FIRST_AS_PRIMARY = False  # If True, the first channel in each allocated channel group will be the primary channel
 
     ## --- Network Configuration (Basic) --- ##
     # Basic:

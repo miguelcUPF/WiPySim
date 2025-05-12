@@ -73,6 +73,7 @@ class UserConfig:
 
     # --- Network Configuration --- #
     NETWORK_BOUNDS_m = (10, 10, 2)
+    FIRST_AS_PRIMARY = False
 
     ## --- Network Configuration (Basic) --- ##
     NUMBER_OF_BSSS = 1

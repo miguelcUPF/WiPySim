@@ -104,7 +104,9 @@ def validate_params(sparams: sparams_module, logger: logging.Logger):
     logger.success("Simulation parameters validated.")
 
 
-def validate_config(cfg: cfg_module, sparams: sparams_module, logger: logging.Logger) -> None:
+def validate_config(
+    cfg: cfg_module, sparams: sparams_module, logger: logging.Logger
+) -> None:
     def _is_valid_pos(pos) -> bool:
         if isinstance(pos, tuple) and len(pos) == 3:
             return all(isinstance(x, (int, float)) for x in pos)
@@ -180,6 +182,7 @@ def validate_config(cfg: cfg_module, sparams: sparams_module, logger: logging.Lo
         "ENABLE_STATS_COLLECTION": cfg.ENABLE_STATS_COLLECTION,
         "ENABLE_STATS_COMPUTATION": cfg.ENABLE_STATS_COMPUTATION,
         "ENABLE_ADVANCED_NETWORK_CONFIG": cfg.ENABLE_ADVANCED_NETWORK_CONFIG,
+        "FIRST_AS_PRIMARY": cfg.FIRST_AS_PRIMARY,
     }
 
     for name, value in bool_settings.items():
@@ -766,9 +769,14 @@ def validate_settings(cfg: cfg_module, sparams: sparams_module, logger: logging.
 
 
 def initialize_network(
-    cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, network: Network = None
+    cfg: cfg_module,
+    sparams: sparams_module,
+    env: simpy.Environment,
+    network: Network = None,
 ) -> Network:
-    def _get_unique_position(bounds: tuple, used_positions: set, rng: random.Random) -> tuple:
+    def _get_unique_position(
+        bounds: tuple, used_positions: set, rng: random.Random
+    ) -> tuple:
         """Generate a unique random position within bounds."""
         while True:
             x_lim, y_lim, z_lim = bounds
@@ -793,7 +801,7 @@ def initialize_network(
                             break
                     valid_channel_bonds.append(bond) if not invalid_bond else None
         return list(rng.choice(valid_channel_bonds))
-    
+
     env.rng = random.Random(cfg.SEED)
     rng = env.rng
 
@@ -810,9 +818,13 @@ def initialize_network(
             last_id += 1
             ap_id = last_id
             ap_pos = _get_unique_position(bounds, used_positions, rng)
-            channels = _get_random_channels(sparams,  rng)
+            channels = _get_random_channels(sparams, rng)
             sensing_channels = (
-                rng.choice(channels) if sparams.BONDING_MODE in [0, 1] else channels
+                channels[0]
+                if cfg.FIRST_AS_PRIMARY and sparams.BONDING_MODE in [0, 1]
+                else (
+                    rng.choice(channels) if sparams.BONDING_MODE in [0, 1] else channels
+                )
             )
             ap = network.add_ap(
                 ap_id,
@@ -850,13 +862,22 @@ def initialize_network(
 
             # Create the AP
             ap_id = bss["ap"]["id"]
-            ap_pos = bss["ap"].get("pos", _get_unique_position(bounds, used_positions, rng))
-            channels = bss["ap"].get("channels", _get_random_channels(sparams, rng))
-            sensing_channels = (
-                bss["ap"].get("primary_channel", rng.choice(channels))
-                if sparams.BONDING_MODE in [0, 1]
-                else channels
+            ap_pos = bss["ap"].get(
+                "pos", _get_unique_position(bounds, used_positions, rng)
             )
+            channels = bss["ap"].get("channels", _get_random_channels(sparams, rng))
+            if bss["ap"].get("primary_channel", None) is None:
+                sensing_channels = (
+                    channels[0]
+                    if cfg.FIRST_AS_PRIMARY and sparams.BONDING_MODE in [0, 1]
+                    else (
+                        rng.choice(channels)
+                        if sparams.BONDING_MODE in [0, 1]
+                        else channels
+                    )
+                )
+            else:
+                sensing_channels = bss["ap"]["primary_channel"]
             rl_driven = bss["ap"].get("rl_driven", False) if cfg.ENABLE_RL else False
             ap = network.add_ap(
                 ap_id, ap_pos, bss_id, set(channels), {sensing_channels}, rl_driven
@@ -865,7 +886,9 @@ def initialize_network(
             # Create associated STAs
             for sta in bss.get("stas", []):
                 sta_id = sta["id"]
-                sta_pos = sta.get("pos", _get_unique_position(bounds, used_positions, rng))
+                sta_pos = sta.get(
+                    "pos", _get_unique_position(bounds, used_positions, rng)
+                )
                 network.add_sta(sta_id, sta_pos, bss_id, ap)
 
             for flow in bss.get("traffic_flows", []):

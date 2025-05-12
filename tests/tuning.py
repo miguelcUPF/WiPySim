@@ -112,6 +112,8 @@ def objective(
         cfg.ENABLE_RL = True
         cfg.RL_MODE = rl_mode
 
+        cfg.FIRST_AS_PRIMARY = True
+
         cfg.USE_WANDB = False
         cfg.ENABLE_CONSOLE_LOGGING = False
         cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION = False
