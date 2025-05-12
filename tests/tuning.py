@@ -10,7 +10,7 @@ from functools import partial
 import optuna
 import optuna.visualization as vis
 import random
-import os
+from optuna.importance import get_param_importances
 
 
 def style_plotly_as_matplotlib(fig, small_fonts=False):
@@ -86,12 +86,12 @@ def objective(
         if strategy == "sw_linucb":
             agents_settings["window_size"] = trial.suggest_int("window_size", 0, 84)
 
-    if agents_settings["window_size"] == -1:
-        agents_settings["window_size"] = None
+            if agents_settings["window_size"] == -1:
+                agents_settings["window_size"] = None
 
     elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
-        agents_settings["epsilon"] = trial.suggest_float("epsilon", 0.01, 0.5)
-        agents_settings["eta"] = trial.suggest_float("eta", 1e-5, 1e-1, log=True)
+        agents_settings["epsilon"] = trial.suggest_float("epsilon", 0.01, 0.3)
+        agents_settings["eta"] = trial.suggest_float("eta", 1e-4, 1e-1, log=True)
         agents_settings["gamma"] = trial.suggest_float("gamma", 0.7, 0.99)
         agents_settings["alpha_ema"] = trial.suggest_float("alpha_ema", 0.01, 0.3)
         if strategy == "decay_epsilon_greedy":
@@ -143,6 +143,10 @@ def objective(
 
             trial.report(result, step)
 
+            if trial.should_prune():
+                print(f"Trial {trial.number} step {step} pruned: {result}")
+                raise optuna.TrialPruned()
+
             print(f"Trial {trial.number} step {step} completed: {result}")
         except Exception as e:
             print(f"Trial {trial.number} step {step} failed: {e}")
@@ -156,7 +160,7 @@ RL_MODE = 1
 STRATEGY = "sw_linucb"
 DISPLAY_STUDY_FIGS = True
 
-SIM_TIME_CHOICES = [1_000_000, 2_000_000, 5_000_000, 10_000_000]
+SIM_TIME_CHOICES = [1_000_000, 2_000_000, 4_000_000, 8_000_000]
 NUM_BSS_CHOICES = [2, 3, 4]
 
 if __name__ == "__main__":
@@ -170,6 +174,7 @@ if __name__ == "__main__":
         direction="minimize",
         study_name=f"{RL_MODE}_{STRATEGY}",
         sampler=optuna.samplers.TPESampler(seed=SEED),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=3),
     )  # minimize delay
 
     study.optimize(
@@ -190,6 +195,12 @@ if __name__ == "__main__":
     print(f"Best hyperparameters:")
     for k, v in study.best_trial.params.items():
         print(f"  {k}: {v}")
+
+    print("\nParameter Importances:")
+    param_importances = get_param_importances(study)
+
+    for param, importance in param_importances.items():
+        print(f"{param}: {importance}")
 
     if len(study.trials) >= 3:
         print("\nTop 3 Trials:")

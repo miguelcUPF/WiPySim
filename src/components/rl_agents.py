@@ -580,7 +580,6 @@ class SARLController:
                     valid_actions.append(
                         (c_id, p - 1, cw_id)
                     )  # p-1 because primaries are 0-indexed
-        print(len(valid_actions))
 
         # Define valid joint actions
         self.valid_joint_actions = valid_actions  # (channel, primary, cw)

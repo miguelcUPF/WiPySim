@@ -16,84 +16,75 @@ from codecarbon import EmissionsTracker
 import simpy
 import json
 
-sparams_module.CW_MIN = 16
-sparams_module.CW_MAX = 2**6 * sparams_module.CW_MIN
 
-cfg_module.SIMULATION_TIME_us = 2e6
-cfg_module.SEED = 1
+STRATEGY = "sw_linucb"
+cfg_module.RL_MODE = 1
+cfg_module.SIMULATION_TIME_us = 30e6
 
-cfg_module.ENABLE_RL = True
-cfg_module.RL_MODE = 1  # Test 0: SARL, 1: MARL
-cfg_module.USE_WANDB = True
-cfg_module.WANDB_RUN_NAME = "test_marl"
-
-cfg_module.USE_CODECARBON = False
-
-cfg_module.DISABLE_SIMULTANEOUS_ACTION_SELECTION = True  # Test: True and False
-cfg_module.ENABLE_REWARD_DECOMPOSITION = False  # Test: True and False
-
-cfg_module.CHANNEL_AGENT_WEIGHTS = {
-    "sensing_delay": 0.3,
-    "backoff_delay": 0.1,
-    "tx_delay": 0.3,
-    "residual_delay": 0.3,
-}
-cfg_module.PRIMARY_AGENT_WEIGHTS = {
-    "sensing_delay": 0.4,
-    "backoff_delay": 0.2,
-    "tx_delay": 0.1,
-    "residual_delay": 0.3,
-}
-cfg_module.CW_AGENT_WEIGHTS = {
-    "sensing_delay": 0,
-    "backoff_delay": 0.35,
-    "tx_delay": 0.35,
-    "residual_delay": 0.3,
-}
+# SW-LinUCB RL MODE 1 (MARL) TODO
 cfg_module.AGENTS_SETTINGS = {
-    "strategy": "sw_linucb",
-    "channel_frequency": 8,
-    "primary_frequency": 4,
+    "strategy": STRATEGY,
+    "channel_frequency": 1,
+    "primary_frequency": 1,
     "cw_frequency": 1,
-    "epsilon": 0.1,
+    "alpha": 1,
     "window_size": 0,
 }
 
-cfg_module.ENABLE_CONSOLE_LOGGING = False
+sparams_module.CW_MIN = 16
+sparams_module.CW_MAX = 2**6 * sparams_module.CW_MIN
+
+sparams_module.NUM_CHANNELS = 4
+
+cfg_module.SEED = 1
+cfg_module.ENABLE_RL = True
+
+cfg_module.FIRST_AS_PRIMARY = True
+
+cfg_module.ENABLE_CONSOLE_LOGGING = True
+cfg_module.DISABLE_SIMULTANEOUS_ACTION_SELECTION = False
+cfg_module.ENABLE_REWARD_DECOMPOSITION = False
 
 cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
+
+cfg_module.ENABLE_STATS_COMPUTATION = True
+
+cfg_module.USE_WANDB = True
+cfg_module.WANDB_RUN_NAME = f"{cfg_module.RL_MODE}_{STRATEGY}"
+cfg_module.USE_CODECARBON = True
+
 
 cfg_module.BSSs_Advanced = [
     {
         "id": 1,  # A BSS
-        "ap": {"id": 1, "pos": (0, 0, 0), "rl_driven": True},
-        "stas": [{"id": 2, "pos": (3, 4, 0)}],
+        "ap": {"id": 1, "pos": (3, 6, 0.5), "rl_driven": True},
+        "stas": [{"id": 2, "pos": (4, 8, 0.5)}],
         "traffic_flows": [
             {
                 "destination": 2,
-                "model": {"name": "Poisson"},
+                "model": {"name": "Full"},
             },
         ],
     },
     {
         "id": 2,  # Another BSS
-        "ap": {"id": 3, "pos": (5, 5, 1), "channels": [1, 2], "primary_channel": 1},
-        "stas": [{"id": 4, "pos": (1, 2, 1)}],
+        "ap": {"id": 3, "pos": (7, 5, 1), "channels": [3, 4], "primary_channel": 3},
+        "stas": [{"id": 4, "pos": (6, 7, 0.5)}],
         "traffic_flows": [
             {
                 "destination": 4,
-                "model": {"name": "Poisson"},
+                "model": {"name": "Full"},
             }
         ],
     },
     {
         "id": 3,  # Another BSS
-        "ap": {"id": 5, "pos": (2, 3, 1), "channels": [3], "primary_channel": 3},
-        "stas": [{"id": 6, "pos": (1, 0, 1)}],
+        "ap": {"id": 5, "pos": (3, 3, 1), "channels": [1], "primary_channel": 1},
+        "stas": [{"id": 6, "pos": (5, 2, 1)}],
         "traffic_flows": [
             {
                 "destination": 6,
-                "model": {"name": "Poisson"},
+                "model": {"name": "Full"},
             }
         ],
     },
@@ -133,18 +124,22 @@ if __name__ == "__main__":
             f"AP {ap.id} -> Tx attempts: {ap.tx_stats.tx_attempts}, Tx Failures: {ap.tx_stats.tx_failures}, Tx Pkts: {ap.tx_stats.pkts_tx}, Pkts Success: {ap.tx_stats.pkts_success}, Dropped Pkts: {ap.tx_stats.pkts_dropped_queue_lim + ap.tx_stats.pkts_dropped_retry_lim}, Channels: [{', '.join(map(str, ap.phy_layer.channels_ids))}], Sensing Channels: {', '.join(map(str, ap.phy_layer.sensing_channels_ids))}"
         )
         if cfg_module.USE_CODECARBON:
-            ap.mac_layer.rl_controller.log_emissions_data() if ap.mac_layer.rl_controller else None
-
+            (
+                ap.mac_layer.rl_controller.log_emissions_data()
+                if ap.mac_layer.rl_controller
+                else None
+            )
 
     if cfg_module.USE_CODECARBON:
         if DISPLAY_AGENTS_EMISSIONS:
             print(SECTION_DIVIDER_MSG)
-            for ap in network.get_aps():      
+            for ap in network.get_aps():
                 if not ap.mac_layer.rl_controller:
                     continue
                 emissions_data = ap.mac_layer.rl_controller.get_emissions_data()
+                logger.info(f"AP {ap.id}:\n{json.dumps(emissions_data, indent=6)}")
                 logger.info(
-                    f"AP {ap.id}:\n{json.dumps(emissions_data, indent=6)}"
+                    f"AP {ap.id}: \n{len(ap.mac_layer.rl_controller.results)} results"
                 )
 
         if DISPLAY_SIMULATION_EMISSIONS:
