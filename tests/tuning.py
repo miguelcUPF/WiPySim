@@ -141,15 +141,16 @@ def objective(
 
             runs.append(result)
 
-            trial.report(result, step)
-
-            if trial.should_prune():
-                print(f"Trial {trial.number} step {step} pruned: {result}")
-                raise optuna.TrialPruned()
-
             print(f"Trial {trial.number} step {step} completed: {result}")
         except Exception as e:
             print(f"Trial {trial.number} step {step} failed: {e}")
+            raise optuna.TrialPruned()
+
+        trial.report(result, step)
+
+        if trial.should_prune():
+            print(f"Trial {trial.number} step {step} pruned: {result}")
+            raise optuna.TrialPruned()
 
     return np.mean(runs)
 
@@ -174,7 +175,7 @@ if __name__ == "__main__":
         direction="minimize",
         study_name=f"{RL_MODE}_{STRATEGY}",
         sampler=optuna.samplers.TPESampler(seed=SEED),
-        pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=3),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=4),
     )  # minimize delay
 
     study.optimize(
