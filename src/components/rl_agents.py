@@ -75,7 +75,9 @@ class SWLinUCB:
             A_inv = np.linalg.inv(self.A[a])
             theta = A_inv @ self.b[a]
             p[a] = context @ theta + self.alpha * np.sqrt(context @ A_inv @ context)
-        action = np.argmax(p)
+        max_p = np.max(p)
+        candidate_actions = np.where(p == max_p)[0]
+        action = np.random.choice(candidate_actions)
         return action
 
     def _sw_linucb(self, context, valid_actions=None):
@@ -99,7 +101,10 @@ class SWLinUCB:
                 p[a] = gamma_t * (context @ theta) + self.alpha * np.sqrt(
                     context @ A_inv @ context
                 )
-        action = np.argmax(p)
+
+        max_p = np.max(p)
+        candidate_actions = np.where(p == max_p)[0]
+        action = np.random.choice(candidate_actions)
         for a in range(self.n_actions):
             self.E[a].append(1 if a == action else 0)
         return action
@@ -204,7 +209,11 @@ class EpsRMSProp:
             masked_preds = np.full_like(preds, -np.inf)
             for a in valid_actions:
                 masked_preds[a] = preds[a]
-            return np.argmax(masked_preds)  # Exploit
+
+            max_p = np.max(masked_preds)
+            candidate_actions = np.where(masked_preds == max_p)[0]
+            action = np.random.choice(candidate_actions)
+            return action  # Exploit
         return action
 
     def _decay_epsilon_greedy(self, context, valid_actions=None):
