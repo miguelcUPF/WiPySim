@@ -19,9 +19,8 @@ import json
 
 STRATEGY = "sw_linucb"
 cfg_module.RL_MODE = 1
-cfg_module.SIMULATION_TIME_us = 30e6
+cfg_module.SIMULATION_TIME_us = 20e6
 
-# SW-LinUCB RL MODE 1 (MARL) TODO
 cfg_module.AGENTS_SETTINGS = {
     "strategy": STRATEGY,
     "channel_frequency": 1,
@@ -41,13 +40,13 @@ cfg_module.ENABLE_RL = True
 
 cfg_module.FIRST_AS_PRIMARY = True
 
-cfg_module.ENABLE_CONSOLE_LOGGING = True
+cfg_module.ENABLE_CONSOLE_LOGGING = False
 cfg_module.DISABLE_SIMULTANEOUS_ACTION_SELECTION = False
 cfg_module.ENABLE_REWARD_DECOMPOSITION = False
 
 cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
-cfg_module.ENABLE_STATS_COMPUTATION = True
+cfg_module.ENABLE_STATS_COMPUTATION = False
 
 cfg_module.USE_WANDB = True
 cfg_module.WANDB_RUN_NAME = f"{cfg_module.RL_MODE}_{STRATEGY}"

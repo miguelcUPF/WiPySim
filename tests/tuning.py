@@ -157,8 +157,8 @@ def objective(
 
 N_TRIALS = 100
 SEED = 1  # or None
-RL_MODE = 1
-STRATEGY = "sw_linucb"
+RL_MODE = 0
+STRATEGY = "epsilon_greedy"
 DISPLAY_STUDY_FIGS = True
 
 SIM_TIME_CHOICES = [1_000_000, 2_000_000, 4_000_000, 8_000_000]
@@ -186,7 +186,7 @@ if __name__ == "__main__":
             rl_mode=RL_MODE,
         ),
         n_trials=N_TRIALS,
-        n_jobs=-1,
+        n_jobs=1,
         show_progress_bar=True,
     )
     print(TEST_COMPLETED_MSG)
