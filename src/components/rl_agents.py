@@ -62,7 +62,7 @@ class SWLinUCB:
 
         # Normalization
         self.min_val = min_val
-        self.max_val = -max_val
+        self.max_val = max_val
 
         self.rng = rng
 
@@ -160,6 +160,8 @@ class EpsRMSProp:
         eta: float = 0.1,
         gamma: float = 0.9,
         alpha_ema: float = 0.1,  # EMA factor
+        min_val: float = -10e3,
+        max_val: float = 0,
     ):
 
         self.name = name
@@ -190,6 +192,9 @@ class EpsRMSProp:
         # RMSProp: moving average of squared gradients
         self.grad_squared_avg = np.zeros((n_actions, context_dim))
 
+        self.min_val = min_val
+        self.max_val = max_val
+
         self.rng = rng
 
     def _epsilon_greedy(self, context, valid_actions=None):
@@ -215,6 +220,17 @@ class EpsRMSProp:
             action = np.random.choice(candidate_actions)
             return action  # Exploit
         return action
+    
+    def _normalize_reward(self, reward):
+        # Clipping
+        clipped_reward = max(min(reward, self.max_val), self.min_val)
+
+        # Normalize the reward to the range [0, 1]
+        normalized_reward = (clipped_reward - self.min_val) / (
+            self.max_val - self.min_val
+        )
+
+        return normalized_reward
 
     def _decay_epsilon_greedy(self, context, valid_actions=None):
         self.epsilon *= self.decay_rate
@@ -233,7 +249,8 @@ class EpsRMSProp:
         Updates weights using RMSProp and maintains EMA of weights.
         """
         pred = self.weight_matrix[action] @ context
-        error = pred - reward
+        reward = self._normalize_reward(reward)
+        error = reward - pred
         gradient = error * context
 
         # Update RMSProp memory
@@ -242,11 +259,12 @@ class EpsRMSProp:
         ) * (gradient**2)
 
         # Parameter update
-        self.weight_matrix[action] -= (
+        self.weight_matrix[action] += (
             self.eta
             / (np.sqrt(self.grad_squared_avg[action] + self.epsilon_rms))
             * gradient
         )
+
 
         # EMA update
         self.weight_matrix_ema[action] = (
@@ -328,6 +346,8 @@ class MARLController:
                     "eta": settings.get("eta", 0.1),
                     "gamma": settings.get("gamma", 0.9),
                     "alpha_ema": settings.get("alpha_ema", 0.1),
+                    "min_val": settings.get("min_val", -10e3),
+                    "max_val": settings.get("max_val", 0),
                 }
             )
             primary_params.update(
@@ -337,6 +357,8 @@ class MARLController:
                     "eta": settings.get("eta", 0.1),
                     "gamma": settings.get("gamma", 0.9),
                     "alpha_ema": settings.get("alpha_ema", 0.1),
+                    "min_val": settings.get("min_val", -10e3),
+                    "max_val": settings.get("max_val", 0),
                 }
             )
             cw_params.update(
@@ -346,6 +368,8 @@ class MARLController:
                     "eta": settings.get("eta", 0.1),
                     "gamma": settings.get("gamma", 0.9),
                     "alpha_ema": settings.get("alpha_ema", 0.1),
+                    "min_val": settings.get("min_val", -10e3),
+                    "max_val": settings.get("max_val", 0),
                 }
             )
         elif agent_class == SWLinUCB:
@@ -609,6 +633,8 @@ class SARLController:
                     "eta": settings.get("eta", 0.1),
                     "gamma": settings.get("gamma", 0.9),
                     "alpha_ema": settings.get("alpha_ema", 0.1),
+                    "min_val": settings.get("min_val", -10e3),
+                    "max_val": settings.get("max_val", 0),
                 }
             )
         elif agent_class == SWLinUCB:
