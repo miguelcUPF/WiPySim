@@ -202,11 +202,11 @@ def validate_config(
     if cfg.ENABLE_RL and cfg.RL_MODE != 1:
         if cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
             logger.warning(
-                "RL_MODE is {cfg.RL_MODE}, ignoring DISABLE_SIMULTANEOUS_ACTION_SELECTION..."
+                f"RL_MODE is {cfg.RL_MODE}, ignoring DISABLE_SIMULTANEOUS_ACTION_SELECTION..."
             )
         if cfg.ENABLE_REWARD_DECOMPOSITION:
             logger.warning(
-                "RL_MODE is {cfg.RL_MODE}, ignoring ENABLE_REWARD_DECOMPOSITION..."
+                f"RL_MODE is {cfg.RL_MODE}, ignoring ENABLE_REWARD_DECOMPOSITION..."
             )
         for name, val in zip(
             ["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"],
@@ -280,7 +280,7 @@ def validate_config(
         if cfg.AGENTS_SETTINGS.get("channel_frequency", None):
             if cfg.RL_MODE != 1:
                 logger.warning(
-                    "RL_MODE is {cfg.RL_MODE}, ignoring channel_frequency..."
+                    f"RL_MODE is {cfg.RL_MODE}, ignoring channel_frequency..."
                 )
             else:
                 if not isinstance(
@@ -297,7 +297,7 @@ def validate_config(
         if cfg.AGENTS_SETTINGS.get("primary_frequency", None):
             if cfg.RL_MODE != 1:
                 logger.warning(
-                    "RL_MODE is {cfg.RL_MODE}, ignoring primary_frequency..."
+                    f"RL_MODE is {cfg.RL_MODE}, ignoring primary_frequency..."
                 )
             else:
                 if not isinstance(
@@ -331,7 +331,7 @@ def validate_config(
 
         if cfg.AGENTS_SETTINGS.get("cw_frequency", None):
             if cfg.RL_MODE != 1:
-                logger.warning("RL_MODE is {cfg.RL_MODE}, ignoring cw_frequency...")
+                logger.warning(f"RL_MODE is {cfg.RL_MODE}, ignoring cw_frequency...")
             else:
                 if not isinstance(cfg.AGENTS_SETTINGS.get("cw_frequency", None), int):
                     logger.critical(

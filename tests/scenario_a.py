@@ -18,17 +18,16 @@ import json
 
 
 STRATEGY = "sw_linucb"
-cfg_module.RL_MODE = 1
-cfg_module.SIMULATION_TIME_us = 30e6
+cfg_module.RL_MODE = 0
+cfg_module.SIMULATION_TIME_us = 20e6
 
-# SW-LinUCB RL MODE 1 (MARL) TODO
 cfg_module.AGENTS_SETTINGS = {
     "strategy": STRATEGY,
     "channel_frequency": 1,
     "primary_frequency": 1,
     "cw_frequency": 1,
-    "alpha": 1,
-    "window_size": 0,
+    "alpha": 0.246,
+    "window_size": 77,
 }
 
 sparams_module.CW_MIN = 16
