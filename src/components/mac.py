@@ -934,7 +934,7 @@ class MAC:
 
         self.node.phy_layer.set_sensing_channels(PRIMARY_CHANNEL_MAP[joint_action[1]])
 
-        self.cw_current = CW_MAP[joint_action[1]]
+        self.cw_current = CW_MAP[joint_action[2]]
 
         self.logger.debug(
             f"{self.node.type} {self.node.id} -> Agent selected action {joint_action}, channel changed to {CHANNEL_MAP[joint_action[0]]}, primary channel changed to {PRIMARY_CHANNEL_MAP[joint_action[1]]}, CW size changed to {self.cw_current}"
