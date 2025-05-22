@@ -89,17 +89,17 @@ cfg_module.BSSs_Advanced = [
             }
         ],
     },
-    {
-        "id": 4,  # Another BSS
-        "ap": {"id": 7, "pos": (14, 8, 1.5), "channels": [1], "primary_channel": 1},
-        "stas": [{"id": 8, "pos": (10, 2, 1.5)}],
-        "traffic_flows": [
-            {
-                "destination": 8,
-                "model": {"name": "Full"},
-            }
-        ],
-    },
+    # {
+    #     "id": 4,  # Another BSS
+    #     "ap": {"id": 7, "pos": (14, 8, 1.5), "channels": [1], "primary_channel": 1},
+    #     "stas": [{"id": 8, "pos": (10, 2, 1.5)}],
+    #     "traffic_flows": [
+    #         {
+    #             "destination": 8,
+    #             "model": {"name": "Full"},
+    #         }
+    #     ],
+    # },
     {
         "id": 5,  # Another BSS TODO: implement changing in mid
         "ap": {"id": 9, "pos": (2, 4, 1), "channels": [4], "primary_channel": 4},
