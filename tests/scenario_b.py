@@ -17,26 +17,64 @@ import simpy
 import json
 
 
-STRATEGY = "sw_linucb"
-cfg_module.RL_MODE = 1
-cfg_module.SIMULATION_TIME_us = 20e6
+STRATEGY = "sw_linucb"  # "sw_linucb", "epsilon_greedy"
+cfg_module.RL_MODE = 1  # 0: SARL, 1: MARL
 
-cfg_module.AGENTS_SETTINGS = {
-    "strategy": STRATEGY,
-    "channel_frequency": 1,
-    "primary_frequency": 1,
-    "cw_frequency": 1,
-    "alpha": 1,
-    "window_size": 0,
+cfg_module.SIMULATION_TIME_us = 60e6
+
+settings_mapping = {
+    0: {
+        "sw_linucb": {
+            "strategy": STRATEGY,
+            "channel_frequency": 1,
+            "primary_frequency": 1,
+            "cw_frequency": 1,
+            "alpha": 0.11,
+            "window_size": 38,
+        },
+        "epsilon_greedy": {
+            "strategy": STRATEGY,
+            "channel_frequency": 1,
+            "primary_frequency": 1,
+            "cw_frequency": 1,
+            "epsilon": 0.016,
+            "eta": 0.0194,
+            "gamma": 0.758,
+            "alpha_ema": 0.064,
+        },
+    },
+    1: {
+        "sw_linucb": {
+            "strategy": STRATEGY,
+            "channel_frequency": 1,
+            "primary_frequency": 1,
+            "cw_frequency": 1,
+            "alpha": 0.22,
+            "window_size": 35,
+        },
+        "epsilon_greedy": {
+            "strategy": STRATEGY,
+            "channel_frequency": 1,
+            "primary_frequency": 1,
+            "cw_frequency": 1,
+            "epsilon": 0.019,
+            "eta": 0.051,
+            "gamma": 0.836,
+            "alpha_ema": 0.197,
+        },
+    },
 }
+
+
+cfg_module.AGENTS_SETTINGS = settings_mapping[cfg_module.RL_MODE][STRATEGY]
 
 sparams_module.CW_MIN = 16
 sparams_module.CW_MAX = 2**6 * sparams_module.CW_MIN
 
 sparams_module.NUM_CHANNELS = 4
 
-cfg_module.SEED = 1
-cfg_module.ENABLE_RL = True
+cfg_module.SEED = 1  # 1,2,3,4,5
+cfg_module.ENABLE_RL = True  # False for non-learning baselines
 
 cfg_module.FIRST_AS_PRIMARY = True
 
@@ -49,14 +87,20 @@ cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
 cfg_module.ENABLE_STATS_COMPUTATION = False
 
 cfg_module.USE_WANDB = True
-cfg_module.WANDB_RUN_NAME = f"{cfg_module.RL_MODE}_{STRATEGY}"
-cfg_module.USE_CODECARBON = True
+cfg_module.WANDB_RUN_NAME = (
+    f"{cfg_module.RL_MODE}_{STRATEGY}"  # {seed}_A for non-learning baselines
+)
+cfg_module.USE_CODECARBON = True  # False for non-learning baselines
 
 
 cfg_module.BSSs_Advanced = [
     {
         "id": 1,  # A BSS
-        "ap": {"id": 1, "pos": (3, 8, 1.5), "rl_driven": True},
+        "ap": {
+            "id": 1,
+            "pos": (3, 8, 1.5),
+            "rl_driven": True,
+        },  # e.g., for non-learning baselines: {"id": 1, "pos": (4, 18, 1), "channels": [1], "primary_channel": 1},
         "stas": [{"id": 2, "pos": (4, 5, 0.5)}],
         "traffic_flows": [
             {
