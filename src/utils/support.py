@@ -423,6 +423,8 @@ def validate_config(
         "MEDIUM",
         "CHANNEL",
         "STATS",
+        "MARL",
+        "SARL",
     ]
     valid_log_levels = ["HEADER", "DEBUG", "INFO", "WARNING", "ALL"]
 

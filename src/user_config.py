@@ -99,7 +99,7 @@ class UserConfig:
 
     # Logging exclusions (if ENABLE_CONSOLE_LOGGING or ENABLE_LOGS_RECORDING is enabled)
     # Format: { "<module_name>": ["<excluded_log_level_1>", "<excluded_log_level_2>", ...] }
-    # <module_name>: Module name (e.g., "NETWORK", "NODE", "GEN", "LOAD", "APP", "MAC", "PHY", "MEDIUM", "CHANNEL", "STATS", "MARL")
+    # <module_name>: Module name (e.g., "NETWORK", "NODE", "GEN", "LOAD", "APP", "MAC", "PHY", "MEDIUM", "CHANNEL", "STATS", "MARL", "SARL")
     # <excluded_log_level>: Log levels to exclude (e.g., "HEADER","DEBUG", "INFO", "WARNING", "ALL")
     EXCLUDED_LOGS = {
         "NETWORK": ["ALL"],
@@ -113,6 +113,7 @@ class UserConfig:
         "CHANNEL": ["ALL"],
         "STATS": ["ALL"],
         "MARL": ["ALL"],
+        "SARL": ["ALL"],
     }
     # Logging exclusions for specific nodes IDs (if ENABLE_CONSOLE_LOGGING or ENABLE_LOGS_RECORDING is enabled)
     EXCLUDED_IDS = []
