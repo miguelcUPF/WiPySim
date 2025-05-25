@@ -1,0 +1,298 @@
+{
+    "global_stats": {
+        "total_tx_attempts": 20,
+        "total_tx_successes": 18,
+        "total_tx_failures": 2,
+        "total_pkts_tx": 291,
+        "total_pkts_rx": 291,
+        "total_bytes_tx": 448755,
+        "total_bytes_rx": 387785,
+        "pkt_loss_ratio": 0.0,
+        "avg_queue_len": 15.712271050011552,
+        "avg_channel_airtime_us": 17582.0,
+        "avg_channel_utilization": 87.91
+    },
+    "per_node_stats": {
+        "1": {
+            "info": {
+                "id": 1,
+                "bss_id": 1,
+                "type": "AP",
+                "position": [
+                    0,
+                    0,
+                    0
+                ],
+                "allocated_channels": [
+                    1
+                ],
+                "sensing_channels": [
+                    1
+                ]
+            },
+            "tx": {
+                "first_tx_attempt_us": 93,
+                "last_tx_attempt_us": 14168,
+                "tx_attempts": 10,
+                "tx_successes": 9,
+                "tx_failures": 1,
+                "data_units_tx": 18,
+                "cts_tx": 0,
+                "rts_tx": 9,
+                "backs_tx": 0,
+                "ampdus_tx": 9,
+                "pkts_tx": 143,
+                "pkts_success": 131,
+                "pkts_fail": 12,
+                "pkts_dropped_queue_lim": 0,
+                "pkts_dropped_retry_lim": 0,
+                "tx_app_bytes": 183040,
+                "tx_mac_bytes": 189369,
+                "tx_phy_bytes": 189801,
+                "avg_queue_len": 25.742050714429464,
+                "tx_rate_pkts_per_sec": 7150.0,
+                "tx_rate_Mbits_per_sec": 75.9204,
+                "airtime_us": 6972,
+                "utilization": 34.86
+            },
+            "rx": {
+                "first_rx_time_us": 180,
+                "last_rx_time_us": 15419,
+                "data_units_rx": 17,
+                "cts_rx": 8,
+                "rts_rx": 0,
+                "backs_rx": 9,
+                "ampdus_rx": 0,
+                "pkts_rx": 0,
+                "pkts_success": 0,
+                "pkts_fail": 0,
+                "rx_app_bytes": 0,
+                "rx_mac_bytes": 398,
+                "rx_phy_bytes": 806,
+                "rx_rate_pkts_per_sec": 0.0,
+                "rx_rate_Mbits_per_sec": 0.32239999999999996
+            },
+            "states": {
+                "idle_time_us": 612.0,
+                "contend_time_us": 5081.0,
+                "tx_time_us": 7335.0,
+                "rx_time_us": 6972.0
+            }
+        },
+        "2": {
+            "info": {
+                "id": 2,
+                "bss_id": 1,
+                "type": "STA",
+                "position": [
+                    3,
+                    4,
+                    0
+                ],
+                "allocated_channels": [
+                    1
+                ],
+                "sensing_channels": [
+                    1
+                ]
+            },
+            "tx": {
+                "first_tx_attempt_us": null,
+                "last_tx_attempt_us": null,
+                "tx_attempts": 0,
+                "tx_successes": 0,
+                "tx_failures": 0,
+                "data_units_tx": 17,
+                "cts_tx": 8,
+                "rts_tx": 0,
+                "backs_tx": 9,
+                "ampdus_tx": 0,
+                "pkts_tx": 0,
+                "pkts_success": 0,
+                "pkts_fail": 0,
+                "pkts_dropped_queue_lim": 0,
+                "pkts_dropped_retry_lim": 0,
+                "tx_app_bytes": 0,
+                "tx_mac_bytes": 398,
+                "tx_phy_bytes": 806,
+                "avg_queue_len": 0,
+                "tx_rate_pkts_per_sec": 0.0,
+                "tx_rate_Mbits_per_sec": 0.32239999999999996,
+                "airtime_us": 748,
+                "utilization": 3.74
+            },
+            "rx": {
+                "first_rx_time_us": 140,
+                "last_rx_time_us": 15338,
+                "data_units_rx": 17,
+                "cts_rx": 0,
+                "rts_rx": 8,
+                "backs_rx": 0,
+                "ampdus_rx": 0,
+                "pkts_rx": 143,
+                "pkts_success": 131,
+                "pkts_fail": 12,
+                "rx_app_bytes": 167680,
+                "rx_mac_bytes": 189349,
+                "rx_phy_bytes": 189757,
+                "rx_rate_pkts_per_sec": 7150.0,
+                "rx_rate_Mbits_per_sec": 75.9028
+            },
+            "states": {
+                "idle_time_us": 5329.0,
+                "contend_time_us": 14399.0,
+                "tx_time_us": 272.0,
+                "rx_time_us": 0.0
+            }
+        },
+        "4": {
+            "info": {
+                "id": 4,
+                "bss_id": 2,
+                "type": "AP",
+                "position": [
+                    5,
+                    5,
+                    1
+                ],
+                "allocated_channels": [
+                    1
+                ],
+                "sensing_channels": [
+                    1
+                ]
+            },
+            "tx": {
+                "first_tx_attempt_us": 599,
+                "last_tx_attempt_us": 18003,
+                "tx_attempts": 10,
+                "tx_successes": 9,
+                "tx_failures": 1,
+                "data_units_tx": 19,
+                "cts_tx": 0,
+                "rts_tx": 10,
+                "backs_tx": 0,
+                "ampdus_tx": 9,
+                "pkts_tx": 148,
+                "pkts_success": 137,
+                "pkts_fail": 11,
+                "pkts_dropped_queue_lim": 0,
+                "pkts_dropped_retry_lim": 0,
+                "tx_app_bytes": 189440,
+                "tx_mac_bytes": 256862,
+                "tx_phy_bytes": 257318,
+                "avg_queue_len": 37.107033485616746,
+                "tx_rate_pkts_per_sec": 7400.0,
+                "tx_rate_Mbits_per_sec": 102.9272,
+                "airtime_us": 7245,
+                "utilization": 36.225
+            },
+            "rx": {
+                "first_rx_time_us": 691,
+                "last_rx_time_us": 18095,
+                "data_units_rx": 17,
+                "cts_rx": 9,
+                "rts_rx": 0,
+                "backs_rx": 8,
+                "ampdus_rx": 0,
+                "pkts_rx": 0,
+                "pkts_success": 0,
+                "pkts_fail": 0,
+                "rx_app_bytes": 0,
+                "rx_mac_bytes": 422,
+                "rx_phy_bytes": 830,
+                "rx_rate_pkts_per_sec": 0.0,
+                "rx_rate_Mbits_per_sec": 0.332
+            },
+            "states": {
+                "idle_time_us": 582.0,
+                "contend_time_us": 685.0,
+                "tx_time_us": 11488.0,
+                "rx_time_us": 7245.0
+            }
+        },
+        "5": {
+            "info": {
+                "id": 5,
+                "bss_id": 2,
+                "type": "STA",
+                "position": [
+                    1,
+                    2,
+                    1
+                ],
+                "allocated_channels": [
+                    1
+                ],
+                "sensing_channels": [
+                    1
+                ]
+            },
+            "tx": {
+                "first_tx_attempt_us": null,
+                "last_tx_attempt_us": null,
+                "tx_attempts": 0,
+                "tx_successes": 0,
+                "tx_failures": 0,
+                "data_units_tx": 17,
+                "cts_tx": 9,
+                "rts_tx": 0,
+                "backs_tx": 8,
+                "ampdus_tx": 0,
+                "pkts_tx": 0,
+                "pkts_success": 0,
+                "pkts_fail": 0,
+                "pkts_dropped_queue_lim": 0,
+                "pkts_dropped_retry_lim": 0,
+                "tx_app_bytes": 0,
+                "tx_mac_bytes": 422,
+                "tx_phy_bytes": 830,
+                "avg_queue_len": 0,
+                "tx_rate_pkts_per_sec": 0.0,
+                "tx_rate_Mbits_per_sec": 0.332,
+                "airtime_us": 769,
+                "utilization": 3.8449999999999998
+            },
+            "rx": {
+                "first_rx_time_us": 640,
+                "last_rx_time_us": 18044,
+                "data_units_rx": 17,
+                "cts_rx": 0,
+                "rts_rx": 9,
+                "backs_rx": 0,
+                "ampdus_rx": 0,
+                "pkts_rx": 148,
+                "pkts_success": 137,
+                "pkts_fail": 11,
+                "rx_app_bytes": 175360,
+                "rx_mac_bytes": 195984,
+                "rx_phy_bytes": 196392,
+                "rx_rate_pkts_per_sec": 7400.0,
+                "rx_rate_Mbits_per_sec": 78.55680000000001
+            },
+            "states": {
+                "idle_time_us": 2674.0,
+                "contend_time_us": 17054.0,
+                "tx_time_us": 272.0,
+                "rx_time_us": 0.0
+            }
+        }
+    },
+    "per_channel_stats": {
+        "1": {
+            "airtime_us": 17582.0,
+            "utilization": 87.91
+        }
+    },
+    "medium_stats": {
+        "ppdus_tx": 70,
+        "ppdus_success": 68,
+        "ppdus_fail": 2,
+        "tx_bytes": 0,
+        "tx_bytes_success": 0,
+        "tx_rate_Mbits_per_sec": 0.0,
+        "througput_Mbits_per_sec": 0.0,
+        "airtime_us": 17582.0,
+        "utilization": 87.91
+    }
+}
