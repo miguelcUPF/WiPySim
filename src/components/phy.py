@@ -314,7 +314,7 @@ class PHY:
             self.idle_events[ch_id].succeed()
 
     def end_nav(self):
-        self.node.medium.end_nav(self.node.id, self.sensing_channels_ids)
+        self.node.medium.end_nav(self.node.id, self.transmitting_channels_ids)
 
     def transmit(self, data_unit: DataUnit):
         if (
@@ -327,14 +327,14 @@ class PHY:
             return
 
         if data_unit.is_mgmt_ctrl_frame:
-            # For management and control frames, use the sensing channels (i.e., primary channel if BONDING_MODE is 0 or 1) and MCS index 0
+            # For management and control frames use MCS index 0
             mcs_index = 0
-            tx_channels_ids = self.sensing_channels_ids
         else:
             mcs_index = self.mcs_indexes[data_unit.dst_id]
-            tx_channels_ids = self.transmitting_channels_ids
 
-        nav_channels_ids = self.sensing_channels_ids if data_unit.type == "RTS" else []
+        tx_channels_ids = self.transmitting_channels_ids
+
+        nav_channels_ids = self.transmitting_channels_ids if data_unit.type == "RTS" else [] # NAV reservation in all channels not only primary
 
         ppdu = PPDU(data_unit, self.env.now)
 
