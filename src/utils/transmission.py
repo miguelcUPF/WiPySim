@@ -61,7 +61,7 @@ def get_tx_duration_us(
     # Calculate the data rate in bits per second
     data_rate_bps = calculate_data_rate_bps(
         mcs_index,
-        channel_width,
+        channel_width if not is_mgmt_ctrl_frame else 20,
         sparams.SPATIAL_STREAMS if not is_mgmt_ctrl_frame else 1,
         sparams.GUARD_INTERVAL_us if not is_mgmt_ctrl_frame else 0.8,
     )

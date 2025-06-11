@@ -182,6 +182,7 @@ class Channel20MHz:
         for node_id, p_node in self.nodes_sensing.items():
             if node_id not in self.nav_nodes_ids:
                 # If the node sensing on the channel is currently transmitting, it can not receive the RTS and thus NAV reservation
+                # Reservation only occurs in nodes sensing it, i.e., using it as primary
                 if p_node.mac_layer.state != MACState.TX:
                     p_node.phy_layer.channel_is_busy(self.id)
 
