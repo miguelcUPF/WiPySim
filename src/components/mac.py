@@ -120,7 +120,9 @@ class MAC:
         self.rl_controller = None
         self.rl_mode = self.cfg.RL_MODE
 
-        if self.rl_driven and self.sparams.BONDING_MODE == 0:
+        if (
+            self.rl_driven and self.sparams.BONDING_MODE == 0
+        ):  # only enabled if bonding mode is static channel bonding
             if self.cfg.RL_MODE == 0:
                 self.rl_controller = SARLController(
                     sparams, cfg, env, self.node, self.rl_settings
@@ -339,11 +341,12 @@ class MAC:
             )
             return
 
-        if self.rl_driven:
+        if self.rl_driven:  # if there is a CW selector agent
             self.backoff_slots = self.rng.randint(0, self.cw_current - 1)
-        else:
+        else:  # standard BEB behavior
             cw = min(self.sparams.CW_MIN * (2**self.retries), self.sparams.CW_MAX)
             self.backoff_slots = self.rng.randint(0, max(0, cw - 1))
+
         if not self.is_first_tx:
             self.backoff_slots += 1
 
@@ -887,16 +890,7 @@ class MAC:
 
         self.sensing_duration_us += self.env.now - self.sensing_start_time_us
 
-        if (
-            self.rl_driven
-            and self.backoff_slots == 0
-            and self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION
-            and not self.cts_timedout
-            and self.rl_mode == 1
-        ):
-            cw_freq = self.rl_settings.get("cw_frequency", 1)
-            if self.tx_counter % cw_freq == 0:
-                self._run_cw_agent()
+        self._run_cw_just_before_backoff() if self.rl_driven else None
 
         yield self.env.process(self.backoff(idle_channels))
 
@@ -916,6 +910,40 @@ class MAC:
                 )
             yield self.env.process(self.transmit_ampdu())
 
+    def run(self):
+        """Handles channel access, contention, and transmission"""
+        had_nothing_to_send = True
+        while True:
+            if (
+                self.non_full_event is not None
+                and not len(self.tx_queue.items) == self.sparams.MAX_TX_QUEUE_SIZE_pkts
+            ):
+                (
+                    self.non_full_event.succeed()
+                    if not self.non_full_event.triggered
+                    else None
+                )
+            if self.tx_queue.items:
+                self._start_rl_agents() if self.rl_driven else None
+
+                yield self.env.process(self._csma_ca(had_nothing_to_send))
+
+                had_nothing_to_send = False
+
+                if self.backoff_slots > 0 or self.backoff_slots == -1:
+                    continue
+
+                self.ampdu_aggregation()
+
+                yield self.env.process(self._transmit_data())
+            else:
+                self.tx_queue_event = self.env.event()
+                yield self.tx_queue_event
+                had_nothing_to_send = True
+
+    # ---------------------------------------------------------------------------------- #
+    # ------------------------------ RL Specific Functions ----------------------------- #
+    # ---------------------------------------------------------------------------------- #
     def _run_joint_agent(self):
         channels_occupancy_ratio = self.node.phy_layer.get_channels_occupancy_ratio()
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
@@ -1055,65 +1083,56 @@ class MAC:
         if self.rl_driven:
             self.rl_controller.update_agents(delay_components)
 
-    def run(self):
-        """Handles channel access, contention, and transmission"""
-        had_nothing_to_send = True
-        while True:
-            if (
-                self.non_full_event is not None
-                and not len(self.tx_queue.items) == self.sparams.MAX_TX_QUEUE_SIZE_pkts
-            ):
-                (
-                    self.non_full_event.succeed()
-                    if not self.non_full_event.triggered
-                    else None
-                )
-            if self.tx_queue.items:
-                if self.rl_driven and self.backoff_slots == 0 and not self.cts_timedout:
-                    (
-                        self._update_rl_agents()
-                        if self.tx_attempt_time_us is not None
-                        else None
-                    )
-                    self.tx_attempt_time_us = self.env.now
-                    self.sensing_duration_us = 0
-                    self.bo_duration_us = 0
-                    self.tx_duration_us = 0
+    def _run_rl_multi_agent(self):
+        ch_freq = self.rl_settings.get("channel_frequency", 1)
+        prim_freq = self.rl_settings.get("primary_frequency", 1)
+        cw_freq = self.rl_settings.get("cw_frequency", 1)
 
-                    if self.rl_mode == 1:
-                        ch_freq = self.rl_settings.get("channel_frequency", 1)
-                        prim_freq = self.rl_settings.get("primary_frequency", 1)
-                        cw_freq = self.rl_settings.get("cw_frequency", 1)
+        if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
+            # All agents should perform their decisions at the beginning of the cycle...
+            if self.tx_counter % ch_freq == 0:
+                self._run_channel_agent()
+            if self.tx_counter % prim_freq == 0:
+                self._run_primary_agent()
+            if self.tx_counter % cw_freq == 0:
+                self._run_cw_agent()
+        else:
+            # Agents can perform their decisions at distinct phases in the cycle...
+            if self.tx_counter % ch_freq == 0:
+                self._run_channel_agent()
+            if self.tx_counter % prim_freq == 0:
+                self._run_primary_agent()
 
-                        if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
-                            if self.tx_counter % ch_freq == 0:
-                                self._run_channel_agent()
-                            if self.tx_counter % prim_freq == 0:
-                                self._run_primary_agent()
-                            if self.tx_counter % cw_freq == 0:
-                                self._run_cw_agent()
-                        else:
-                            if self.tx_counter % ch_freq == 0:
-                                self._run_channel_agent()
-                            if self.tx_counter % prim_freq == 0:
-                                self._run_primary_agent()
-                    else:
-                        joint_freq = self.rl_settings.get("joint_frequency", 1)
+    def _run_cw_just_before_backoff(self):
+        if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION and self.rl_mode != 1:
+            return
 
-                        if self.tx_counter % joint_freq == 0:
-                            self._run_joint_agent()
+        if self.backoff_slots == 0 and not self.cts_timedout:
+            cw_freq = self.rl_settings.get("cw_frequency", 1)
+            if self.tx_counter % cw_freq == 0:
+                self._run_cw_agent()
 
-                yield self.env.process(self._csma_ca(had_nothing_to_send))
+    def _run_rl_single_agent(self):
+        joint_freq = self.rl_settings.get("joint_frequency", 1)
+        # Check if agent should perform its decision according to its frequency of action
+        if self.tx_counter % joint_freq == 0:
+            self._run_joint_agent()
 
-                had_nothing_to_send = False
+    def _start_rl_agents(self):
+        if self.backoff_slots == 0 and not self.cts_timedout:
+            (
+                self._update_rl_agents()
+                if self.tx_attempt_time_us is not None
+                else None
+            )  # update RL agents, i.e., give them a reward
 
-                if self.backoff_slots > 0 or self.backoff_slots == -1:
-                    continue
+            # variables to count the total transmission cycle duration and also the time spent in each phase
+            self.tx_attempt_time_us = self.env.now
+            self.sensing_duration_us = 0
+            self.bo_duration_us = 0
+            self.tx_duration_us = 0
 
-                self.ampdu_aggregation()
-
-                yield self.env.process(self._transmit_data())
-            else:
-                self.tx_queue_event = self.env.event()
-                yield self.tx_queue_event
-                had_nothing_to_send = True
+            if self.rl_mode == 1:  # Multi-agent
+                self._run_rl_multi_agent()
+            else:  # Single-agent
+                self._run_rl_single_agent()
