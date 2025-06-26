@@ -208,18 +208,18 @@ def validate_config(
             logger.warning(
                 f"RL_MODE is {cfg.RL_MODE}, ignoring ENABLE_REWARD_DECOMPOSITION..."
             )
-        for name, val in zip(
-            ["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"],
-            [
-                cfg.CHANNEL_AGENT_WEIGHTS,
-                cfg.PRIMARY_AGENT_WEIGHTS,
-                cfg.CW_AGENT_WEIGHTS,
-            ],
-        ):
-            if val is not None:
-                logger.warning(f"RL_MODE is {cfg.RL_MODE}, ignoring {name}...")
+            for name, val in zip(
+                ["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"],
+                [
+                    cfg.CHANNEL_AGENT_WEIGHTS,
+                    cfg.PRIMARY_AGENT_WEIGHTS,
+                    cfg.CW_AGENT_WEIGHTS,
+                ],
+            ):
+                if val is not None:
+                    logger.warning(f"RL_MODE is {cfg.RL_MODE}, ignoring {name}...")
 
-    if cfg.ENABLE_RL and cfg.RL_MODE == 1:
+    if cfg.ENABLE_RL and cfg.RL_MODE == 1 and cfg.ENABLE_REWARD_DECOMPOSITION:
         for name, val in zip(
             ["CHANNEL_AGENT_WEIGHTS", "PRIMARY_AGENT_WEIGHTS", "CW_AGENT_WEIGHTS"],
             [
@@ -272,6 +272,7 @@ def validate_config(
                 "linucb",
                 "epsilon_greedy",
                 "decay_epsilon_greedy",
+                "e2tc",
             ]:
                 logger.critical(
                     f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy' or 'decay_epsilon_greedy'."
@@ -357,11 +358,26 @@ def validate_config(
                         f"Invalid joint_frequency: '{cfg.AGENTS_SETTINGS.get('joint_frequency', None)}'. It must be a positive integer."
                     )
 
+        strategies_params = [
+            "epsilon",
+            "decay_rate",
+            "eta",
+            "gamma",
+            "alpha_ema",
+            "alpha",
+            "window_size",
+            "T",
+        ]
+
         if strategy in [
             "sw_linucb",
             "linucb",
         ]:
-            unused_params = ["epsilon", "decay_rate", "eta" "gamma", "alpha_ema"]
+            used_params = ["alpha", "window_size"]
+
+            unused_params = [
+                param for param in strategies_params if param not in used_params
+            ]
 
             for param in unused_params:
                 if cfg.AGENTS_SETTINGS.get(param) is not None:
@@ -383,7 +399,14 @@ def validate_config(
             "epsilon_greedy",
             "decay_epsilon_greedy",
         ]:
-            unused_params = ["alpha", "window_size"]
+            used_params = ["epsilon", "eta", "gamma", "alpha_ema"]
+
+            if strategy == "decay_epsilon_greedy":
+                used_params.append("decay_rate")
+
+            unused_params = [
+                param for param in strategies_params if param not in used_params
+            ]
 
             for param in unused_params:
                 if cfg.AGENTS_SETTINGS.get(param) is not None:
@@ -399,6 +422,30 @@ def validate_config(
             }
 
             _param_validation(param_validations)
+
+        if strategy == "e2tc":
+            used_params = ["alpha", "T"]
+
+            unused_params = [
+                param for param in strategies_params if param not in used_params
+            ]
+
+            for param in unused_params:
+                if cfg.AGENTS_SETTINGS.get(param) is not None:
+                    logger.warning(f"Strategy {strategy} does not use {param}.")
+
+            # Validation rules: (type, min_val, max_val, inclusive_min, inclusive_max)
+            param_validations = {
+                "alpha": ((float, int), 0, None, True, None),  # [0, ∞)
+                "T": ((int), 0, None, False, None),  # (0, ∞)
+            }
+
+            _param_validation(param_validations)
+
+        if strategy == "e2tc" and cfg.RL_MODE != 0:
+            logger.critical(
+                f"Strategy {strategy} is not compatible with RL_MODE={cfg.RL_MODE}. Please set RL_MODE=0 for using this strategy."
+            )
 
     str_settings = {
         "WANDB_PROJECT_NAME": cfg.WANDB_PROJECT_NAME,

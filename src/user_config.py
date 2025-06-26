@@ -56,7 +56,7 @@ class UserConfig:
     }
 
     # Algorithm settings for each agent. Keys:
-    # - strategy (optional): "sw_linucb" or "linucb" or "epsilon_greedy" or "decay_epsilon_greedy". Default: "sw_linucb"
+    # - strategy (optional): "sw_linucb" or "linucb" or "epsilon_greedy" or "decay_epsilon_greedy" or "e2tc". Default: "sw_linucb"
 
     # only if "sw_linucb" or "linucb":
     # - alpha (optional): confidence bound parameter for LinUCB. Default: 1
@@ -69,6 +69,10 @@ class UserConfig:
     # - eta (optional): learning rate. Default: 0.1
     # - gamma (optional): RMSProp decay factor. Default: 0.9
     # - alpha_ema (optional): EMA smoothing factor. Default: 0.1
+
+    # only if "e2tc":
+    # - alpha (optional): algorithm parameter. Default: 1
+    # - T (optional, int): time horizon. Default: 2 * 10**4
 
     # only if "MARL":
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1

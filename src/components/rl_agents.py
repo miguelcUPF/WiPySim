@@ -5,6 +5,7 @@ from src.components.network import AP
 
 from collections import deque
 from codecarbon import EmissionsTracker
+from itertools import combinations
 
 import numpy as np
 import simpy
@@ -148,7 +149,6 @@ class EpsRMSProp:
 
     def __init__(
         self,
-        rng: random.Random,
         name: str,
         n_actions: int,
         context_dim: int,
@@ -162,6 +162,7 @@ class EpsRMSProp:
         alpha_ema: float = 0.1,  # EMA factor
         min_val: float = -10e3,
         max_val: float = 0,
+        rng: random.Random | None = None,
     ):
 
         self.name = name
@@ -220,7 +221,7 @@ class EpsRMSProp:
             action = np.random.choice(candidate_actions)
             return action  # Exploit
         return action
-    
+
     def _normalize_reward(self, reward):
         # Clipping
         clipped_reward = max(min(reward, self.max_val), self.min_val)
@@ -265,7 +266,6 @@ class EpsRMSProp:
             * gradient
         )
 
-
         # EMA update
         self.weight_matrix_ema[action] = (
             self.alpha_ema * self.weight_matrix_ema[action]
@@ -276,6 +276,169 @@ class EpsRMSProp:
         self.weight_matrix = np.zeros((self.n_actions, self.context_dim))
         self.weight_matrix_ema = np.zeros((self.n_actions, self.context_dim))
         self.grad_squared_avg = np.zeros((self.n_actions, self.context_dim))
+
+
+class E2TC:
+    def __init__(
+        self,
+        name: str,
+        actions: np.ndarray,
+        marl_controller,
+        T=2 * 10**4,
+        sigma2=1 / 4,
+        d=3 + 1,  # 3 features + 1 bias
+        alpha=1,  # recommended between 1 and 3; best alpha=1
+        min_val: float = -10e3,
+        max_val: float = 0,
+        rng: random.Random | None = None,
+    ):
+        def encode_action(a: tuple[int, int, int]) -> np.ndarray:
+            return np.array([a[0], a[1], a[2], 1])
+
+        def find_basis_vectors(
+            vectors: np.ndarray, d: int, rng: random.Random | None = None
+        ) -> list[np.ndarray] | None:
+            if rng is None:
+                rng = random
+
+            for combo in combinations(vectors, d):
+                mat = np.stack(combo)
+                if np.linalg.matrix_rank(mat) == d:
+                    print(f"found basis: {combo}")
+                    return mat  # Found a basis
+
+            # No basis found; return 3 random vectors
+            indices = rng.sample(range(len(vectors)), d)
+            return np.stack([vectors[i] for i in indices])
+
+        self.name = name
+        self.marl_controller = marl_controller
+
+        self.actions = np.array(
+            [encode_action(a) for a in actions]
+        )  # add bias term to avoid 0 rewards
+        self.base = find_basis_vectors(self.actions, d, rng=rng)
+        self.sigma2 = sigma2
+        self.alpha = alpha
+        self.T = T
+
+        self.d = d
+        self.X = np.zeros((T, self.d))
+        self.Y = np.zeros(T)
+
+        self.t = 0
+
+        self.hattheta = np.zeros(self.d)
+
+        self.phase_1_end_t = None
+        self.phase_2_end_t = None
+
+        # phase params
+        self.i = 0
+
+        self.ni = None
+        self.deltai = None
+        self.Ui = None
+
+        self.a = None
+        self.b = None
+
+        self.Ne = None
+
+        # Normalization
+        self.min_val = min_val
+        self.max_val = max_val
+
+        self.rng = rng
+
+    def _get_phase_1_action(self):
+        self.X[self.t, :] = self.base[self.t % self.d, :]
+        return self.X[self.t, :]
+
+    def _get_phase_2_action(self):
+        self.X[self.t, :] = self.base[self.t % self.d, :]
+        return self.X[self.t, :]
+
+    def _get_phase_3_action(self):
+        # Return the action with the highest estimated reward
+        estimates = {}
+        for i, action in enumerate(self.actions):
+            estimates[tuple(action)] = action @ self.hattheta
+        return self.actions[np.argmax(list(estimates.values()))]
+
+    def _normalize_reward(self, reward):
+        # Clipping
+        clipped_reward = max(min(reward, self.max_val), self.min_val)
+
+        # Normalize the reward to the range [0, 1]
+        normalized_reward = (clipped_reward - self.min_val) / (
+            self.max_val - self.min_val
+        )
+
+        return normalized_reward
+
+    def select_action(self):
+        if self.phase_1_end_t is None:
+            if self.a is None:
+                self.update_phase_1()
+            if self.t == self.b:
+                self.update_hattheta(self.a, self.b)
+                self.i += 1
+                self.update_phase_1()
+            if (
+                self.Ui is not None
+                and np.linalg.norm(self.hattheta) > self.alpha * self.Ui
+            ):
+                self.phase_1_end_t = self.t
+                print("Phase 1 end t", self.phase_1_end_t)
+            action = self._get_phase_1_action()
+        elif self.phase_2_end_t is None:
+            if self.Ne is None:
+                self.update_phase_2()
+            if self.t == self.b:
+                self.phase_2_end_t = self.b
+                self.update_hattheta(self.a, self.b)
+                print("Phase 2 end t", self.phase_2_end_t)
+            action = self._get_phase_2_action()
+        else:
+            action = self._get_phase_3_action()
+        self.t += 1
+        return np.where(np.all(self.actions == action, axis=1))[0][0]
+
+    def update(self, y):
+        if self.t >= self.T:
+            return
+        self.Y[self.t] = self._normalize_reward(y)
+
+    def update_hattheta(self, a, b):
+        self.hattheta = (
+            np.linalg.inv(self.X[a:b, :].transpose() @ self.X[a:b, :])
+            @ self.X[a:b, :].transpose()
+            @ self.Y[a:b]
+        )
+
+    def update_phase_1(self):
+        self.a = self.d * (2**self.i - 1)
+        self.b = self.d * (2 ** (self.i + 1) - 1)
+        self.ni = self.d * 2 ** (self.i - 1)
+        self.deltai = min(1, self.d * self.ni / self.T)
+        self.Ui = (self.sigma2 * self.d * self.d / self.ni) * (
+            1
+            + 2
+            * np.sqrt(
+                (1 / self.d) * np.log(1 / self.deltai)
+                + (2 / self.d) * np.log(1 / self.deltai)
+            )
+        )
+
+    def update_phase_2(self):
+        self.Ne = (
+            self.d
+            * np.sqrt(self.sigma2)
+            * np.ceil(np.sqrt(self.T) / np.linalg.norm(self.hattheta))
+        )
+        a = self.phase_1_end_t + 1
+        self.b = int(a + self.Ne)
 
 
 class MARLController:
@@ -603,6 +766,8 @@ class SARLController:
             agent_class = SWLinUCB
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
             agent_class = EpsRMSProp
+        elif strategy in ["e2tc"]:
+            agent_class = E2TC
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
@@ -646,6 +811,15 @@ class SARLController:
                     "window_size": settings.get("window_size", None),
                 }
             )
+        elif agent_class == E2TC:
+            agent_params = {
+                "name": "joint_agent",
+                "actions": valid_actions,
+                "T": settings.get("T", 2 * 10**4),
+                "alpha": settings.get("alpha", 1.0),
+                "min_val": settings.get("min_val", -10e3),
+                "max_val": settings.get("max_val", 0),
+            }
 
         self.joint_agent = agent_class(
             **agent_params, marl_controller=self, rng=env.rng
@@ -666,8 +840,13 @@ class SARLController:
         if self.emissions_tracker:
             self.emissions_tracker.start()
 
-        self.last_context = context
-        action_idx = self.joint_agent.select_action(context)
+        if isinstance(self.joint_agent, E2TC):
+            action_idx = self.joint_agent.select_action()
+            print(f"Selected action idx: {action_idx}")
+        else:
+            self.last_context = context
+            action_idx = self.joint_agent.select_action(context)
+
         self.last_action_idx = action_idx
         self.last_action_tuple = self.valid_joint_actions[action_idx]
 
@@ -686,7 +865,11 @@ class SARLController:
         if self.emissions_tracker:
             self.emissions_tracker.start()
 
-        self.joint_agent.update(self.last_context, self.last_action_idx, reward)
+        if isinstance(self.joint_agent, E2TC):
+            self.joint_agent.update(reward)
+            print(f"non normalized reward: {reward}")
+        else:
+            self.joint_agent.update(self.last_context, self.last_action_idx, reward)
 
         if self.emissions_tracker:
             self.emissions_tracker.stop()
