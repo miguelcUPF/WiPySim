@@ -304,7 +304,6 @@ class E2TC:
             for combo in combinations(vectors, d):
                 mat = np.stack(combo)
                 if np.linalg.matrix_rank(mat) == d:
-                    print(f"found basis: {combo}")
                     return mat  # Found a basis
 
             # No basis found; return 3 random vectors
@@ -390,7 +389,6 @@ class E2TC:
                 and np.linalg.norm(self.hattheta) > self.alpha * self.Ui
             ):
                 self.phase_1_end_t = self.t
-                print("Phase 1 end t", self.phase_1_end_t)
             action = self._get_phase_1_action()
         elif self.phase_2_end_t is None:
             if self.Ne is None:
@@ -398,7 +396,6 @@ class E2TC:
             if self.t == self.b:
                 self.phase_2_end_t = self.b
                 self.update_hattheta(self.a, self.b)
-                print("Phase 2 end t", self.phase_2_end_t)
             action = self._get_phase_2_action()
         else:
             action = self._get_phase_3_action()
@@ -842,7 +839,6 @@ class SARLController:
 
         if isinstance(self.joint_agent, E2TC):
             action_idx = self.joint_agent.select_action()
-            print(f"Selected action idx: {action_idx}")
         else:
             self.last_context = context
             action_idx = self.joint_agent.select_action(context)
@@ -867,7 +863,6 @@ class SARLController:
 
         if isinstance(self.joint_agent, E2TC):
             self.joint_agent.update(reward)
-            print(f"non normalized reward: {reward}")
         else:
             self.joint_agent.update(self.last_context, self.last_action_idx, reward)
 
