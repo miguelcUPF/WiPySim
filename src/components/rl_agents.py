@@ -286,37 +286,62 @@ class E2TC:
         marl_controller,
         T=2 * 10**4,
         sigma2=1 / 4,
-        d=3 + 1,  # 3 features + 1 bias
         alpha=1,  # recommended between 1 and 3; best alpha=1
         min_val: float = -10e3,
         max_val: float = 0,
         rng: random.Random | None = None,
     ):
-        def encode_action(a: tuple[int, int, int]) -> np.ndarray:
-            return np.array([a[0], a[1], a[2], 1])
+        def select_diverse_base(actions, d, rng):
+            selected = []
+            used_set = set()
 
-        def find_basis_vectors(
-            vectors: np.ndarray, d: int, rng: random.Random | None = None
-        ) -> list[np.ndarray] | None:
-            if rng is None:
-                rng = random
+            unique_channels = list(set(tuple(a[:4]) for a in actions))
+            num_channels = len(unique_channels)
 
-            for combo in combinations(vectors, d):
-                mat = np.stack(combo)
-                if np.linalg.matrix_rank(mat) == d:
-                    return mat  # Found a basis
+            cycles = d // num_channels
 
-            # No basis found; return 3 random vectors
-            indices = rng.sample(range(len(vectors)), d)
-            return np.stack([vectors[i] for i in indices])
+            for _ in range(cycles):
+                rng.shuffle(unique_channels)
+                used_cws_in_cycle = set()
+
+                for ch_vec in unique_channels:
+                    candidates = [
+                        a
+                        for a in actions
+                        if tuple(a[:4]) == ch_vec
+                        and a[8] not in used_cws_in_cycle
+                        and tuple(a) not in used_set
+                    ]
+                    if not candidates:
+                        candidates = [
+                            a
+                            for a in actions
+                            if tuple(a[:4]) == ch_vec and tuple(a) not in used_set
+                        ]
+
+                    if candidates:
+                        choice = rng.choice(candidates)
+                        selected.append(choice)
+                        used_set.add(tuple(choice))
+                        used_cws_in_cycle.add(choice[8])
+
+            # Fill remaining slots randomly
+            remaining_slots = d - len(selected)
+            if remaining_slots > 0:
+                remaining = [a for a in actions if tuple(a) not in used_set]
+                rng.shuffle(remaining)
+                selected.extend(remaining[:remaining_slots])
+
+            return np.stack(selected)
+
+        d = len(actions[0])
 
         self.name = name
         self.marl_controller = marl_controller
 
-        self.actions = np.array(
-            [encode_action(a) for a in actions]
-        )  # add bias term to avoid 0 rewards
-        self.base = find_basis_vectors(self.actions, d, rng=rng)
+        self.actions = np.array([a for a in actions])
+        self.base = select_diverse_base(self.actions, d, rng)
+
         self.sigma2 = sigma2
         self.alpha = alpha
         self.T = T
@@ -335,7 +360,6 @@ class E2TC:
         # phase params
         self.i = 0
 
-        self.ni = None
         self.deltai = None
         self.Ui = None
 
@@ -373,34 +397,45 @@ class E2TC:
         normalized_reward = (clipped_reward - self.min_val) / (
             self.max_val - self.min_val
         )
-
         return normalized_reward
 
     def select_action(self):
         if self.phase_1_end_t is None:
             if self.a is None:
                 self.update_phase_1()
+
+            action = self._get_phase_1_action()
+
             if self.t == self.b:
                 self.update_hattheta(self.a, self.b)
-                self.i += 1
-                self.update_phase_1()
-            if (
-                self.Ui is not None
-                and np.linalg.norm(self.hattheta) > self.alpha * self.Ui
-            ):
-                self.phase_1_end_t = self.t
-            action = self._get_phase_1_action()
+                norm = np.linalg.norm(self.hattheta)
+
+                if norm > self.alpha * self.Ui:
+                    self.phase_1_end_t = self.b
+                else:
+                    self.i += 1
+                    self.update_phase_1()
+            self.t += 1
+            return np.where(np.all(self.actions == action, axis=1))[0][0]
+
         elif self.phase_2_end_t is None:
             if self.Ne is None:
                 self.update_phase_2()
+
+            action = self._get_phase_2_action()
+
             if self.t == self.b:
                 self.phase_2_end_t = self.b
                 self.update_hattheta(self.a, self.b)
-            action = self._get_phase_2_action()
+
+            self.t += 1
+            return np.where(np.all(self.actions == action, axis=1))[0][0]
         else:
             action = self._get_phase_3_action()
-        self.t += 1
-        return np.where(np.all(self.actions == action, axis=1))[0][0]
+
+            self.t += 1
+
+            return np.where(np.all(self.actions == action, axis=1))[0][0]
 
     def update(self, y):
         if self.t >= self.T:
@@ -409,17 +444,19 @@ class E2TC:
 
     def update_hattheta(self, a, b):
         self.hattheta = (
-            np.linalg.inv(self.X[a:b, :].transpose() @ self.X[a:b, :])
-            @ self.X[a:b, :].transpose()
+            np.linalg.inv(
+                self.X[a:b, :].T @ self.X[a:b, :] + 1e-6 * np.eye(self.X.shape[1])
+            )  # add regularization to avoid singular matrix
+            @ self.X[a:b, :].T
             @ self.Y[a:b]
         )
 
     def update_phase_1(self):
         self.a = self.d * (2**self.i - 1)
         self.b = self.d * (2 ** (self.i + 1) - 1)
-        self.ni = self.d * 2 ** (self.i - 1)
-        self.deltai = min(1, self.d * self.ni / self.T)
-        self.Ui = (self.sigma2 * self.d * self.d / self.ni) * (
+        ni = self.d * 2 ** (self.i - 1)
+        self.deltai = min(1, self.d * ni / self.T)
+        self.Ui = (self.sigma2 * self.d * self.d / ni) * (
             1
             + 2
             * np.sqrt(
@@ -739,6 +776,25 @@ class SARLController:
         node: AP,
         settings: dict,
     ):
+
+        def action_to_onehot_vector(
+            channel_id, primary_index, cw_index, n_channels=4, n_primaries=4
+        ):
+            channel_bits = [0] * n_channels
+            for ch in CHANNEL_MAP[channel_id]:
+                channel_bits[ch - 1] = 1
+
+            primary_bits = [0] * n_primaries
+            primary_bits[primary_index] = 1
+
+            cw_min = min(CW_MAP.values())
+            cw_max = max(CW_MAP.values())
+
+            normalized_cw = (CW_MAP[cw_index] - cw_min) / (cw_max - cw_min)
+
+            vec = channel_bits + primary_bits + [normalized_cw]
+            return vec
+
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
@@ -769,14 +825,21 @@ class SARLController:
             raise ValueError(f"Unknown strategy {strategy}")
 
         valid_actions = []
+        valid_actions_onehot = (
+            []
+        )  # [channel1, channel2, channel3, channel4, primary1, primary2, primary3, primary4, cw]; d=9
         for c_id, pset in CHANNEL_MAP.items():
             for p in pset:
-                for cw_id in CW_MAP.keys():
+                for cw_id, cw_value in CW_MAP.items():
                     valid_actions.append(
                         (c_id, p - 1, cw_id)
                     )  # p-1 because primaries are 0-indexed
+                    valid_actions_onehot.append(
+                        action_to_onehot_vector(
+                            c_id, p - 1, cw_id
+                        )
+                    )
 
-        # Define valid joint actions
         self.valid_joint_actions = valid_actions  # (channel, primary, cw)
         self.n_actions = len(self.valid_joint_actions)
 
@@ -811,7 +874,7 @@ class SARLController:
         elif agent_class == E2TC:
             agent_params = {
                 "name": "joint_agent",
-                "actions": valid_actions,
+                "actions": valid_actions_onehot,  # one-hot vectors
                 "T": settings.get("T", 2 * 10**4),
                 "alpha": settings.get("alpha", 1.0),
                 "min_val": settings.get("min_val", -10e3),
