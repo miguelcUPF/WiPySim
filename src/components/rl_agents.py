@@ -438,9 +438,9 @@ class E2TC:
             return np.where(np.all(self.actions == action, axis=1))[0][0]
 
     def update(self, y):
-        if self.t >= self.T:
+        if self.t == 0 or self.t > self.T:
             return
-        self.Y[self.t] = self._normalize_reward(y)
+        self.Y[self.t - 1] = self._normalize_reward(y)
 
     def update_hattheta(self, a, b):
         self.hattheta = (
