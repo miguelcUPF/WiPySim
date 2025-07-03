@@ -75,6 +75,8 @@ class UserConfig:
     # - T (optional, int): time horizon. Default: 2 * 10**4
 
     # only if "MARL":
+    # - enable_meta_agent (optional): whether to enable the meta agent (i.e., agent that schedules how often the other agents should select actions, in transmissions attempts). Default: False
+    # - meta_agent_start_time_us (optional): time in simulation units after which meta agent is active if enabled. Default: 0.
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - cw_frequency (optional): frequency of the cw agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
@@ -90,7 +92,7 @@ class UserConfig:
     }
 
     ### --- Context settings --- ###
-    OCCUPANCY_RATIO_WINDOW_DURATION_US = 100e3 # Duration of the channels occupation ratio sliding window in microseconds
+    OCCUPANCY_RATIO_WINDOW_DURATION_US = 100e3  # Duration of the channels occupation ratio sliding window in microseconds
 
     # --- Logging Configuration --- #
     ENABLE_CONSOLE_LOGGING = True  # Enable/disable displaying logs in the console (useful for debugging, may affect performance)
@@ -133,7 +135,9 @@ class UserConfig:
     TRAFFIC_GEN_RECORDING_PATH = "data/sim_traces/run_1"
 
     # --- Statistics Collection --- #
-    ENABLE_STATS_COMPUTATION = False  # Enable/disable computing tx/rx statistics (can affect performance)
+    ENABLE_STATS_COMPUTATION = (
+        False  # Enable/disable computing tx/rx statistics (can affect performance)
+    )
     ENABLE_STATS_COLLECTION = False  # Enable/disable collecting statistics
     STATS_SAVE_PATH = "data/statistics"
 

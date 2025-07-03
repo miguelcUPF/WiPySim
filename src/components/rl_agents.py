@@ -25,6 +25,8 @@ CHANNEL_MAP = {
 PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
 CW_MAP = {i: 2 ** (4 + i) for i in range(7)}
 
+META_MAP = {i: 2**i for i in range(4)}  # or such as (CSA_freq, PCSA_freq, CWSA_freq)
+
 
 # https://arxiv.org/pdf/1003.0146
 # https://dl.acm.org/doi/abs/10.1145/3297280.3297440?casa_token=eoZgPNBt-AUAAAAA:o80ERr_mN7BeM9GFgjH801INiTUf31_9OYERVQfAnnHPYEC6K9i00knEYUwMpcR_ZQeGwNq6yn9tOMU
@@ -535,65 +537,36 @@ class MARLController:
             "weights_r": settings.get("cw_weights", {}),
         }
 
+        meta_params = {
+            "name": "meta_agent",
+            "n_actions": 4,  # 0: {1}, 1: {2}, 2: {4}, 3: {8} (i.e., 2**(x))
+            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 1x current cw (mapped idx) + 4x channel occupation ratio + 4x channel busy flags
+            "strategy": strategy,
+        }
+
         if agent_class == EpsRMSProp:
-            channel_params.update(
-                {
-                    "epsilon": settings.get("epsilon", 0.1),
-                    "decay_rate": settings.get("decay_rate", 0.99),
-                    "eta": settings.get("eta", 0.1),
-                    "gamma": settings.get("gamma", 0.9),
-                    "alpha_ema": settings.get("alpha_ema", 0.1),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
-                }
-            )
-            primary_params.update(
-                {
-                    "epsilon": settings.get("epsilon", 0.1),
-                    "decay_rate": settings.get("decay_rate", 0.99),
-                    "eta": settings.get("eta", 0.1),
-                    "gamma": settings.get("gamma", 0.9),
-                    "alpha_ema": settings.get("alpha_ema", 0.1),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
-                }
-            )
-            cw_params.update(
-                {
-                    "epsilon": settings.get("epsilon", 0.1),
-                    "decay_rate": settings.get("decay_rate", 0.99),
-                    "eta": settings.get("eta", 0.1),
-                    "gamma": settings.get("gamma", 0.9),
-                    "alpha_ema": settings.get("alpha_ema", 0.1),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
-                }
-            )
+            for param in [channel_params, primary_params, cw_params, meta_params]:
+                param.update(
+                    {
+                        "epsilon": settings.get("epsilon", 0.1),
+                        "decay_rate": settings.get("decay_rate", 0.99),
+                        "eta": settings.get("eta", 0.1),
+                        "gamma": settings.get("gamma", 0.9),
+                        "alpha_ema": settings.get("alpha_ema", 0.1),
+                        "min_val": settings.get("min_val", -10e3),
+                        "max_val": settings.get("max_val", 0),
+                    }
+                )
         elif agent_class == SWLinUCB:
-            channel_params.update(
-                {
-                    "alpha": settings.get("alpha", 1.0),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
-                    "window_size": settings.get("window_size", None),
-                }
-            )
-            primary_params.update(
-                {
-                    "alpha": settings.get("alpha", 1.0),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
-                    "window_size": settings.get("window_size", None),
-                }
-            )
-            cw_params.update(
-                {
-                    "alpha": settings.get("alpha", 1.0),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
-                    "window_size": settings.get("window_size", None),
-                }
-            )
+            for param in [channel_params, primary_params, cw_params, meta_params]:
+                param.update(
+                    {
+                        "alpha": settings.get("alpha", 1.0),
+                        "min_val": settings.get("min_val", -10e3),
+                        "max_val": settings.get("max_val", 0),
+                        "window_size": settings.get("window_size", None),
+                    }
+                )
 
         self.channel_agent = agent_class(
             **channel_params, marl_controller=self, rng=env.rng
@@ -603,17 +576,26 @@ class MARLController:
         )
         self.cw_agent = agent_class(**cw_params, marl_controller=self, rng=env.rng)
 
+        self.meta_agent = (
+            agent_class(**meta_params, marl_controller=self, rng=env.rng)
+            if settings.get("enable_meta_agent", False)
+            else None
+        )
+
         self.last_channel_action = None
         self.last_primary_action = None
         self.last_cw_action = None
+        self.last_meta_action = None
 
         self.last_channel_context = None
         self.last_primary_context = None
         self.last_cw_context = None
+        self.last_meta_context = None
 
         self.channel_emissions_tracker = None
         self.primary_emissions_tracker = None
         self.cw_emissions_tracker = None
+        self.meta_emissions_tracker = None
 
         if cfg.USE_CODECARBON:
             self.channel_emissions_tracker = EmissionsTracker(
@@ -623,6 +605,9 @@ class MARLController:
                 project_name="primary_agent"
             )
             self.cw_emissions_tracker = EmissionsTracker(project_name="cw_agent")
+            self.meta_emissions_tracker = (
+                EmissionsTracker(project_name="meta_agent") if self.meta_agent else None
+            )
 
         self.results = []
 
@@ -673,51 +658,100 @@ class MARLController:
 
         return action
 
+    def decide_meta(self, context):
+        if self.meta_emissions_tracker:
+            self.meta_emissions_tracker.start()
+
+        self.last_meta_context = context
+        action = self.meta_agent.select_action(context)
+        self.last_meta_action = action
+        self.logger.debug(f"{self.node.type} {self.node.id} -> Meta action: {action}")
+
+        if self.meta_emissions_tracker:
+            self.meta_emissions_tracker.stop()
+
+        return action
+
     def _compute_weighted_reward(self, delay_components: dict, weights: dict):
         return -sum(weights.get(k, 0) * delay_components[k] for k in weights)
 
-    def update_agents(self, delay_components: dict):
+    def update_channel_agent(self, delay_components: dict):
         if self.cfg.ENABLE_REWARD_DECOMPOSITION:
-            # Per-agent weighted reward
-            r_ch = self._compute_weighted_reward(
+            reward = self._compute_weighted_reward(
                 delay_components, self.channel_agent.weights_r
             )
-            r_pr = self._compute_weighted_reward(
-                delay_components, self.primary_agent.weights_r
-            )
-            r_cw = self._compute_weighted_reward(
-                delay_components, self.cw_agent.weights_r
-            )
         else:
-            # Shared reward
-            r_ch = r_pr = r_cw = -(sum(delay_components.values()))  # (minimize delay)
+            reward = -sum(
+                delay_components.values()
+            )  # (minimize delay) sum of component means equals mean of per-sample sums since each component has the same number of samples
 
         if self.channel_emissions_tracker:
             self.channel_emissions_tracker.start()
         self.channel_agent.update(
-            self.last_channel_context, self.last_channel_action, r_ch
+            self.last_channel_context, self.last_channel_action, reward
         )  # update
         if self.channel_emissions_tracker:
             self.channel_emissions_tracker.stop()
 
+        self._log_agent_data("channel", reward)
+
+    def update_primary_agent(self, delay_components: dict):
+        if self.cfg.ENABLE_REWARD_DECOMPOSITION:
+            reward = self._compute_weighted_reward(
+                delay_components, self.primary_agent.weights_r
+            )
+        else:
+            reward = -sum(delay_components.values())
+
         if self.primary_emissions_tracker:
             self.primary_emissions_tracker.start()
         self.primary_agent.update(
-            self.last_primary_context, self.last_primary_action, r_pr
+            self.last_primary_context, self.last_primary_action, reward
         )  # update
         if self.primary_emissions_tracker:
             self.primary_emissions_tracker.stop()
 
+        self._log_agent_data("primary", reward)
+
+    def update_cw_agent(self, delay_components: dict):
+        if self.cfg.ENABLE_REWARD_DECOMPOSITION:
+            reward = self._compute_weighted_reward(
+                delay_components, self.cw_agent.weights_r
+            )
+        else:
+            reward = -sum(delay_components.values())
+
         if self.cw_emissions_tracker:
             self.cw_emissions_tracker.start()
-        self.cw_agent.update(self.last_cw_context, self.last_cw_action, r_cw)  # update
+        self.cw_agent.update(
+            self.last_cw_context, self.last_cw_action, reward
+        )  # update
         if self.cw_emissions_tracker:
             self.cw_emissions_tracker.stop()
 
-        self._log_to_wandb(
-            delay_components, {"channel": r_ch, "primary": r_pr, "cw": r_cw}
-        )
+        self._log_agent_data("cw", reward)
 
+    def update_meta_agent(self, delay_components: dict):
+        if not self.meta_agent:
+            return
+        if self.cfg.ENABLE_REWARD_DECOMPOSITION:
+            reward = self._compute_weighted_reward(
+                delay_components, self.meta_agent.weights_r
+            )
+        else:
+            reward = -sum(delay_components.values())
+
+        if self.meta_emissions_tracker:
+            self.meta_emissions_tracker.start()
+        self.meta_agent.update(
+            self.last_meta_context, self.last_meta_action, reward
+        )  # update
+        if self.meta_emissions_tracker:
+            self.meta_emissions_tracker.stop()
+
+        self._log_agent_data("meta", reward)
+
+    def update_tx_duration(self, delay_components: dict):
         self.results.append(sum(delay_components.values()))
 
     def log_emissions_data(self):
@@ -731,6 +765,10 @@ class MARLController:
             wandb.run.summary["cw_emissions"] = (
                 self.cw_emissions_tracker.final_emissions_data.__dict__
             )
+            if self.meta_emissions_tracker:
+                wandb.run.summary["meta_emissions"] = (
+                    self.meta_emissions_tracker.final_emissions_data.__dict__
+                )
 
     def get_emissions_data(self):
         emissions_data = {
@@ -738,30 +776,21 @@ class MARLController:
             "primary": self.primary_emissions_tracker.final_emissions_data.__dict__,
             "cw": self.cw_emissions_tracker.final_emissions_data.__dict__,
         }
+
+        if self.meta_emissions_tracker:
+            emissions_data["meta"] = (
+                self.meta_emissions_tracker.final_emissions_data.__dict__
+            )
         return emissions_data
 
-    def _log_to_wandb(self, delay_components: dict, reward: dict):
+    def _log_agent_data(self, agent: str, reward: float):
         if wandb.run:
             wandb.log(
                 {
-                    f"node_{self.node.id}/action/channel": self.last_channel_action,
-                    f"node_{self.node.id}/action/primary": self.last_primary_action,
-                    f"node_{self.node.id}/action/cw": self.last_cw_action,
-                    f"node_{self.node.id}/action/cw_current": self.node.mac_layer.cw_current,
-                    f"node_{self.node.id}/reward/channel": reward["channel"],
-                    f"node_{self.node.id}/reward/primary": reward["primary"],
-                    f"node_{self.node.id}/reward/cw": reward["cw"],
-                    f"node_{self.node.id}/delay/sensing": delay_components[
-                        "sensing_delay"
-                    ],
-                    f"node_{self.node.id}/delay/backoff": delay_components[
-                        "backoff_delay"
-                    ],
-                    f"node_{self.node.id}/delay/tx": delay_components["tx_delay"],
-                    f"node_{self.node.id}/delay/residual": delay_components[
-                        "residual_delay"
-                    ],
-                    f"node_{self.node.id}/delay/total": sum(delay_components.values()),
+                    f"node_{self.node.id}/action/{agent}": getattr(
+                        self, f"last_{agent}_action"
+                    ),
+                    f"node_{self.node.id}/reward/{agent}": reward,
                     "env_time_us": self.env.now,
                 }
             )
@@ -835,9 +864,7 @@ class SARLController:
                         (c_id, p - 1, cw_id)
                     )  # p-1 because primaries are 0-indexed
                     valid_actions_onehot.append(
-                        action_to_onehot_vector(
-                            c_id, p - 1, cw_id
-                        )
+                        action_to_onehot_vector(c_id, p - 1, cw_id)
                     )
 
         self.valid_joint_actions = valid_actions  # (channel, primary, cw)
@@ -918,7 +945,7 @@ class SARLController:
 
         return self.last_action_tuple
 
-    def update_agents(self, delay_components: dict):
+    def update_single_agent(self, delay_components: dict):
         reward = -sum(delay_components.values())
 
         if self.emissions_tracker:
@@ -932,8 +959,9 @@ class SARLController:
         if self.emissions_tracker:
             self.emissions_tracker.stop()
 
-        self._log_to_wandb(delay_components, reward)
+        self._log_agent_data(reward)
 
+    def update_tx_duration(self, delay_components: dict):
         self.results.append(sum(delay_components.values()))
 
     def log_emissions_data(self):
@@ -947,7 +975,7 @@ class SARLController:
             return {}
         return {"joint": self.emissions_tracker.final_emissions_data.__dict__}
 
-    def _log_to_wandb(self, delay_components: dict, reward: float):
+    def _log_agent_data(self, reward: float):
         if wandb.run:
             wandb.log(
                 {
@@ -955,19 +983,6 @@ class SARLController:
                     f"node_{self.node.id}/action/primary": self.last_action_tuple[1],
                     f"node_{self.node.id}/action/cw": self.last_action_tuple[2],
                     f"node_{self.node.id}/reward": reward,
-                    f"node_{self.node.id}/delay/sensing": delay_components.get(
-                        "sensing_delay", 0
-                    ),
-                    f"node_{self.node.id}/delay/backoff": delay_components.get(
-                        "backoff_delay", 0
-                    ),
-                    f"node_{self.node.id}/delay/tx": delay_components.get(
-                        "tx_delay", 0
-                    ),
-                    f"node_{self.node.id}/delay/residual": delay_components.get(
-                        "residual_delay", 0
-                    ),
-                    f"node_{self.node.id}/delay/total": sum(delay_components.values()),
                     "env_time_us": self.env.now,
                 }
             )

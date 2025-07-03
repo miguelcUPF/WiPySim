@@ -8,6 +8,7 @@ from src.components.rl_agents import (
     CHANNEL_MAP,
     PRIMARY_CHANNEL_MAP,
     CW_MAP,
+    META_MAP,
 )
 from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.utils.event_logger import get_logger
@@ -63,6 +64,9 @@ class MAC:
         self.node = node
 
         self.rl_driven = rl_driven
+        self.rl_settings = self.cfg.AGENTS_SETTINGS
+        self.rl_controller = None
+        self.rl_mode = self.cfg.RL_MODE
 
         self.state = MACState.IDLE
 
@@ -94,6 +98,18 @@ class MAC:
         self.is_first_rx = True
 
         self.tx_counter = 0
+        # Single-agent
+        self.joint_freq = self.rl_settings.get("joint_frequency", 1)
+        # Multi-agent
+        self.ch_freq = self.rl_settings.get("channel_frequency", 1)
+        self.prim_freq = self.rl_settings.get("primary_frequency", 1)
+        self.cw_freq = self.rl_settings.get("cw_frequency", 1)
+
+        self.meta_agent_start_time_us = self.rl_settings.get(
+            "meta_agent_start_time_us", 0
+        )
+        self.meta_agent_started = False
+        self.k = 1
 
         self.tx_attempt_time_us = None
         self.sensing_start_time_us = None
@@ -103,7 +119,7 @@ class MAC:
         self.bo_duration_us = 0
         self.tx_duration_us = 0
 
-        self.cw_current = 8  # lazy init
+        self.cw_current = 16  # lazy init
 
         self.mac_state_stats = MACStateStats(disabled=not cfg.ENABLE_STATS_COMPUTATION)
 
@@ -116,10 +132,6 @@ class MAC:
             True if node.id in self.cfg.EXCLUDED_IDS else False,
         )
 
-        self.rl_settings = self.cfg.AGENTS_SETTINGS
-        self.rl_controller = None
-        self.rl_mode = self.cfg.RL_MODE
-
         if (
             self.rl_driven and self.sparams.BONDING_MODE == 0
         ):  # only enabled if bonding mode is static channel bonding
@@ -131,6 +143,12 @@ class MAC:
                 self.rl_controller = MARLController(
                     sparams, cfg, env, self.node, self.rl_settings
                 )
+
+        self.sensing_delays = []
+        self.backoff_delays = []
+        self.tx_delays = []
+        self.total_delays = []
+        self.residual_delays = []
 
         self.rng: random.Random = env.rng
 
@@ -1041,6 +1059,43 @@ class MAC:
             f"{self.node.type} {self.node.id} -> CW agent selected action {cw_action}, CW size changed to {self.cw_current}"
         )
 
+    def _run_meta_agent(self):
+        current_channel = self.node.phy_layer.channels_ids
+        current_primary = self.node.phy_layer.sensing_channels_ids
+        channels_occupancy_ratio = self.node.phy_layer.get_channels_occupancy_ratio()
+        busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
+
+        channel_key = next(
+            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
+        )
+        primary_key = next(
+            (k for k, v in PRIMARY_CHANNEL_MAP.items() if v == current_primary), None
+        )
+        cw_key = next((k for k, v in CW_MAP.items() if v == self.cw_current), None)
+
+        meta_ctx = [
+            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
+            primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
+            cw_key / len(CW_MAP),  # normalized in range [0, 1]
+            *channels_occupancy_ratio,  # already in range [0, 1]
+            *busy_flags_per_channel,  # already in range [0, 1]
+        ]
+
+        if self.tx_counter % self.k == 0:
+            meta_action = self.rl_controller.decide_meta(np.array(meta_ctx))
+
+            self.ch_freq = self.prim_freq = self.cw_freq = META_MAP[meta_action]
+            # self.ch_freq, self.prim_freq, self.cw_freq = META_MAP[meta_action]  # if actions in META_MAP are such as (CSA_freq, PCSA_freq, CWSA_freq)
+
+            self.tx_counter = 0  # reset to ensure it does not loose track
+            self.k = META_MAP[
+                meta_action
+            ]  # or max(META_MAP[meta_action]) if actions in META_MAP are such as (CSA_freq, PCSA_freq, CWSA_freq)
+
+            self.logger.debug(
+                f"{self.node.type} {self.node.id} -> Meta agent selected action {meta_action}, CSA, PCSA, and CWSA freq changed to {self.ch_freq}, {self.prim_freq}, {self.cw_freq}, respectively"
+            )
+
     def _log_to_wandb_delays(self, delay_components: dict):
         if wandb.run:
             wandb.log(
@@ -1060,6 +1115,29 @@ class MAC:
                 }
             )
 
+    def _trim_delays(self, n=100):
+        if len(self.sensing_delays) > n:
+            self.sensing_delays = self.sensing_delays[-n:]
+        if len(self.backoff_delays) > n:
+            self.backoff_delays = self.backoff_delays[-n:]
+        if len(self.tx_delays) > n:
+            self.tx_delays = self.tx_delays[-n:]
+        if len(self.residual_delays) > n:
+            self.residual_delays = self.residual_delays[-n:]
+
+    def _get_mean_last_delays(self, n: int) -> dict:
+        def mean_last(values):
+            if not values:
+                return 0.0
+            return np.mean(values[-n:]) if len(values) >= n else np.mean(values)
+
+        return {
+            "sensing_delay": mean_last(self.sensing_delays),
+            "backoff_delay": mean_last(self.backoff_delays),
+            "tx_delay": mean_last(self.tx_delays),
+            "residual_delay": mean_last(self.residual_delays),
+        }
+
     def _update_rl_agents(self):
         self.tx_counter += 1
 
@@ -1071,36 +1149,59 @@ class MAC:
 
         residual_delay = total_delay - sensing_delay - backoff_delay - tx_delay
 
-        delay_components = {
-            "sensing_delay": sensing_delay,
-            "backoff_delay": backoff_delay,
-            "tx_delay": tx_delay,
-            "residual_delay": residual_delay,
-        }
+        self.sensing_delays.append(sensing_delay)
+        self.backoff_delays.append(backoff_delay)
+        self.tx_delays.append(tx_delay)
+        self.residual_delays.append(residual_delay)
 
-        self._log_to_wandb_delays(delay_components)
+        self._log_to_wandb_delays(self._get_mean_last_delays(1))
 
         if self.rl_driven:
-            self.rl_controller.update_agents(delay_components)
+            self.rl_controller.update_tx_duration(self._get_mean_last_delays(1))
+            if self.rl_mode == 0:
+                if self.tx_counter % self.joint_freq == 0:
+                    self.rl_controller.update_single_agent(
+                        self._get_mean_last_delays(self.joint_freq)
+                    )
+            else:
+                if self.tx_counter % self.ch_freq == 0:
+                    self.rl_controller.update_channel_agent(
+                        self._get_mean_last_delays(self.ch_freq)
+                    )
+                if self.tx_counter % self.prim_freq == 0:
+                    self.rl_controller.update_primary_agent(
+                        self._get_mean_last_delays(self.prim_freq)
+                    )
+                if self.tx_counter % self.cw_freq == 0:
+                    self.rl_controller.update_cw_agent(
+                        self._get_mean_last_delays(self.cw_freq)
+                    )
+                if self.tx_counter % self.k == 0 and self.meta_agent_started:
+                    self.rl_controller.update_meta_agent(
+                        self._get_mean_last_delays(self.k)
+                    )
+
+        self._trim_delays()
 
     def _run_rl_multi_agent(self):
-        ch_freq = self.rl_settings.get("channel_frequency", 1)
-        prim_freq = self.rl_settings.get("primary_frequency", 1)
-        cw_freq = self.rl_settings.get("cw_frequency", 1)
+        if self.rl_settings.get("enable_meta_agent", False):
+            if self.env.now >= self.meta_agent_start_time_us:
+                self.meta_agent_started = True
+                self._run_meta_agent()
 
         if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
             # All agents should perform their decisions at the beginning of the cycle...
-            if self.tx_counter % ch_freq == 0:
+            if self.tx_counter % self.ch_freq == 0:
                 self._run_channel_agent()
-            if self.tx_counter % prim_freq == 0:
+            if self.tx_counter % self.prim_freq == 0:
                 self._run_primary_agent()
-            if self.tx_counter % cw_freq == 0:
+            if self.tx_counter % self.cw_freq == 0:
                 self._run_cw_agent()
         else:
             # Agents can perform their decisions at distinct phases in the cycle...
-            if self.tx_counter % ch_freq == 0:
+            if self.tx_counter % self.ch_freq == 0:
                 self._run_channel_agent()
-            if self.tx_counter % prim_freq == 0:
+            if self.tx_counter % self.prim_freq == 0:
                 self._run_primary_agent()
 
     def _run_cw_just_before_backoff(self):
@@ -1108,14 +1209,12 @@ class MAC:
             return
 
         if self.backoff_slots == 0 and not self.cts_timedout:
-            cw_freq = self.rl_settings.get("cw_frequency", 1)
-            if self.tx_counter % cw_freq == 0:
+            if self.tx_counter % self.cw_freq == 0:
                 self._run_cw_agent()
 
     def _run_rl_single_agent(self):
-        joint_freq = self.rl_settings.get("joint_frequency", 1)
         # Check if agent should perform its decision according to its frequency of action
-        if self.tx_counter % joint_freq == 0:
+        if self.tx_counter % self.joint_freq == 0:
             self._run_joint_agent()
 
     def _start_rl_agents(self):
