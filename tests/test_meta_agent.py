@@ -30,6 +30,7 @@ settings_mapping = {
             "primary_frequency": 1,
             "cw_frequency": 1,
             "enable_meta_agent": True,
+            "enable_meta_agent_multifreq": False,
             "meta_agent_start_time_us": 10e6,
             "alpha": 0.11,
             "window_size": 38,
@@ -40,6 +41,7 @@ settings_mapping = {
             "primary_frequency": 1,
             "cw_frequency": 1,
             "enable_meta_agent": True,
+            "enable_meta_agent_multifreq": False,
             "meta_agent_start_time_us": 10e6,
             "epsilon": 0.016,
             "eta": 0.0194,
@@ -54,6 +56,7 @@ settings_mapping = {
             "primary_frequency": 1,
             "cw_frequency": 1,
             "enable_meta_agent": True,
+            "enable_meta_agent_multifreq": False,
             "meta_agent_start_time_us": 10e6,
             "alpha": 0.22,
             "window_size": 35,
@@ -64,6 +67,7 @@ settings_mapping = {
             "primary_frequency": 1,
             "cw_frequency": 1,
             "enable_meta_agent": True,
+            "enable_meta_agent_multifreq": False, # True or False
             "meta_agent_start_time_us": 10e6,
             "epsilon": 0.019,
             "eta": 0.051,
@@ -94,7 +98,7 @@ cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
 
 cfg_module.ENABLE_STATS_COMPUTATION = False
 
-cfg_module.USE_WANDB = True
+cfg_module.USE_WANDB = False
 cfg_module.WANDB_RUN_NAME = (
     f"meta_agent_{cfg_module.RL_MODE}_{STRATEGY}_A_seed{cfg_module.SEED}"
 )

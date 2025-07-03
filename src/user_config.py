@@ -76,6 +76,7 @@ class UserConfig:
 
     # only if "MARL":
     # - enable_meta_agent (optional): whether to enable the meta agent (i.e., agent that schedules how often the other agents should select actions, in transmissions attempts). Default: False
+    # - enable_meta_agent_multifreq (optional): if True, meta agent outputs distinct frequencies for channel, primary, and cw agents. Default: False.
     # - meta_agent_start_time_us (optional): time in simulation units after which meta agent is active if enabled. Default: 0.
     # - channel_frequency (optional): frequency of the channel agent (i.e., how often it selects an action, in transmissions attempts). Default: 1
     # - primary_frequency (optional): frequency of the primary agent (i.e., how often it selects an action, in transmissions attempts). Default: 1

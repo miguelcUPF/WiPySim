@@ -25,7 +25,19 @@ CHANNEL_MAP = {
 PRIMARY_CHANNEL_MAP = {0: {1}, 1: {2}, 2: {3}, 3: {4}}
 CW_MAP = {i: 2 ** (4 + i) for i in range(7)}
 
-META_MAP = {i: 2**i for i in range(4)}  # or such as (CSA_freq, PCSA_freq, CWSA_freq)
+META_MAP = {i: 2**i for i in range(4)}  # joint freq for CSA, PCSA, CWSA
+META_MAP_multifreq = {
+    0: (1, 1, 1),
+    1: (2, 2, 1),
+    2: (2, 2, 2),
+    3: (4, 4, 1),
+    4: (4, 4, 2),
+    5: (4, 4, 4),
+    6: (8, 8, 1),
+    7: (8, 8, 2),
+    8: (8, 8, 4),
+    9: (8, 8, 8),
+}  # (CSA_freq, PCSA_freq, CWSA_freq)
 
 
 # https://arxiv.org/pdf/1003.0146
@@ -515,31 +527,50 @@ class MARLController:
 
         channel_params = {
             "name": "channel_agent",
-            "n_actions": 7,  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
-            "context_dim": 9,  # 4x channel occupation ratio + 4x channel busy flags + 1x queue size
+            "n_actions": len(
+                CHANNEL_MAP
+            ),  # 0: {1}, 1: {2}, 2: {3}, 3: {4}, 4: {1, 2}, 5: {3, 4}, 6: {1, 2, 3, 4}
+            "context_dim": 9
+            + (
+                1 if settings.get("enable_meta_agent", False) else 0
+            ),  # 4x channel occupation ratio + 4x channel busy flags + 1x queue size + (1x holdtime if meta-controller enabled)
             "strategy": strategy,
             "weights_r": settings.get("channel_weights", {}),
         }
 
         primary_params = {
             "name": "primary_agent",
-            "n_actions": 4,  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            "context_dim": 9,  # 1x current channel (mapped idx) + 4x channel occupation ratio + 4x channel busy flags
+            "n_actions": len(
+                PRIMARY_CHANNEL_MAP
+            ),  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
+            "context_dim": 9
+            + (
+                1 if settings.get("enable_meta_agent", False) else 0
+            ),  # 1x current channel (mapped idx) + 4x channel occupation ratio + 4x channel busy flags + (1x holdtime if meta-controller enabled)
             "strategy": strategy,
             "weights_r": settings.get("primary_weights", {}),
         }
 
         cw_params = {
             "name": "cw_agent",
-            "n_actions": 7,  # 0: {16}, 1: {32}, 2: {64}, 3: {128}, 4: {256}, 5: {512}, 6: {1024} (i.e., 2**(x+4))
-            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel occupation ratio + 4x channel busy flags + 1x queue size
+            "n_actions": len(
+                CW_MAP
+            ),  # 0: {16}, 1: {32}, 2: {64}, 3: {128}, 4: {256}, 5: {512}, 6: {1024} (i.e., 2**(x+4))
+            "context_dim": 11
+            + (
+                1 if settings.get("enable_meta_agent", False) else 0
+            ),  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel occupation ratio + 4x channel busy flags + 1x queue size + (1x holdtime if meta-controller enabled)
             "strategy": strategy,
             "weights_r": settings.get("cw_weights", {}),
         }
 
         meta_params = {
             "name": "meta_agent",
-            "n_actions": 4,  # 0: {1}, 1: {2}, 2: {4}, 3: {8} (i.e., 2**(x))
+            "n_actions": (
+                len(META_MAP)
+                if not settings.get("enable_meta_agent_multifreq", False)
+                else len(META_MAP_multifreq)
+            ),  # 0: {1}, 1: {2}, 2: {4}, 3: {8} (i.e., 2**(x))
             "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 1x current cw (mapped idx) + 4x channel occupation ratio + 4x channel busy flags
             "strategy": strategy,
         }

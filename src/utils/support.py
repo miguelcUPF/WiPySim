@@ -355,6 +355,12 @@ def validate_config(
                     logger.critical(
                         f"Invalid enable_meta_agent: '{cfg.AGENTS_SETTINGS.get('enable_meta_agent', None)}'. It must be a boolean."
                     )
+                if not isinstance(
+                    cfg.AGENTS_SETTINGS.get("enable_meta_agent_multifreq", None), bool
+                ):
+                    logger.critical(
+                        f"Invalid enable_meta_agent_multifreq: '{cfg.AGENTS_SETTINGS.get('enable_meta_agent_multifreq', None)}'. It must be a boolean."
+                    )
                 if cfg.AGENTS_SETTINGS.get("channel_frequency", None) is not None:
                     logger.warning(f"Meta agent is enabled, ignoring cw_frequency...")
                 if cfg.AGENTS_SETTINGS.get("primary_frequency", None) is not None:
@@ -378,6 +384,15 @@ def validate_config(
                         logger.critical(
                             f"Invalid meta_agent_start_time_us: '{cfg.AGENTS_SETTINGS.get('meta_agent_start_time_us', None)}'. It must be a positive integer."
                         )
+        else:
+            if cfg.AGENTS_SETTINGS.get("enable_meta_agent_multifreq", None):
+                logger.warning(
+                    f"Meta agent is disabled, ignoring enable_meta_agent_multifreq..."
+                )
+            if cfg.AGENTS_SETTINGS.get("meta_agent_start_time_us", None) is not None:
+                logger.warning(
+                    f"Meta agent is disabled, ignoring meta_agent_start_time_us..."
+                )
 
         if cfg.AGENTS_SETTINGS.get("joint_frequency", None):
             if cfg.RL_MODE != 0:

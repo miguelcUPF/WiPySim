@@ -9,6 +9,7 @@ from src.components.rl_agents import (
     PRIMARY_CHANNEL_MAP,
     CW_MAP,
     META_MAP,
+    META_MAP_multifreq,
 )
 from src.utils.data_units import Packet, AMPDU, MPDU, BACK, RTS, CTS, DataUnit
 from src.utils.event_logger import get_logger
@@ -997,6 +998,17 @@ class MAC:
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
+
+        if self.rl_settings.get("enable_meta_agent", False):
+            ch_ctx.append(
+                self.ch_freq
+                / (
+                    max(META_MAP.values())
+                    if not self.rl_settings.get("enable_meta_agent_multifreq", False)
+                    else max(max(tup) for tup in META_MAP_multifreq.values())
+                )
+            )  # normalized in range [0, 1]
+
         ch_action = self.rl_controller.decide_channel(np.array((ch_ctx)))
 
         self.node.phy_layer.set_channels(CHANNEL_MAP[ch_action])
@@ -1019,6 +1031,17 @@ class MAC:
             *channels_occupancy_ratio,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
         ]
+
+        if self.rl_settings.get("enable_meta_agent", False):
+            primary_ctx.append(
+                self.prim_freq
+                / (
+                    max(META_MAP.values())
+                    if not self.rl_settings.get("enable_meta_agent_multifreq", False)
+                    else max(max(tup) for tup in META_MAP_multifreq.values())
+                )
+            )  # normalized in range [0, 1]
+
         primary_action = self.rl_controller.decide_primary(
             np.array(primary_ctx), current_channel
         )
@@ -1051,6 +1074,17 @@ class MAC:
             queue_size
             / self.sparams.MAX_TX_QUEUE_SIZE_pkts,  # normalized in range [0, 1]
         ]
+
+        if self.rl_settings.get("enable_meta_agent", False):
+            cw_ctx.append(
+                self.cw_freq
+                / (
+                    max(META_MAP.values())
+                    if not self.rl_settings.get("enable_meta_agent_multifreq", False)
+                    else max(max(tup) for tup in META_MAP_multifreq.values())
+                )
+            )  # normalized in range [0, 1]
+
         cw_action = self.rl_controller.decide_cw(np.array(cw_ctx))
 
         self.cw_current = CW_MAP[cw_action]
@@ -1084,13 +1118,20 @@ class MAC:
         if self.tx_counter % self.k == 0:
             meta_action = self.rl_controller.decide_meta(np.array(meta_ctx))
 
-            self.ch_freq = self.prim_freq = self.cw_freq = META_MAP[meta_action]
-            # self.ch_freq, self.prim_freq, self.cw_freq = META_MAP[meta_action]  # if actions in META_MAP are such as (CSA_freq, PCSA_freq, CWSA_freq)
+            if not self.rl_settings.get("enable_meta_agent_multifreq", False):
+                self.ch_freq = self.prim_freq = self.cw_freq = META_MAP[
+                    meta_action
+                ]  # actions are a single joint frequency
+            else:
+                self.ch_freq, self.prim_freq, self.cw_freq = META_MAP_multifreq[
+                    meta_action
+                ]
 
             self.tx_counter = 0  # reset to ensure it does not loose track
-            self.k = META_MAP[
-                meta_action
-            ]  # or max(META_MAP[meta_action]) if actions in META_MAP are such as (CSA_freq, PCSA_freq, CWSA_freq)
+            if not self.rl_settings.get("enable_meta_agent_multifreq", False):
+                self.k = META_MAP[meta_action]
+            else:
+                self.k = max(META_MAP_multifreq[meta_action])
 
             self.logger.debug(
                 f"{self.node.type} {self.node.id} -> Meta agent selected action {meta_action}, CSA, PCSA, and CWSA freq changed to {self.ch_freq}, {self.prim_freq}, {self.cw_freq}, respectively"
