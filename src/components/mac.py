@@ -36,6 +36,8 @@ CTS_TX_us = round(
 )
 CTS_TIMEOUT_us = sparams_module.SIFS_us + sparams_module.SLOT_TIME_us + CTS_TX_us
 
+CH_ACCESS_TIMEOUT_us = 10e3
+
 
 class MACState:
     IDLE = 0
@@ -78,6 +80,7 @@ class MAC:
 
         self.ampdu_counter = 0
 
+        self.contention_start_time_us = None
         self.backoff_slots = 0
         self.retries = 0
 
@@ -119,6 +122,8 @@ class MAC:
         self.sensing_duration_us = 0
         self.bo_duration_us = 0
         self.tx_duration_us = 0
+
+        self.ch_access_timedout = False
 
         self.cw_current = 16  # lazy init
 
@@ -903,7 +908,7 @@ class MAC:
                 self.wait_until_primary_idle(ch_duration_us, ch_waited_times)
             )
         else:  # Toy behavior
-            idle_channels = yield self.env.process(
+            yield self.env.process(
                 self.wait_until_any_idle(ch_duration_us, ch_waited_times)
             )
 
@@ -943,6 +948,8 @@ class MAC:
                     else None
                 )
             if self.tx_queue.items:
+                if self.backoff_slots == 0:
+                    self.contention_start_time_us = self.env.now
                 self._start_rl_agents() if self.rl_driven else None
 
                 yield self.env.process(self._csma_ca(had_nothing_to_send))
@@ -950,6 +957,12 @@ class MAC:
                 had_nothing_to_send = False
 
                 if self.backoff_slots > 0 or self.backoff_slots == -1:
+                    if (
+                        self.rl_driven
+                        and self.env.now - self.contention_start_time_us
+                        > CH_ACCESS_TIMEOUT_us
+                    ):
+                        self.ch_access_timedout = True
                     continue
 
                 self.ampdu_aggregation()
@@ -1179,50 +1192,62 @@ class MAC:
             "residual_delay": mean_last(self.residual_delays),
         }
 
-    def _update_rl_agents(self):
-        self.tx_counter += 1
-
-        sensing_delay = self.sensing_duration_us
-        backoff_delay = self.bo_duration_us
-        tx_delay = self.tx_duration_us
-
-        total_delay = self.env.now - self.tx_attempt_time_us
-
-        residual_delay = total_delay - sensing_delay - backoff_delay - tx_delay
-
-        self.sensing_delays.append(sensing_delay)
-        self.backoff_delays.append(backoff_delay)
-        self.tx_delays.append(tx_delay)
-        self.residual_delays.append(residual_delay)
-
-        self._log_to_wandb_delays(self._get_mean_last_delays(1))
-
-        if self.rl_driven:
-            self.rl_controller.update_tx_duration(self._get_mean_last_delays(1))
+    def _update_rl_agents(self, min_reward=False):
+        if min_reward and self.rl_driven:  # update agents with the smallest reward
             if self.rl_mode == 0:
-                if self.tx_counter % self.joint_freq == 0:
-                    self.rl_controller.update_single_agent(
-                        self._get_mean_last_delays(self.joint_freq)
-                    )
+                self.tx_counter = 0  # to ensure it performs its decision
+                self.rl_controller.update_single_agent()
             else:
-                if self.tx_counter % self.ch_freq == 0:
-                    self.rl_controller.update_channel_agent(
-                        self._get_mean_last_delays(self.ch_freq)
-                    )
-                if self.tx_counter % self.prim_freq == 0:
-                    self.rl_controller.update_primary_agent(
-                        self._get_mean_last_delays(self.prim_freq)
-                    )
-                if self.tx_counter % self.cw_freq == 0:
-                    self.rl_controller.update_cw_agent(
-                        self._get_mean_last_delays(self.cw_freq)
-                    )
-                if self.tx_counter % self.k == 0 and self.meta_agent_started:
-                    self.rl_controller.update_meta_agent(
-                        self._get_mean_last_delays(self.k)
-                    )
+                self.tx_counter = 0
+                self.rl_controller.update_channel_agent()
+                self.rl_controller.update_primary_agent()
+                self.rl_controller.update_cw_agent()
+                if self.meta_agent_started:
+                    self.rl_controller.update_meta_agent()
+        else:
+            self.tx_counter += 1
 
-        self._trim_delays()
+            sensing_delay = self.sensing_duration_us
+            backoff_delay = self.bo_duration_us
+            tx_delay = self.tx_duration_us
+
+            total_delay = self.env.now - self.tx_attempt_time_us
+
+            residual_delay = total_delay - sensing_delay - backoff_delay - tx_delay
+
+            self.sensing_delays.append(sensing_delay)
+            self.backoff_delays.append(backoff_delay)
+            self.tx_delays.append(tx_delay)
+            self.residual_delays.append(residual_delay)
+
+            self._log_to_wandb_delays(self._get_mean_last_delays(1))
+
+            if self.rl_driven:
+                self.rl_controller.update_tx_duration(self._get_mean_last_delays(1))
+                if self.rl_mode == 0:
+                    if self.tx_counter % self.joint_freq == 0:
+                        self.rl_controller.update_single_agent(
+                            self._get_mean_last_delays(self.joint_freq)
+                        )
+                else:
+                    if self.tx_counter % self.ch_freq == 0:
+                        self.rl_controller.update_channel_agent(
+                            self._get_mean_last_delays(self.ch_freq)
+                        )
+                    if self.tx_counter % self.prim_freq == 0:
+                        self.rl_controller.update_primary_agent(
+                            self._get_mean_last_delays(self.prim_freq)
+                        )
+                    if self.tx_counter % self.cw_freq == 0:
+                        self.rl_controller.update_cw_agent(
+                            self._get_mean_last_delays(self.cw_freq)
+                        )
+                    if self.tx_counter % self.k == 0 and self.meta_agent_started:
+                        self.rl_controller.update_meta_agent(
+                            self._get_mean_last_delays(self.k)
+                        )
+
+            self._trim_delays()
 
     def _run_rl_multi_agent(self):
         if self.rl_settings.get("enable_meta_agent", False):
@@ -1246,7 +1271,7 @@ class MAC:
                 self._run_primary_agent()
 
     def _run_cw_just_before_backoff(self):
-        if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION and self.rl_mode != 1:
+        if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION or self.rl_mode != 1:
             return
 
         if self.backoff_slots == 0 and not self.cts_timedout:
@@ -1259,13 +1284,19 @@ class MAC:
             self._run_joint_agent()
 
     def _start_rl_agents(self):
-        if self.backoff_slots == 0 and not self.cts_timedout:
-            (
-                self._update_rl_agents()
-                if self.tx_attempt_time_us is not None
-                else None
-            )  # update RL agents, i.e., give them a reward
+        if self.ch_access_timedout:
+            self._update_rl_agents(
+                True
+            )  # update RL agents, giving them the smallest reward
 
+        elif self.backoff_slots == 0 and not self.cts_timedout:
+            if self.tx_attempt_time_us is not None:
+                self._update_rl_agents()  # update RL agents, i.e., give them a reward
+
+        if self.ch_access_timedout or (
+            self.backoff_slots == 0 and not self.cts_timedout
+        ):
+            self.ch_access_timedout = False
             # variables to count the total transmission cycle duration and also the time spent in each phase
             self.tx_attempt_time_us = self.env.now
             self.sensing_duration_us = 0

@@ -5,7 +5,6 @@ from src.components.network import AP
 
 from collections import deque
 from codecarbon import EmissionsTracker
-from itertools import combinations
 
 import numpy as np
 import simpy
@@ -40,6 +39,10 @@ META_MAP_multifreq = {
 }  # (CSA_freq, PCSA_freq, CWSA_freq)
 
 
+MIN_REWARD = -10e3 # equal to CH_ACCESS_TIMEOUT_us
+MAX_REWARD = 0
+
+
 # https://arxiv.org/pdf/1003.0146
 # https://dl.acm.org/doi/abs/10.1145/3297280.3297440?casa_token=eoZgPNBt-AUAAAAA:o80ERr_mN7BeM9GFgjH801INiTUf31_9OYERVQfAnnHPYEC6K9i00knEYUwMpcR_ZQeGwNq6yn9tOMU
 class SWLinUCB:
@@ -52,8 +55,8 @@ class SWLinUCB:
         strategy: str = "sw_linucb",
         weights_r: dict[str, float] = None,
         alpha: float = 1.0,
-        min_val: float = -10e3,
-        max_val: float = 0,
+        min_val: float = MIN_REWARD,
+        max_val: float = MAX_REWARD,
         window_size: int | None = None,
         rng: random.Random | None = None,
     ):
@@ -174,8 +177,8 @@ class EpsRMSProp:
         eta: float = 0.1,
         gamma: float = 0.9,
         alpha_ema: float = 0.1,  # EMA factor
-        min_val: float = -10e3,
-        max_val: float = 0,
+        min_val: float = MIN_REWARD,
+        max_val: float = MAX_REWARD,
         rng: random.Random | None = None,
     ):
 
@@ -301,8 +304,8 @@ class E2TC:
         T=2 * 10**4,
         sigma2=1 / 4,
         alpha=1,  # recommended between 1 and 3; best alpha=1
-        min_val: float = -10e3,
-        max_val: float = 0,
+        min_val: float = MIN_REWARD,
+        max_val: float = MAX_REWARD,
         rng: random.Random | None = None,
     ):
         def select_diverse_base(actions, d, rng):
@@ -584,8 +587,8 @@ class MARLController:
                         "eta": settings.get("eta", 0.1),
                         "gamma": settings.get("gamma", 0.9),
                         "alpha_ema": settings.get("alpha_ema", 0.1),
-                        "min_val": settings.get("min_val", -10e3),
-                        "max_val": settings.get("max_val", 0),
+                        "min_val": settings.get("min_val", MIN_REWARD),
+                        "max_val": settings.get("max_val", MAX_REWARD),
                     }
                 )
         elif agent_class == SWLinUCB:
@@ -593,8 +596,8 @@ class MARLController:
                 param.update(
                     {
                         "alpha": settings.get("alpha", 1.0),
-                        "min_val": settings.get("min_val", -10e3),
-                        "max_val": settings.get("max_val", 0),
+                        "min_val": settings.get("min_val", MIN_REWARD),
+                        "max_val": settings.get("max_val", MAX_REWARD),
                         "window_size": settings.get("window_size", None),
                     }
                 )
@@ -706,8 +709,10 @@ class MARLController:
     def _compute_weighted_reward(self, delay_components: dict, weights: dict):
         return -sum(weights.get(k, 0) * delay_components[k] for k in weights)
 
-    def update_channel_agent(self, delay_components: dict):
-        if self.cfg.ENABLE_REWARD_DECOMPOSITION:
+    def update_channel_agent(self, delay_components: dict = None):
+        if delay_components is None:
+            reward = MIN_REWARD
+        elif self.cfg.ENABLE_REWARD_DECOMPOSITION:
             reward = self._compute_weighted_reward(
                 delay_components, self.channel_agent.weights_r
             )
@@ -726,8 +731,10 @@ class MARLController:
 
         self._log_agent_data("channel", reward)
 
-    def update_primary_agent(self, delay_components: dict):
-        if self.cfg.ENABLE_REWARD_DECOMPOSITION:
+    def update_primary_agent(self, delay_components: dict = None):
+        if delay_components is None:
+            reward = MIN_REWARD
+        elif self.cfg.ENABLE_REWARD_DECOMPOSITION:
             reward = self._compute_weighted_reward(
                 delay_components, self.primary_agent.weights_r
             )
@@ -744,8 +751,11 @@ class MARLController:
 
         self._log_agent_data("primary", reward)
 
-    def update_cw_agent(self, delay_components: dict):
-        if self.cfg.ENABLE_REWARD_DECOMPOSITION:
+    def update_cw_agent(self, delay_components: dict = None):
+        if delay_components is None:
+            reward = MIN_REWARD
+            
+        elif self.cfg.ENABLE_REWARD_DECOMPOSITION:
             reward = self._compute_weighted_reward(
                 delay_components, self.cw_agent.weights_r
             )
@@ -762,16 +772,18 @@ class MARLController:
 
         self._log_agent_data("cw", reward)
 
-    def update_meta_agent(self, delay_components: dict):
+    def update_meta_agent(self, delay_components: dict = None):
         if not self.meta_agent:
             return
-        if self.cfg.ENABLE_REWARD_DECOMPOSITION:
+        if delay_components is None:
+            reward = MIN_REWARD
+        elif self.cfg.ENABLE_REWARD_DECOMPOSITION:
             reward = self._compute_weighted_reward(
                 delay_components, self.meta_agent.weights_r
             )
         else:
             reward = -sum(delay_components.values())
-
+        
         if self.meta_emissions_tracker:
             self.meta_emissions_tracker.start()
         self.meta_agent.update(
@@ -916,16 +928,16 @@ class SARLController:
                     "eta": settings.get("eta", 0.1),
                     "gamma": settings.get("gamma", 0.9),
                     "alpha_ema": settings.get("alpha_ema", 0.1),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
+                    "min_val": settings.get("min_val", MIN_REWARD),
+                    "max_val": settings.get("max_val", MAX_REWARD),
                 }
             )
         elif agent_class == SWLinUCB:
             agent_params.update(
                 {
                     "alpha": settings.get("alpha", 1.0),
-                    "min_val": settings.get("min_val", -10e3),
-                    "max_val": settings.get("max_val", 0),
+                    "min_val": settings.get("min_val", MIN_REWARD),
+                    "max_val": settings.get("max_val", MAX_REWARD),
                     "window_size": settings.get("window_size", None),
                 }
             )
@@ -935,8 +947,8 @@ class SARLController:
                 "actions": valid_actions_onehot,  # one-hot vectors
                 "T": settings.get("T", 2 * 10**4),
                 "alpha": settings.get("alpha", 1.0),
-                "min_val": settings.get("min_val", -10e3),
-                "max_val": settings.get("max_val", 0),
+                "min_val": settings.get("min_val", MIN_REWARD),
+                "max_val": settings.get("max_val", MAX_REWARD),
             }
 
         self.joint_agent = agent_class(
@@ -976,8 +988,11 @@ class SARLController:
 
         return self.last_action_tuple
 
-    def update_single_agent(self, delay_components: dict):
-        reward = -sum(delay_components.values())
+    def update_single_agent(self, delay_components: dict = None):
+        if delay_components is None:
+            reward = MIN_REWARD
+        else:
+            reward = -sum(delay_components.values())
 
         if self.emissions_tracker:
             self.emissions_tracker.start()
