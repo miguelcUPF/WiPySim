@@ -383,7 +383,7 @@ class EpsRMSProp:
         self.grad_squared_avg = np.zeros((self.n_actions, self.context_dim))
 
 
-class E2TC:
+class E2TC:  # only for single agent
     def __init__(
         self,
         name: str,
@@ -584,7 +584,110 @@ class E2TC:
         self.b = int(a + self.Ne)
 
 
-class MARLController:
+class OSUB:
+    def __init__(
+        self,
+        name: str,
+        n_actions: int,
+        marl_controller,
+        weights_r: dict[str, float] = None,
+        min_val: float = MIN_REWARD,
+        max_val: float = MAX_REWARD,
+        rng: random.Random | None = None,
+    ):
+        self.name = name
+        self.n_actions = n_actions
+
+        self.marl_controller = marl_controller
+
+        self.weights_r = weights_r or {}
+
+        self.counts = np.zeros(n_actions)
+        self.rewards = np.zeros(n_actions)
+
+        self.t = 1
+
+        # Normalization
+        self.min_val = min_val
+        self.max_val = max_val
+
+        self.rng = rng
+
+    def get_neighbors(self, k):
+        # assuming a linear action space
+        if k == 0:
+            return [0, 1]
+        elif k == self.n_actions - 1:
+            return [self.n_actions - 2, self.n_actions - 1]
+        else:
+            return [k - 1, k, k + 1]
+
+    def kl_ucb_index(self, m, n, t):
+        if n == 0:
+            return 1.0
+        if m == 1.0:
+            return 1.0
+        if m == 0.0:
+            return 1.0 - (t ** (-1 / n))
+
+        q = m
+        while (
+            n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(t)
+            < 0
+        ):
+            q = (q + 1) / 2
+
+        # Newton's method
+        f = n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(t)
+        while np.abs(f) > 1e-5:
+            fprime = n * (-m / q + (1 - m) / (1 - q))
+            q -= f / fprime
+            # Recompute f after step
+            f = n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(
+                t
+            )
+
+        return q
+
+    def select_action(self, valid_actions=None):
+        if valid_actions is None:
+            valid_actions = list(range(self.n_actions))
+
+        # compute empirical means only for valid actions
+        mu_hat = self.rewards / np.maximum(1, self.counts)
+
+        # Mask invalid actions for leader selection
+        masked_means = np.full(self.n_actions, -np.inf)
+        masked_means[valid_actions] = mu_hat[valid_actions]
+        leader = np.argmax(masked_means)
+
+        # neighbors of leader that are valid
+        N = self.get_neighbors(leader)
+        N = [a for a in N if a in valid_actions]
+
+        indices = [self.kl_ucb_index(mu_hat[k], self.counts[k], self.t) for k in N]
+
+        max_idx = np.argmax(indices)
+        action = N[max_idx]
+
+        return action
+
+    def _normalize_reward(self, reward):
+        clipped_reward = max(min(reward, self.max_val), self.min_val)
+        return (clipped_reward - self.min_val) / (self.max_val - self.min_val)
+
+    def update(self, action, reward):
+        self.counts[action] += 1
+        self.rewards[action] += self._normalize_reward(reward)
+        self.t += 1
+
+    def reset(self):
+        self.counts = np.zeros(self.n_actions)
+        self.rewards = np.zeros(self.n_actions)
+        self.t = 1
+
+
+class MARLController:  # only for multi agent
     def __init__(
         self,
         sparams: sparams_module,
@@ -619,6 +722,8 @@ class MARLController:
             agent_class = EpsRMSProp
         elif strategy in ["ucb"]:
             agent_class = UCB
+        elif strategy in ["osub"]:
+            agent_class = OSUB
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
@@ -706,6 +811,16 @@ class MARLController:
                 )
                 param.pop("context_dim", None)
                 param.pop("strategy", None)
+        elif agent_class == OSUB:
+            for param in [channel_params, primary_params, cw_params, meta_params]:
+                param.update(
+                    {
+                        "min_val": settings.get("min_val", MIN_REWARD),
+                        "max_val": settings.get("max_val", MAX_REWARD),
+                    }
+                )
+                param.pop("context_dim", None)
+                param.pop("strategy", None)
 
         self.channel_agent = agent_class(
             **channel_params, marl_controller=self, rng=env.rng
@@ -756,7 +871,7 @@ class MARLController:
 
         self.last_channel_context = context
 
-        if isinstance(self.channel_agent, UCB):
+        if isinstance(self.channel_agent, UCB) or isinstance(self.channel_agent, OSUB):
             action = self.channel_agent.select_action()
         else:
             action = self.channel_agent.select_action(context)
@@ -778,7 +893,7 @@ class MARLController:
         self.last_primary_context = context
         valid_actions = [c - 1 for c in allocated_channels]
 
-        if isinstance(self.primary_agent, UCB):
+        if isinstance(self.primary_agent, UCB) or isinstance(self.primary_agent, OSUB):
             action = self.primary_agent.select_action(valid_actions)
         else:
             action = self.primary_agent.select_action(context, valid_actions)
@@ -799,7 +914,7 @@ class MARLController:
 
         self.last_cw_context = context
 
-        if isinstance(self.cw_agent, UCB):
+        if isinstance(self.cw_agent, UCB) or isinstance(self.cw_agent, OSUB):
             action = self.cw_agent.select_action()
         else:
             action = self.cw_agent.select_action(context)
@@ -818,7 +933,7 @@ class MARLController:
 
         self.last_meta_context = context
 
-        if isinstance(self.meta_agent, UCB):
+        if isinstance(self.meta_agent, UCB) or isinstance(self.meta_agent, OSUB):
             action = self.meta_agent.select_action()
         else:
             action = self.meta_agent.select_action(context)
@@ -848,7 +963,7 @@ class MARLController:
 
         if self.channel_emissions_tracker:
             self.channel_emissions_tracker.start()
-        if isinstance(self.channel_agent, UCB):
+        if isinstance(self.channel_agent, UCB) or isinstance(self.channel_agent, OSUB):
             self.channel_agent.update(self.last_channel_action, reward)
         else:
             self.channel_agent.update(
@@ -871,7 +986,7 @@ class MARLController:
 
         if self.primary_emissions_tracker:
             self.primary_emissions_tracker.start()
-        if isinstance(self.primary_agent, UCB):
+        if isinstance(self.primary_agent, UCB) or isinstance(self.primary_agent, OSUB):
             self.primary_agent.update(self.last_primary_action, reward)
         else:
             self.primary_agent.update(
@@ -895,7 +1010,7 @@ class MARLController:
 
         if self.cw_emissions_tracker:
             self.cw_emissions_tracker.start()
-        if isinstance(self.cw_agent, UCB):
+        if isinstance(self.cw_agent, UCB) or isinstance(self.cw_agent, OSUB):
             self.cw_agent.update(self.last_cw_action, reward)
         else:
             self.cw_agent.update(
@@ -920,7 +1035,7 @@ class MARLController:
 
         if self.meta_emissions_tracker:
             self.meta_emissions_tracker.start()
-        if isinstance(self.meta_agent, UCB):
+        if isinstance(self.meta_agent, UCB) or isinstance(self.meta_agent, OSUB):
             self.meta_agent.update(self.last_meta_action, reward)
         else:
             self.meta_agent.update(

@@ -274,9 +274,10 @@ def validate_config(
                 "decay_epsilon_greedy",
                 "ucb",
                 "e2tc",
+                "osub",
             ]:
                 logger.critical(
-                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy', 'decay_epsilon_greedy', 'ucb' or 'e2tc'."
+                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy', 'decay_epsilon_greedy', 'ucb', 'e2tc', or 'osub'."
                 )
 
         if cfg.AGENTS_SETTINGS.get("channel_frequency", None):
@@ -503,6 +504,18 @@ def validate_config(
         if strategy == "e2tc" and cfg.RL_MODE != 0:
             logger.critical(
                 f"Strategy {strategy} is not compatible with RL_MODE={cfg.RL_MODE}. Please set RL_MODE=0 for using this strategy."
+            )
+
+        if strategy == "osub":
+            unused_params = strategies_params
+
+            for param in unused_params:
+                if cfg.AGENTS_SETTINGS.get(param) is not None:
+                    logger.warning(f"Strategy {strategy} does not use {param}.")
+
+        if strategy == "osub" and cfg.RL_MODE != 1:
+            logger.critical(
+                f"Strategy {strategy} is not compatible with RL_MODE={cfg.RL_MODE}. Please set RL_MODE=1 for using this strategy."
             )
 
     str_settings = {
