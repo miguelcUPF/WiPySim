@@ -272,10 +272,11 @@ def validate_config(
                 "linucb",
                 "epsilon_greedy",
                 "decay_epsilon_greedy",
+                "ucb",
                 "e2tc",
             ]:
                 logger.critical(
-                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy' or 'decay_epsilon_greedy'."
+                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy', 'decay_epsilon_greedy', 'ucb' or 'e2tc'."
                 )
 
         if cfg.AGENTS_SETTINGS.get("channel_frequency", None):
@@ -423,8 +424,11 @@ def validate_config(
         if strategy in [
             "sw_linucb",
             "linucb",
+            "ucb",
         ]:
-            used_params = ["alpha", "window_size"]
+            used_params = (
+                ["alpha", "window_size"] if strategy == "sw_linucb" else ["alpha"]
+            )
 
             unused_params = [
                 param for param in strategies_params if param not in used_params
@@ -437,12 +441,15 @@ def validate_config(
             # Validation rules: (type, min_val, max_val, inclusive_min, inclusive_max)
             param_validations = {
                 "alpha": ((float, int), 0, None, False, None),  # (0, ∞)
-                "window_size": ((int, None), 0, None, True, None),  # [0, ∞)
             }
+            if strategy == "sw_linucb":
+                param_validations["window_size"] = (
+                    ((int, None), 0, None, True, None),
+                )  # [0, ∞)
 
             _param_validation(param_validations)
 
-        if strategy == "linucb":
+        if strategy in ["linucb", "ucb"]:
             if cfg.AGENTS_SETTINGS.get("window_size") is not None:
                 logger.warning(f"Strategy {strategy} does not use window_size.")
 

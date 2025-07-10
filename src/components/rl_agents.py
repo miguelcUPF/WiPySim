@@ -39,8 +39,91 @@ META_MAP_multifreq = {
 }  # (CSA_freq, PCSA_freq, CWSA_freq)
 
 
-MIN_REWARD = -10e3 # equal to CH_ACCESS_TIMEOUT_us
+MIN_REWARD = -10e3  # equal to CH_ACCESS_TIMEOUT_us
 MAX_REWARD = 0
+
+
+class UCB:
+    def __init__(
+        self,
+        name: str,
+        n_actions: int,
+        marl_controller,
+        weights_r: dict[str, float] = None,
+        alpha: float = 4.0,  # alpha = 4 for UCB-1
+        min_val: float = MIN_REWARD,
+        max_val: float = MAX_REWARD,
+        rng: random.Random | None = None,
+    ):
+        self.name = name
+        self.n_actions = n_actions
+
+        self.marl_controller = marl_controller
+
+        self.weights_r = weights_r or {}  # Used if decomposition enabled
+
+        self.alpha = alpha
+
+        self.counts = np.zeros(n_actions)  # Number of pulls per arm
+        self.values = np.zeros(n_actions)  # Average reward per arm
+        self.time_step = 0
+
+        # Normalization
+        self.min_val = min_val
+        self.max_val = max_val
+
+        self.rng = rng
+
+    def _normalize_reward(self, reward):
+        # Clipping
+        clipped_reward = max(min(reward, self.max_val), self.min_val)
+
+        # Normalize the reward to the range [0, 1]
+        normalized_reward = (clipped_reward - self.min_val) / (
+            self.max_val - self.min_val
+        )
+
+        return normalized_reward
+
+    def select_action(self, valid_actions=None):
+        if valid_actions is None:
+            valid_actions = list(range(self.n_actions))
+
+        self.time_step += 1
+
+        # Pull each arm once if not pulled yet
+        for a in valid_actions:
+            if self.counts[a] == 0:
+                return a
+
+        ucb_values = np.full(self.n_actions, -np.inf)
+        for a in valid_actions:
+            ucb_values[a] = self.values[a] + np.sqrt(
+                self.alpha * np.log(self.time_step) / (2 * self.counts[a])
+            )
+
+        max_ucb = np.max(ucb_values)
+        candidate_actions = [a for a in valid_actions if ucb_values[a] == max_ucb]
+
+        action = (
+            self.rng.choice(candidate_actions)
+            if self.rng
+            else np.random.choice(candidate_actions)
+        )
+        return action
+
+    def update(self, action, reward):
+        reward = self._normalize_reward(reward)
+        self.counts[action] += 1
+        n = self.counts[action]
+
+        # Update running average
+        self.values[action] = ((n - 1) / n) * self.values[action] + (1 / n) * reward
+
+    def reset(self):
+        self.counts = np.zeros(self.n_actions)
+        self.values = np.zeros(self.n_actions)
+        self.time_step = 0
 
 
 # https://arxiv.org/pdf/1003.0146
@@ -139,6 +222,7 @@ class SWLinUCB:
         return normalized_reward
 
     def select_action(self, context, valid_actions=None):
+        print(valid_actions)
         if self.strategy == "linucb":
             return self._linucb(context, valid_actions)
         elif self.strategy == "sw_linucb":
@@ -224,8 +308,12 @@ class EpsRMSProp:
         if valid_actions is None:
             valid_actions = list(range(self.n_actions))
 
-        if self.rng.random() < self.epsilon:
-            action = self.rng.choice(valid_actions)  # Explore
+        if (self.rng.random() if self.rng else np.random.random()) < self.epsilon:
+            action = (
+                self.rng.choice(valid_actions)
+                if self.rng
+                else np.random.choice(valid_actions)
+            )  # Explore
         else:
             preds = self.weight_matrix_ema @ context
             # Create a masked array with -inf for invalid actions to prevent them from being selected
@@ -301,6 +389,7 @@ class E2TC:
         name: str,
         actions: np.ndarray,
         marl_controller,
+        weights_r: dict[str, float] = None,
         T=2 * 10**4,
         sigma2=1 / 4,
         alpha=1,  # recommended between 1 and 3; best alpha=1
@@ -354,7 +443,10 @@ class E2TC:
         d = len(actions[0])
 
         self.name = name
+
         self.marl_controller = marl_controller
+
+        self.weights_r = weights_r or {}  # Used if decomposition enabled
 
         self.actions = np.array([a for a in actions])
         self.base = select_diverse_base(self.actions, d, rng)
@@ -525,6 +617,8 @@ class MARLController:
             agent_class = SWLinUCB
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
             agent_class = EpsRMSProp
+        elif strategy in ["ucb"]:
+            agent_class = UCB
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
@@ -601,6 +695,17 @@ class MARLController:
                         "window_size": settings.get("window_size", None),
                     }
                 )
+        elif agent_class == UCB:
+            for param in [channel_params, primary_params, cw_params, meta_params]:
+                param.update(
+                    {
+                        "alpha": settings.get("alpha", 4.0),
+                        "min_val": settings.get("min_val", MIN_REWARD),
+                        "max_val": settings.get("max_val", MAX_REWARD),
+                    }
+                )
+                param.pop("context_dim", None)
+                param.pop("strategy", None)
 
         self.channel_agent = agent_class(
             **channel_params, marl_controller=self, rng=env.rng
@@ -650,7 +755,12 @@ class MARLController:
             self.channel_emissions_tracker.start()
 
         self.last_channel_context = context
-        action = self.channel_agent.select_action(context)
+
+        if isinstance(self.channel_agent, UCB):
+            action = self.channel_agent.select_action()
+        else:
+            action = self.channel_agent.select_action(context)
+
         self.last_channel_action = action
         self.logger.debug(
             f"{self.node.type} {self.node.id} -> Channel action: {action}"
@@ -667,7 +777,12 @@ class MARLController:
 
         self.last_primary_context = context
         valid_actions = [c - 1 for c in allocated_channels]
-        action = self.primary_agent.select_action(context, valid_actions)
+
+        if isinstance(self.primary_agent, UCB):
+            action = self.primary_agent.select_action(valid_actions)
+        else:
+            action = self.primary_agent.select_action(context, valid_actions)
+
         self.last_primary_action = action
         self.logger.debug(
             f"{self.node.type} {self.node.id} -> Primary action: {action}"
@@ -683,7 +798,12 @@ class MARLController:
             self.cw_emissions_tracker.start()
 
         self.last_cw_context = context
-        action = self.cw_agent.select_action(context)
+
+        if isinstance(self.cw_agent, UCB):
+            action = self.cw_agent.select_action()
+        else:
+            action = self.cw_agent.select_action(context)
+
         self.last_cw_action = action
         self.logger.debug(f"{self.node.type} {self.node.id} -> CW action: {action}")
 
@@ -697,7 +817,12 @@ class MARLController:
             self.meta_emissions_tracker.start()
 
         self.last_meta_context = context
-        action = self.meta_agent.select_action(context)
+
+        if isinstance(self.meta_agent, UCB):
+            action = self.meta_agent.select_action()
+        else:
+            action = self.meta_agent.select_action(context)
+
         self.last_meta_action = action
         self.logger.debug(f"{self.node.type} {self.node.id} -> Meta action: {action}")
 
@@ -723,9 +848,12 @@ class MARLController:
 
         if self.channel_emissions_tracker:
             self.channel_emissions_tracker.start()
-        self.channel_agent.update(
-            self.last_channel_context, self.last_channel_action, reward
-        )  # update
+        if isinstance(self.channel_agent, UCB):
+            self.channel_agent.update(self.last_channel_action, reward)
+        else:
+            self.channel_agent.update(
+                self.last_channel_context, self.last_channel_action, reward
+            )  # update
         if self.channel_emissions_tracker:
             self.channel_emissions_tracker.stop()
 
@@ -743,9 +871,12 @@ class MARLController:
 
         if self.primary_emissions_tracker:
             self.primary_emissions_tracker.start()
-        self.primary_agent.update(
-            self.last_primary_context, self.last_primary_action, reward
-        )  # update
+        if isinstance(self.primary_agent, UCB):
+            self.primary_agent.update(self.last_primary_action, reward)
+        else:
+            self.primary_agent.update(
+                self.last_primary_context, self.last_primary_action, reward
+            )  # update
         if self.primary_emissions_tracker:
             self.primary_emissions_tracker.stop()
 
@@ -754,7 +885,7 @@ class MARLController:
     def update_cw_agent(self, delay_components: dict = None):
         if delay_components is None:
             reward = MIN_REWARD
-            
+
         elif self.cfg.ENABLE_REWARD_DECOMPOSITION:
             reward = self._compute_weighted_reward(
                 delay_components, self.cw_agent.weights_r
@@ -764,9 +895,12 @@ class MARLController:
 
         if self.cw_emissions_tracker:
             self.cw_emissions_tracker.start()
-        self.cw_agent.update(
-            self.last_cw_context, self.last_cw_action, reward
-        )  # update
+        if isinstance(self.cw_agent, UCB):
+            self.cw_agent.update(self.last_cw_action, reward)
+        else:
+            self.cw_agent.update(
+                self.last_cw_context, self.last_cw_action, reward
+            )  # update
         if self.cw_emissions_tracker:
             self.cw_emissions_tracker.stop()
 
@@ -783,12 +917,15 @@ class MARLController:
             )
         else:
             reward = -sum(delay_components.values())
-        
+
         if self.meta_emissions_tracker:
             self.meta_emissions_tracker.start()
-        self.meta_agent.update(
-            self.last_meta_context, self.last_meta_action, reward
-        )  # update
+        if isinstance(self.meta_agent, UCB):
+            self.meta_agent.update(self.last_meta_action, reward)
+        else:
+            self.meta_agent.update(
+                self.last_meta_context, self.last_meta_action, reward
+            )  # update
         if self.meta_emissions_tracker:
             self.meta_emissions_tracker.stop()
 
@@ -891,6 +1028,8 @@ class SARLController:
             agent_class = SWLinUCB
         elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
             agent_class = EpsRMSProp
+        elif strategy in ["ucb"]:
+            agent_class = UCB
         elif strategy in ["e2tc"]:
             agent_class = E2TC
         else:
@@ -941,6 +1080,16 @@ class SARLController:
                     "window_size": settings.get("window_size", None),
                 }
             )
+        elif agent_class == UCB:
+            agent_params.update(
+                {
+                    "alpha": settings.get("alpha", 4.0),
+                    "min_val": settings.get("min_val", MIN_REWARD),
+                    "max_val": settings.get("max_val", MAX_REWARD),
+                }
+            )
+            agent_params.pop("context_dim", None)
+            agent_params.pop("strategy", None)
         elif agent_class == E2TC:
             agent_params = {
                 "name": "joint_agent",
@@ -970,7 +1119,7 @@ class SARLController:
         if self.emissions_tracker:
             self.emissions_tracker.start()
 
-        if isinstance(self.joint_agent, E2TC):
+        if isinstance(self.joint_agent, E2TC) or isinstance(self.joint_agent, UCB):
             action_idx = self.joint_agent.select_action()
         else:
             self.last_context = context
@@ -999,6 +1148,8 @@ class SARLController:
 
         if isinstance(self.joint_agent, E2TC):
             self.joint_agent.update(reward)
+        elif isinstance(self.joint_agent, UCB):
+            self.joint_agent.update(self.last_action_idx, reward)
         else:
             self.joint_agent.update(self.last_context, self.last_action_idx, reward)
 
