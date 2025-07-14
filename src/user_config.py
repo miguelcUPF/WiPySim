@@ -75,6 +75,9 @@ class UserConfig:
     # - T (optional, int): time horizon. Default: 2 * 10**4
 
     # only if "MARL":
+    # - enable_ch_agent (optional): whether to enable the channel agent. Default: True
+    # - enable_primary_agent (optional): whether to enable the primary agent. Default: True
+    # - enable_cw_agent (optional): whether to enable the cw agent. Default: True
     # - enable_meta_agent (optional): whether to enable the meta agent (i.e., agent that schedules how often the other agents should select actions, in transmissions attempts). Default: False
     # - enable_meta_agent_multifreq (optional): if True, meta agent outputs distinct frequencies for channel, primary, and cw agents. Default: False.
     # - meta_agent_start_time_us (optional): time in simulation units after which meta agent is active if enabled. Default: 0.
