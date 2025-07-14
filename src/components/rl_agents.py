@@ -222,7 +222,6 @@ class SWLinUCB:
         return normalized_reward
 
     def select_action(self, context, valid_actions=None):
-        print(valid_actions)
         if self.strategy == "linucb":
             return self._linucb(context, valid_actions)
         elif self.strategy == "sw_linucb":
