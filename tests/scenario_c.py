@@ -185,6 +185,12 @@ if __name__ == "__main__":
                 if ap.mac_layer.rl_controller
                 else None
             )
+        if STRATEGY in ["epsilon_greedy", "decay_epsilon_greedy"]:
+            (
+                ap.mac_layer.rl_controller.log_eps_weight_matrix()
+                if ap.mac_layer.rl_controller
+                else None
+            )
 
     if cfg_module.USE_CODECARBON:
         if DISPLAY_AGENTS_EMISSIONS:

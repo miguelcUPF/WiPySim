@@ -1113,6 +1113,18 @@ class MARLController:  # only for multi agent
     def update_tx_duration(self, delay_components: dict):
         self.results.append(sum(delay_components.values()))
 
+    def log_eps_weight_matrix(self):
+        if wandb.run:
+            wandb.run.summary["channel_weight_matrix"] = (
+                self.channel_agent.weight_matrix.tolist()
+            )
+            wandb.run.summary["primary_weight_matrix"] = (
+                self.primary_agent.weight_matrix.tolist()
+            )
+            wandb.run.summary["cw_weight_matrix"] = self.cw_agent.weight_matrix.tolist()
+            if self.meta_agent:
+                wandb.run.summary["meta_weight_matrix"] = self.meta_agent.weight_matrix.tolist()
+
     def log_emissions_data(self):
         if wandb.run:
             wandb.run.summary["channel_emissions"] = (
@@ -1339,6 +1351,10 @@ class SARLController:
 
     def update_tx_duration(self, delay_components: dict):
         self.results.append(sum(delay_components.values()))
+
+    def log_eps_weight_matrix(self):
+        if wandb.run:
+            wandb.run.summary["joint_weight_matrix"] = self.joint_agent.weight_matrix.tolist()
 
     def log_emissions_data(self):
         if wandb.run:
