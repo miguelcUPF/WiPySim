@@ -6,9 +6,17 @@ from src.traffic.recorder import TrafficRecorder
 from src.utils.data_units import Packet
 
 import simpy
+import wandb
+
 
 class APP:
-    def __init__(self, cfg: cfg_module, sparams: sparams_module, env: simpy.Environment, node: Node):
+    def __init__(
+        self,
+        cfg: cfg_module,
+        sparams: sparams_module,
+        env: simpy.Environment,
+        node: Node,
+    ):
         self.cfg = cfg
         self.sparams = sparams
         self.env = env
@@ -27,6 +35,13 @@ class APP:
     def packet_from_mac(self, packet: Packet):
         packet.reception_time_us = self.env.now
 
-        self.node.rx_stats.add_packet_to_history(packet)
+        if wandb.run:
+            wandb.log(
+                {
+                    f"node_{self.node.id}/rx_stats/packet_delay_us": packet.reception_time_us
+                    - packet.creation_time_us,
+                    "env_time_us": self.env.now,
+                }
+            )
 
-        
+        self.node.rx_stats.add_packet_to_history(packet)
