@@ -503,7 +503,11 @@ def validate_config(
             }
             if strategy == "sw_linucb":
                 param_validations["window_size"] = (
-                    ((int, None), 0, None, True, None),
+                    (int, None),
+                    0,
+                    None,
+                    True,
+                    None,
                 )  # [0, ∞)
 
             _param_validation(param_validations)
