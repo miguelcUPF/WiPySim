@@ -583,15 +583,20 @@ class E2TC:  # only for single agent
         self.b = int(a + self.Ne)
 
 
-class OSUB:
+class OSUB:  # only for multi agent
     def __init__(
         self,
         name: str,
         n_actions: int,
         marl_controller,
+        strategy: str = "sw_osub",
         weights_r: dict[str, float] = None,
+        actions: dict = None,
+        is_linear: bool = True,
+        prob: float = 0.05,
         min_val: float = MIN_REWARD,
         max_val: float = MAX_REWARD,
+        window_size: int | None = None,
         rng: random.Random | None = None,
     ):
         self.name = name
@@ -599,12 +604,24 @@ class OSUB:
 
         self.marl_controller = marl_controller
 
+        self.strategy = strategy
+
         self.weights_r = weights_r or {}
+
+        self.is_linear = is_linear
+        self.actions = actions
+        self.prob = prob  # to avoid strong correlation across agents
 
         self.counts = np.zeros(n_actions)
         self.rewards = np.zeros(n_actions)
 
         self.t = 1
+
+        self.window_size = window_size if window_size is not None else n_actions
+        if self.strategy == "sw_osub":
+            self.history = deque(
+                maxlen=window_size + 1
+            )  # store (action, reward) tuples
 
         # Normalization
         self.min_val = min_val
@@ -612,7 +629,7 @@ class OSUB:
 
         self.rng = rng
 
-    def get_neighbors(self, k):
+    def get_linear_neighbors(self, k):
         # assuming a linear action space
         if k == 0:
             return [0, 1]
@@ -620,6 +637,23 @@ class OSUB:
             return [self.n_actions - 2, self.n_actions - 1]
         else:
             return [k - 1, k, k + 1]
+
+    def get_action_neighbors(self, k):
+        # considering each action sharing a subset of actions as neighbors
+        target_actions = self.actions[k]
+        neighbors = [k]
+
+        for other_k, other_actions in self.actions.items():
+            if other_k != k and target_actions & other_actions:
+                neighbors.append(other_k)
+
+        return neighbors
+
+    def get_neighbors(self, k):
+        if self.is_linear:
+            return self.get_linear_neighbors(k)
+        else:
+            return self.get_action_neighbors(k)
 
     def kl_ucb_index(self, m, n, t):
         if n == 0:
@@ -639,21 +673,40 @@ class OSUB:
         # Newton's method
         f = n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(t)
         while np.abs(f) > 1e-5:
-            fprime = n * (-m / q + (1 - m) / (1 - q))
-            q -= f / fprime
-            # Recompute f after step
             f = n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(
                 t
             )
-
+            fprime = n * (-m / q + (1 - m) / (1 - q))
+            q -= f / fprime
         return q
 
+    def _sliding_window_stats(self):
+        counts = np.zeros(self.n_actions)
+        rewards = np.zeros(self.n_actions)
+
+        for a, r in self.history:
+            counts[a] += 1
+            rewards[a] += r
+
+        mu_hat = rewards / np.maximum(counts, 1)
+
+        return mu_hat, counts
+
     def select_action(self, valid_actions=None):
+        if self.strategy in "osub" or "sw_osub":
+            return self._select_action(valid_actions)
+        else:
+            raise ValueError(f"Unknown strategy {self.strategy}")
+
+    def _select_action(self, valid_actions=None):
         if valid_actions is None:
             valid_actions = list(range(self.n_actions))
 
-        # compute empirical means only for valid actions
-        mu_hat = self.rewards / np.maximum(1, self.counts)
+        if self.strategy == "sw_osub":
+            mu_hat, counts = self._sliding_window_stats()
+        else:
+            mu_hat = self.rewards / np.maximum(self.counts, 1)
+            counts = self.counts
 
         # Mask invalid actions for leader selection
         masked_means = np.full(self.n_actions, -np.inf)
@@ -664,7 +717,10 @@ class OSUB:
         N = self.get_neighbors(leader)
         N = [a for a in N if a in valid_actions]
 
-        indices = [self.kl_ucb_index(mu_hat[k], self.counts[k], self.t) for k in N]
+        if self.rng.random() < self.prob:
+            return self.rng.choice(N)
+
+        indices = [self.kl_ucb_index(mu_hat[k], counts[k], self.t) for k in N]
 
         max_idx = np.argmax(indices)
         action = N[max_idx]
@@ -676,14 +732,21 @@ class OSUB:
         return (clipped_reward - self.min_val) / (self.max_val - self.min_val)
 
     def update(self, action, reward):
-        self.counts[action] += 1
-        self.rewards[action] += self._normalize_reward(reward)
+        norm_reward = self._normalize_reward(reward)
+
+        if self.strategy == "sw_osub":
+            self.history.append((action, norm_reward))
+        else:
+            self.counts[action] += 1
+            self.rewards[action] += norm_reward
         self.t += 1
 
     def reset(self):
         self.counts = np.zeros(self.n_actions)
         self.rewards = np.zeros(self.n_actions)
         self.t = 1
+        if self.strategy == "sw_osub":
+            self.history.clear()
 
 
 class MARLController:  # only for multi agent
@@ -721,7 +784,7 @@ class MARLController:  # only for multi agent
             agent_class = EpsRMSProp
         elif strategy in ["ucb"]:
             agent_class = UCB
-        elif strategy in ["osub"]:
+        elif strategy in ["osub", "sw_osub"]:
             agent_class = OSUB
         else:
             raise ValueError(f"Unknown strategy {strategy}")
@@ -816,10 +879,12 @@ class MARLController:  # only for multi agent
                     {
                         "min_val": settings.get("min_val", MIN_REWARD),
                         "max_val": settings.get("max_val", MAX_REWARD),
+                        "window_size": settings.get("window_size", None),
                     }
                 )
+                if param["name"] == "channel_agent":
+                    param.update({"is_linear": False, "actions": CHANNEL_MAP})
                 param.pop("context_dim", None)
-                param.pop("strategy", None)
 
         self.channel_agent = agent_class(
             **channel_params, marl_controller=self, rng=env.rng

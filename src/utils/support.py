@@ -275,9 +275,10 @@ def validate_config(
                 "ucb",
                 "e2tc",
                 "osub",
+                "sw_osub",
             ]:
                 logger.critical(
-                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy', 'decay_epsilon_greedy', 'ucb', 'e2tc', or 'osub'."
+                    f"Invalid strategy: '{cfg.AGENTS_SETTINGS.get('strategy', None)}'. It must be 'sw_linucb', 'linucb', 'epsilon_greedy', 'decay_epsilon_greedy', 'ucb', 'e2tc', 'osub', or 'sw_osub'."
                 )
 
         if cfg.AGENTS_SETTINGS.get("channel_frequency", None):
@@ -507,9 +508,9 @@ def validate_config(
 
             _param_validation(param_validations)
 
-        if strategy in ["linucb", "ucb"]:
-            if cfg.AGENTS_SETTINGS.get("window_size") is not None:
-                logger.warning(f"Strategy {strategy} does not use window_size.")
+            if strategy in ["linucb", "ucb"]:
+                if cfg.AGENTS_SETTINGS.get("window_size") is not None:
+                    logger.warning(f"Strategy {strategy} does not use window_size.")
 
         if strategy in [
             "epsilon_greedy",
@@ -563,14 +564,28 @@ def validate_config(
                 f"Strategy {strategy} is not compatible with RL_MODE={cfg.RL_MODE}. Please set RL_MODE=0 for using this strategy."
             )
 
-        if strategy == "osub":
-            unused_params = strategies_params
+        if strategy == "osub" or strategy == "sw_osub":
+            used_params = ["window_size"] if strategy == "sw_osub" else []
+
+            unused_params = [
+                param for param in strategies_params if param not in used_params
+            ]
 
             for param in unused_params:
                 if cfg.AGENTS_SETTINGS.get(param) is not None:
                     logger.warning(f"Strategy {strategy} does not use {param}.")
 
-        if strategy == "osub" and cfg.RL_MODE != 1:
+            param_validations = None
+
+            # Validation rules: (type, min_val, max_val, inclusive_min, inclusive_max)
+            if strategy == "sw_osub":
+                param_validations = {
+                    "window_size": ((int, None), 0, None, True, None)
+                }  # [0, ∞)
+
+            _param_validation(param_validations) if param_validations else None
+
+        if (strategy == "osub" or strategy == "sw_osub") and cfg.RL_MODE != 1:
             logger.critical(
                 f"Strategy {strategy} is not compatible with RL_MODE={cfg.RL_MODE}. Please set RL_MODE=1 for using this strategy."
             )

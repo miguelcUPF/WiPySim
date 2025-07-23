@@ -17,8 +17,8 @@ import simpy
 import json
 
 
-STRATEGY = "osub" # "e2tc", "osub"
-cfg_module.RL_MODE = 1  # only 0 (SARL) for E2TC and only 1 (MARL) for OSUB
+STRATEGY = "osub" # "e2tc", "osub", "sw_osub"
+cfg_module.RL_MODE = 1  # only 0 (SARL) for E2TC and only 1 (MARL) for OSUB and SW-OSUB
 
 cfg_module.SIMULATION_TIME_us = 10e6
 
