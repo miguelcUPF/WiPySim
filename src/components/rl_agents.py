@@ -620,7 +620,7 @@ class OSUB:  # only for multi agent
         self.window_size = window_size if window_size is not None else n_actions
         if self.strategy == "sw_osub":
             self.history = deque(
-                maxlen=window_size + 1
+                maxlen=self.window_size + 1
             )  # store (action, reward) tuples
 
         # Normalization
@@ -663,21 +663,39 @@ class OSUB:  # only for multi agent
         if m == 0.0:
             return 1.0 - (t ** (-1 / n))
 
+        epsilon = 1e-8
+        max_iter = 1000
+        threshold = 1e-5
+
         q = m
-        while (
-            n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(t)
-            < 0
-        ):
-            q = (q + 1) / 2
+        found = False
+
+        for _ in range(max_iter):
+            kl = n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q)))
+            if kl >= np.log(t):
+                found = True
+                break
+            q = (q + 1.0) / 2.0
+            q = min(max(q, epsilon), 1 - epsilon)
+
+        if not found:
+            return 1.0  # fallback
 
         # Newton's method
-        f = n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(t)
-        while np.abs(f) > 1e-5:
+        for _ in range(max_iter):
+            q = min(max(q, epsilon), 1 - epsilon)
             f = n * (m * np.log(m / q) + (1 - m) * np.log((1 - m) / (1 - q))) - np.log(
                 t
             )
             fprime = n * (-m / q + (1 - m) / (1 - q))
-            q -= f / fprime
+
+            if fprime == 0:
+                break
+
+            step = f / fprime
+            if abs(step) < threshold:
+                break
+            q -= step
         return q
 
     def _sliding_window_stats(self):
@@ -1123,7 +1141,9 @@ class MARLController:  # only for multi agent
             )
             wandb.run.summary["cw_weight_matrix"] = self.cw_agent.weight_matrix.tolist()
             if self.meta_agent:
-                wandb.run.summary["meta_weight_matrix"] = self.meta_agent.weight_matrix.tolist()
+                wandb.run.summary["meta_weight_matrix"] = (
+                    self.meta_agent.weight_matrix.tolist()
+                )
 
     def log_emissions_data(self):
         if wandb.run:
@@ -1354,7 +1374,9 @@ class SARLController:
 
     def log_eps_weight_matrix(self):
         if wandb.run:
-            wandb.run.summary["joint_weight_matrix"] = self.joint_agent.weight_matrix.tolist()
+            wandb.run.summary["joint_weight_matrix"] = (
+                self.joint_agent.weight_matrix.tolist()
+            )
 
     def log_emissions_data(self):
         if wandb.run:
