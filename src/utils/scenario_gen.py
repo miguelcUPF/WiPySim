@@ -20,8 +20,10 @@ def generate_random_network_deployment(
         traffic_model = rng.choice(["Poisson", "Bursty", "VR", "Full"])
         traffic = {
             "name": traffic_model,
-            "traffic_load_kbps": rng.uniform(10_000, 500_000),
+            
         }
+        if traffic_model != "Full":
+            traffic.update({"traffic_load_kbps": rng.uniform(10_000, 500_000)})
 
         if not disable_start_end:
             traffic.update(

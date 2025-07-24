@@ -12,7 +12,6 @@ import optuna.visualization as vis
 import random
 from optuna.importance import get_param_importances
 
-
 def style_plotly_as_matplotlib(fig, small_fonts=False):
     fig.update_layout(
         font=dict(family="DejaVu Serif", size=10 if small_fonts else 16, color="black"),
@@ -89,6 +88,9 @@ def objective(
             if agents_settings["window_size"] == -1:
                 agents_settings["window_size"] = None
 
+    elif strategy in ["ucb"]:
+        agents_settings["alpha"] = trial.suggest_float("alpha", 1.0, 10.0)
+        
     elif strategy in ["epsilon_greedy", "decay_epsilon_greedy"]:
         agents_settings["epsilon"] = trial.suggest_float("epsilon", 0.01, 0.3)
         agents_settings["eta"] = trial.suggest_float("eta", 1e-4, 1e-1, log=True)
@@ -96,10 +98,12 @@ def objective(
         agents_settings["alpha_ema"] = trial.suggest_float("alpha_ema", 0.01, 0.3)
         if strategy == "decay_epsilon_greedy":
             agents_settings["decay_rate"] = trial.suggest_float("decay_rate", 0.8, 1.0)
+    
+    elif strategy == "sw_osub":
+        agents_settings["window_size"] = trial.suggest_int("window_size", 0, 84)
 
-        agents_settings["channel_frequency"] = 1
-        agents_settings["primary_frequency"] = 1
-        agents_settings["cw_frequency"] = 1
+        if agents_settings["window_size"] == -1:
+            agents_settings["window_size"] = None
 
     for step, scenario in enumerate(training_scenarios):
         cfg = cfg_module()
@@ -157,8 +161,8 @@ def objective(
 
 N_TRIALS = 100
 SEED = 1  # or None
-RL_MODE = 0
-STRATEGY = "epsilon_greedy"
+RL_MODE = 1
+STRATEGY = "ucb"
 DISPLAY_STUDY_FIGS = True
 
 SIM_TIME_CHOICES = [1_000_000, 2_000_000, 4_000_000, 8_000_000]
@@ -174,7 +178,7 @@ if __name__ == "__main__":
     study = optuna.create_study(
         direction="minimize",
         study_name=f"{RL_MODE}_{STRATEGY}",
-        sampler=optuna.samplers.TPESampler(seed=SEED),
+        sampler=optuna.samplers.TPESampler(),
         pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=4),
     )  # minimize delay
 

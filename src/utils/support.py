@@ -356,8 +356,6 @@ def validate_config(
                     logger.critical(
                         f"Invalid enable_ch_agent: '{cfg.AGENTS_SETTINGS.get('enable_ch_agent', None)}'. It must be a boolean."
                     )
-        elif cfg.AGENTS_SETTINGS.get("enable_ch_agent", None) != False:
-            cfg.AGENTS_SETTINGS["enable_ch_agent"] = True
 
         if cfg.AGENTS_SETTINGS.get("enable_ch_agent", None) == False:
             if cfg.AGENTS_SETTINGS.get("channel_frequency", None) is not None:
@@ -377,8 +375,6 @@ def validate_config(
                     logger.critical(
                         f"Invalid enable_primary_agent: '{cfg.AGENTS_SETTINGS.get('enable_primary_agent', None)}'. It must be a boolean."
                     )
-        elif cfg.AGENTS_SETTINGS.get("enable_primary_agent", None) != False:
-            cfg.AGENTS_SETTINGS["enable_primary_agent"] = True
 
         if cfg.AGENTS_SETTINGS.get("enable_primary_agent", None) == False:
             if cfg.AGENTS_SETTINGS.get("primary_frequency", None) is not None:
@@ -396,8 +392,6 @@ def validate_config(
                     logger.critical(
                         f"Invalid enable_cw_agent: '{cfg.AGENTS_SETTINGS.get('enable_cw_agent', None)}'. It must be a boolean."
                     )
-        elif cfg.AGENTS_SETTINGS.get("enable_cw_agent", None) != False:
-            cfg.AGENTS_SETTINGS["enable_cw_agent"] = True
 
         if cfg.AGENTS_SETTINGS.get("enable_cw_agent", None) == False:
             if cfg.AGENTS_SETTINGS.get("cw_frequency", None) is not None:
@@ -873,10 +867,10 @@ def validate_config(
                         )
                     if (
                         model.get("traffic_load_kbps", None) is not None
-                        and not model["traffic_load_kbps"].is_integer()
+                        and not isinstance(model["traffic_load_kbps"], (int, float))
                     ):
                         logger.critical(
-                            f"Invalid traffic_load_kbps: {model['traffic_load_kbps']} in BSS {bss['id']}. It must be an integer."
+                            f"Invalid traffic_load_kbps: {model['traffic_load_kbps']} in BSS {bss['id']}. It must be an integer or float."
                         )
                     if model.get(
                         "max_packet_size_bytes", None

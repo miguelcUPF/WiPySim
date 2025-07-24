@@ -366,7 +366,7 @@ class MAC:
             return
 
         if self.rl_driven and self.rl_settings.get(
-            "enable_cw_agent", False
+            "enable_cw_agent", True
         ):  # if there is a CW selector agent
             self.backoff_slots = self.rng.randint(0, self.cw_current - 1)
         else:  # standard BEB behavior
@@ -1032,7 +1032,7 @@ class MAC:
             f"{self.node.type} {self.node.id} -> Channel agent selected action {ch_action}, channel changed to {CHANNEL_MAP[ch_action]}"
         )
 
-        if not self.rl_settings.get("enable_primary_agent", False):
+        if not self.rl_settings.get("enable_primary_agent", True):
             self.node.phy_layer.set_sensing_channels({list(CHANNEL_MAP[ch_action])[0]})
 
     def _run_primary_agent(self):
@@ -1206,17 +1206,17 @@ class MAC:
                 self.tx_counter = 0
                 (
                     self.rl_controller.update_channel_agent()
-                    if self.rl_settings.get("enable_ch_agent", False)
+                    if self.rl_settings.get("enable_ch_agent", True)
                     else None
                 )
                 (
                     self.rl_controller.update_primary_agent()
-                    if self.rl_settings.get("enable_primary_agent", False)
+                    if self.rl_settings.get("enable_primary_agent", True)
                     else None
                 )
                 (
                     self.rl_controller.update_cw_agent()
-                    if self.rl_settings.get("enable_cw_agent", False)
+                    if self.rl_settings.get("enable_cw_agent", True)
                     else None
                 )
                 if self.meta_agent_started:
@@ -1248,19 +1248,19 @@ class MAC:
                         )
                 else:
                     if self.tx_counter % self.ch_freq == 0 and self.rl_settings.get(
-                        "enable_ch_agent", False
+                        "enable_ch_agent", True
                     ):
                         self.rl_controller.update_channel_agent(
                             self._get_mean_last_delays(self.ch_freq)
                         )
                     if self.tx_counter % self.prim_freq == 0 and self.rl_settings.get(
-                        "enable_primary_agent", False
+                        "enable_primary_agent", True
                     ):
                         self.rl_controller.update_primary_agent(
                             self._get_mean_last_delays(self.prim_freq)
                         )
                     if self.tx_counter % self.cw_freq == 0 and self.rl_settings.get(
-                        "enable_cw_agent", False
+                        "enable_cw_agent", True
                     ):
                         self.rl_controller.update_cw_agent(
                             self._get_mean_last_delays(self.cw_freq)
@@ -1281,25 +1281,25 @@ class MAC:
         if not self.cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION:
             # All agents should perform their decisions at the beginning of the cycle...
             if self.tx_counter % self.ch_freq == 0 and self.rl_settings.get(
-                "enable_ch_agent", False
+                "enable_ch_agent", True
             ):
                 self._run_channel_agent()
             if self.tx_counter % self.prim_freq == 0 and self.rl_settings.get(
-                "enable_primary_agent", False
+                "enable_primary_agent", True
             ):
                 self._run_primary_agent()
             if self.tx_counter % self.cw_freq == 0 and self.rl_settings.get(
-                "enable_cw_agent", False
+                "enable_cw_agent", True
             ):
                 self._run_cw_agent()
         else:
             # Agents can perform their decisions at distinct phases in the cycle...
             if self.tx_counter % self.ch_freq == 0 and self.rl_settings.get(
-                "enable_ch_agent", False
+                "enable_ch_agent", True
             ):
                 self._run_channel_agent()
             if self.tx_counter % self.prim_freq == 0 and self.rl_settings.get(
-                "enable_primary_agent", False
+                "enable_primary_agent", True
             ):
                 self._run_primary_agent()
 
@@ -1309,7 +1309,7 @@ class MAC:
 
         if self.backoff_slots == 0 and not self.cts_timedout:
             if self.tx_counter % self.cw_freq == 0 and self.rl_settings.get(
-                "enable_cw_agent", False
+                "enable_cw_agent", True
             ):
                 self._run_cw_agent()
 

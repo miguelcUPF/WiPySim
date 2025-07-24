@@ -34,8 +34,8 @@ class UserConfig:
     }
     AGENTS_SETTINGS = {
         "strategy": "sw_linucb",
-        "channel_frequency": 8,
-        "primary_frequency": 4,
+        "channel_frequency": 1,
+        "primary_frequency": 1,
         "cw_frequency": 1,
         "epsilon": 0.1,
     }
