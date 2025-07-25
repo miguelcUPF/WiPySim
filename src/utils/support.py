@@ -952,10 +952,11 @@ def warn_overwriting_enabled_paths(cfg: cfg_module, logger: logging.Logger):
     input(PRESS_TO_CONTINUE_MSG)
 
 
-def validate_settings(cfg: cfg_module, sparams: sparams_module, logger: logging.Logger):
+def validate_settings(cfg: cfg_module, sparams: sparams_module, logger: logging.Logger, skip_warnings: bool = False):
     validate_params(sparams, logger)
     validate_config(cfg, sparams, logger)
-    warn_overwriting_enabled_paths(cfg, logger)
+    if not skip_warnings:
+        warn_overwriting_enabled_paths(cfg, logger)
 
 
 def initialize_network(
