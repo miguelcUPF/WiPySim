@@ -39,11 +39,11 @@ def generate_tasks():
         "sw_linucb": [0, 1],
         "epsilon_greedy": [0, 1],
     }
-    scenarios = ["A", "B"]
+    scenarios = ["A", "B", "C"]
     rl_driven_values = [0, 1]  # False, True
-    seeds = range(1, 20)
+    seeds = range(1, 21)
 
-    enable_channel_options = True
+    enable_channel_options = False
     channel_options = [
         [1],
         [2],
@@ -97,7 +97,7 @@ def generate_tasks():
 
 
 if __name__ == "__main__":
-    max_workers = 10
+    max_workers = 20
     tasks = generate_tasks()
 
     print(f"Launching {len(tasks)} parallel runs with up to {max_workers} workers...")
