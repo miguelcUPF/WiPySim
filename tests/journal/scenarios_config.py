@@ -129,19 +129,22 @@ def generate_random_flows_intervals(
 
 def build_bss(
     idx: int,
-    cfg: dict[str, Any],
+    bss_config: dict[str, Any],
     traffic_flows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build a BSS entry for the scenario."""
     return {
         "id": idx,
         "ap": {
-            "id": cfg["ap_id"],
-            "pos": cfg["ap_pos"],
-            "channels": cfg["channels"],
-            "primary_channel": cfg["channels"][0] if cfg["channels"] else None,
+            "id": bss_config["ap_id"],
+            "pos": bss_config["ap_pos"],
+            "channels": bss_config["channels"],
+            "primary_channel": (
+                bss_config["channels"][0] if bss_config["channels"] else None
+            ),
+            "rl_driven": bss_config.get("rl_driven", False),
         },
-        "stas": [{"id": cfg["sta_id"], "pos": cfg["sta_pos"]}],
+        "stas": [{"id": bss_config["sta_id"], "pos": bss_config["sta_pos"]}],
         "traffic_flows": traffic_flows,
     }
 
@@ -159,8 +162,8 @@ def build_scenario(
     full_buffer_indices = full_buffer_indices or set()
     scenario = []
 
-    for idx, cfg in enumerate(bss_configs, start=1):
-        ap_pos, sta_pos = cfg["ap_pos"], cfg["sta_pos"]
+    for idx, bss_config in enumerate(bss_configs, start=1):
+        ap_pos, sta_pos = bss_config["ap_pos"], bss_config["sta_pos"]
 
         # Generate flows
         if use_intervals:
@@ -172,13 +175,13 @@ def build_scenario(
             flows = generate_random_flows_intervals(
                 ap_pos,
                 sta_pos,
-                cfg["sta_id"],
+                bss_config["sta_id"],
                 seed * 10 + idx,
                 low_load_intervals=low_intervals,
             )
         else:
             flows = generate_random_flows_basic(
-                ap_pos, sta_pos, cfg["sta_id"], seed * 10 + idx, load_range
+                ap_pos, sta_pos, bss_config["sta_id"], seed * 10 + idx, load_range
             )
 
         # Force full-buffer APs
@@ -192,7 +195,7 @@ def build_scenario(
                     "traffic_load_kbps": None,
                 }
 
-        scenario.append(build_bss(idx, cfg, flows))
+        scenario.append(build_bss(idx, bss_config, flows))
 
     return scenario
 
@@ -431,7 +434,7 @@ def get_scenario(
         raise ValueError(f"Unknown scenario: {name}")
 
     # Manually override the AP channels and primary channel
-    if baseline_channels:
+    if baseline_channels is not None:
         if name in ["A", "B"]:  # Override AP 1's channels and primary channel
             scenario[0]["ap"]["channels"] = baseline_channels
             scenario[0]["ap"]["primary_channel"] = baseline_channels[0]
