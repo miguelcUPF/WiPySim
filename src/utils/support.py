@@ -733,19 +733,32 @@ def validate_config(
                     logger.critical(
                         f"AP {ap_id} in BSS {bss['id']} has duplicate entries in 'channels': {channels}."
                     )
-                if max(channels) > sparams.NUM_CHANNELS:
+                if len(channels) == 0:
                     logger.critical(
-                        f"AP {ap_id} in BSS {bss['id']} has channels that exceed the number of channels configured in the simulation ({sparams.NUM_CHANNELS}): {channels}. Please adjust the number of channels in 'sim_params.py'."
+                        f"AP {ap_id} in BSS {bss['id']} has an empty 'channels' list. "
+                        f"Please specify at least one valid channel in 'channels' even if 'rl_driven' is set to True."
                     )
-                channels_bw = len(channels) * 20
-                if channels_bw not in VALID_BONDS.keys():
-                    logger.critical(
-                        f"AP {ap_id} in BSS {bss['id']} has an invalid number of channels: {channels_bw}. The simulator supports bonds of 20, 40, 80, and 160; thus, up to 8 channels."
-                    )
-                if set(channels) not in VALID_BONDS[channels_bw]:
-                    logger.critical(
-                        f"AP {ap_id} in BSS {bss['id']} has an invalid set of channels: {channels}. Valid bonds considering a bond of {channels_bw} MHz are: {VALID_BONDS[channels_bw]}."
-                    )
+                if "rl_driven" in bss["ap"] and not bss["ap"]["rl_driven"]:
+                    if min(channels) < 1:
+                        logger.critical(
+                            f"AP {ap_id} in BSS {bss['id']} has channels that are less than 1: {channels}."
+                        )
+                    if (
+                        max(channels) > sparams.NUM_CHANNELS
+                        and not "rl_driven" in bss["ap"]
+                    ):
+                        logger.critical(
+                            f"AP {ap_id} in BSS {bss['id']} has channels that exceed the number of channels configured in the simulation ({sparams.NUM_CHANNELS}): {channels}. Please adjust the number of channels in 'sim_params.py'."
+                        )
+                    channels_bw = len(channels) * 20
+                    if channels_bw not in VALID_BONDS.keys():
+                        logger.critical(
+                            f"AP {ap_id} in BSS {bss['id']} has an invalid number of channels: {channels_bw}. The simulator supports bonds of 20, 40, 80, and 160; thus, up to 8 channels."
+                        )
+                    if set(channels) not in VALID_BONDS[channels_bw]:
+                        logger.critical(
+                            f"AP {ap_id} in BSS {bss['id']} has an invalid set of channels: {channels}. Valid bonds considering a bond of {channels_bw} MHz are: {VALID_BONDS[channels_bw]}."
+                        )
 
             if "primary_channel" in bss["ap"]:
                 if not "channels" in bss["ap"]:
@@ -865,9 +878,10 @@ def validate_config(
                         logger.critical(
                             f"Invalid end_time_us: {model['end_time_us']} in BSS {bss['id']}. It must be an integer."
                         )
-                    if (
-                        model.get("traffic_load_kbps", None) is not None
-                        and not isinstance(model["traffic_load_kbps"], (int, float))
+                    if model.get(
+                        "traffic_load_kbps", None
+                    ) is not None and not isinstance(
+                        model["traffic_load_kbps"], (int, float)
                     ):
                         logger.critical(
                             f"Invalid traffic_load_kbps: {model['traffic_load_kbps']} in BSS {bss['id']}. It must be an integer or float."
@@ -952,7 +966,12 @@ def warn_overwriting_enabled_paths(cfg: cfg_module, logger: logging.Logger):
     input(PRESS_TO_CONTINUE_MSG)
 
 
-def validate_settings(cfg: cfg_module, sparams: sparams_module, logger: logging.Logger, skip_warnings: bool = False):
+def validate_settings(
+    cfg: cfg_module,
+    sparams: sparams_module,
+    logger: logging.Logger,
+    skip_warnings: bool = False,
+):
     validate_params(sparams, logger)
     validate_config(cfg, sparams, logger)
     if not skip_warnings:

@@ -16,32 +16,32 @@ STRATEGY = os.environ.get("STRATEGY", "sw_linucb")
 RL_MODE = int(os.environ.get("RL_MODE", 1))
 SEED = int(os.environ.get("SEED", 1))
 SCENARIO = os.environ.get("SCENARIO", "A")
-ALL_RL_DRIVEN = int(os.environ.get("ALL_RL_DRIVEN", 0))
-AP1_CHANNELS_ENV = os.environ.get("AP1_CHANNELS", None)
-WANDB_RUN_NAME = os.environ.get(
-    "WANDB_RUN_NAME", f"{SCENARIO}_all{ALL_RL_DRIVEN}_{STRATEGY}_rl{RL_MODE}_seed{SEED}"
-)
+BASELINE_CHANNELS = os.environ.get("BASELINE_CHANNELS", None)
+WANDB_RUN_NAME = os.environ.get("WANDB_RUN_NAME", f"{STRATEGY}_rl{RL_MODE}_seed{SEED}")
 
 # Config
-cfg_module.RL_MODE = RL_MODE
-cfg_module.SEED = SEED
-cfg_module.WANDB_RUN_NAME = WANDB_RUN_NAME
-cfg_module.SIMULATION_TIME_us = 120e6
-cfg_module.ENABLE_RL = True
-cfg_module.FIRST_AS_PRIMARY = True
-cfg_module.ENABLE_CONSOLE_LOGGING = False
-cfg_module.DISABLE_SIMULTANEOUS_ACTION_SELECTION = False
-cfg_module.ENABLE_REWARD_DECOMPOSITION = False
-cfg_module.ENABLE_ADVANCED_NETWORK_CONFIG = True
-cfg_module.ENABLE_STATS_COMPUTATION = False
-cfg_module.USE_WANDB = True
-cfg_module.USE_CODECARBON = False
-cfg_module.WANDB_PROJECT_NAME = "journal-wipysim"
+cfg = cfg_module()
+sparams = sparams_module()
+
+cfg.RL_MODE = RL_MODE
+cfg.SEED = SEED
+cfg.WANDB_RUN_NAME = WANDB_RUN_NAME
+cfg.SIMULATION_TIME_us = 60e6
+cfg.ENABLE_RL = True
+cfg.FIRST_AS_PRIMARY = True
+cfg.ENABLE_CONSOLE_LOGGING = False
+cfg.DISABLE_SIMULTANEOUS_ACTION_SELECTION = False
+cfg.ENABLE_REWARD_DECOMPOSITION = False
+cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
+cfg.ENABLE_STATS_COMPUTATION = False
+cfg.USE_WANDB = True
+cfg.USE_CODECARBON = False
+cfg.WANDB_PROJECT_NAME = f"journal-runs-wipysim{SCENARIO}"
 
 # CW & Channels
-sparams_module.CW_MIN = 16
-sparams_module.CW_MAX = 2**6 * sparams_module.CW_MIN
-sparams_module.NUM_CHANNELS = 4
+sparams.CW_MIN = 16
+sparams.CW_MAX = 2**6 * sparams.CW_MIN
+sparams.NUM_CHANNELS = 4
 
 # Agent settings
 settings_mapping = {
@@ -60,7 +60,7 @@ settings_mapping = {
         "ucb": {"strategy": STRATEGY, "alpha": 1.14},
         "osub": {"strategy": STRATEGY},
         "sw_osub": {"strategy": STRATEGY, "window_size": 71},
-        "sw_linucb": {"strategy": STRATEGY, "alpha": 0.361, "window_size": 30},
+        "sw_linucb": {"strategy": STRATEGY, "alpha": 0.52, "window_size": 0},
         "epsilon_greedy": {
             "strategy": STRATEGY,
             "epsilon": 0.038,
@@ -72,38 +72,38 @@ settings_mapping = {
 }
 
 if STRATEGY in settings_mapping[RL_MODE]:
-    cfg_module.AGENTS_SETTINGS = settings_mapping[RL_MODE][STRATEGY]
+    cfg.AGENTS_SETTINGS = settings_mapping[RL_MODE][STRATEGY]
 
-ap1_channels = None
-if AP1_CHANNELS_ENV:
-    ap1_channels = [int(ch) for ch in AP1_CHANNELS_ENV.split(",")]
+baseline_channels = None
+if BASELINE_CHANNELS:
+    baseline_channels = [int(ch) for ch in BASELINE_CHANNELS.split(",")]
 
 # Scenario
-cfg_module.BSSs_Advanced = get_scenario(
-    SCENARIO, all_rl_driven=ALL_RL_DRIVEN, ap1_channels=ap1_channels, seed=SEED
+cfg.BSSs_Advanced = get_scenario(
+    SCENARIO, baseline_channels=baseline_channels, seed=SEED
 )
 
 DISPLAY_AGENTS_EMISSIONS = True
 DISPLAY_SIMULATION_EMISSIONS = True
 
 emissions_tracker = (
-    EmissionsTracker(project_name="simulation") if cfg_module.USE_CODECARBON else None
+    EmissionsTracker(project_name="simulation") if cfg.USE_CODECARBON else None
 )
 
 if __name__ == "__main__":
-    logger = get_logger("TEST", cfg_module, sparams_module)
+    logger = get_logger("TEST", cfg, sparams)
     logger.disabled = True
 
-    validate_settings(cfg_module, sparams_module, logger, skip_warnings=True)
-    wandb_init(cfg_module)
+    validate_settings(cfg, sparams, logger, skip_warnings=True)
+    wandb_init(cfg)
 
     env = simpy.Environment()
-    network = initialize_network(cfg_module, sparams_module, env)
+    network = initialize_network(cfg, sparams, env)
 
     if emissions_tracker:
         emissions_tracker.start()
 
-    env.run(until=cfg_module.SIMULATION_TIME_us)
+    env.run(until=cfg.SIMULATION_TIME_us)
 
     if emissions_tracker:
         emissions_tracker.stop()
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     network.stats.collect_stats()
 
     for ap in network.get_aps():
-        if cfg_module.USE_CODECARBON:
+        if cfg.USE_CODECARBON:
             if ap.mac_layer.rl_controller:
                 ap.mac_layer.rl_controller.log_emissions_data()
         if STRATEGY in ["epsilon_greedy", "decay_epsilon_greedy"]:

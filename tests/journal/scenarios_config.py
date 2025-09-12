@@ -33,72 +33,180 @@ def get_unique_position(
             return pos
 
 
-def generate_random_flows(
+def _create_flow(
+    rng: random.Random,
+    dst_id: int,
+    max_load_kbps: float,
+    start_us: int,
+    end_us: int,
+    load_range: tuple[float, float],
+):
+    traffic_models = ["Poisson", "Bursty", "VR"]
+    model_name = rng.choice(traffic_models)
+    load = rng.uniform(*load_range) * max_load_kbps
+
+    model = {
+        "name": model_name,
+        "start_time_us": start_us,
+        "end_time_us": end_us,
+        "traffic_load_kbps": int(load),
+    }
+
+    if model_name == "Bursty":
+        model.update(
+            {
+                "burst_size_pkts": rng.randint(10, 40),
+                "avg_inter_packet_time_us": rng.randint(2, 10),
+            }
+        )
+    elif model_name == "VR":
+        model.update(
+            {
+                "fps": rng.choice([60, 90, 120]),
+                "avg_inter_packet_time_us": rng.randint(5, 10),
+            }
+        )
+
+    return {"destination": dst_id, "model": model}
+
+
+def _compute_max_load(
     ap_pos: tuple[float, float, float],
     sta_pos: tuple[float, float, float],
-    seed: int,
-    high_load_range: tuple[int, int] = (0.4, 0.8),
-    low_load_range: tuple[int, int] = (0, 0.2),
-    low_load_intervals: set[int] = set(),
-) -> list[dict[str, Any]]:
-    rng = random.Random(seed)
-    sparams = sparams_module
-    traffic_models = ["Poisson", "Bursty", "VR"]
-    intervals_us = [
-        (0, 40_000_000),
-        (40_000_000, 80_000_000),
-        (80_000_000, 120_000_000),
-    ]
-
-    # Estimate max capacity
+    rng: random.Random,
+):
+    sparams = sparams_module()
     distance_m = round(_calculate_distance(ap_pos, sta_pos), 2)
     rssi_dbm = get_rssi_dbm(sparams, distance_m, rng)
-    mcs_index = get_highest_mcs_index(rssi_dbm, 4 * 20)  # 4 channels max bandwidth
-    data_rate_bps = calculate_data_rate_bps(
-        mcs_index,
-        20,
-        sparams.SPATIAL_STREAMS,
-        sparams.GUARD_INTERVAL_us,
+    mcs_index = get_highest_mcs_index(rssi_dbm, 4 * 20)
+    return (
+        calculate_data_rate_bps(
+            mcs_index, 20, sparams.SPATIAL_STREAMS, sparams.GUARD_INTERVAL_us
+        )
+        / 1000
     )
-    max_load_kbps = data_rate_bps / 1000
+
+
+def generate_random_flows_basic(
+    ap_pos: tuple[float, float, float],
+    sta_pos: tuple[float, float, float],
+    dst_id: int,
+    seed: int,
+    load_range=(0.8, 0.9),
+):
+    rng = random.Random(seed)
+    max_load_kbps = _compute_max_load(ap_pos, sta_pos, rng)
+    return [_create_flow(rng, dst_id, max_load_kbps, 0, None, load_range)]
+
+
+def generate_random_flows_intervals(
+    ap_pos: tuple[float, float, float],
+    sta_pos: tuple[float, float, float],
+    dst_id: int,
+    seed: int,
+    high_load_range=(0.8, 0.9),
+    low_load_range=(0.1, 0.2),
+    low_load_intervals=None,
+):
+    rng = random.Random(seed)
+    max_load_kbps = _compute_max_load(ap_pos, sta_pos, rng)
+    low_load_intervals = low_load_intervals or set()
+    intervals_us = [
+        (0, 15_000_000),
+        (15_000_000, 30_000_000),
+        (30_000_000, 45_000_000),
+        (45_000_000, 60_000_000),
+    ]
 
     flows = []
     for i, (start_us, end_us) in enumerate(intervals_us):
-        model_name = rng.choice(traffic_models)
-        model = {
-            "name": model_name,
-            "start_time_us": start_us,
-            "end_time_us": end_us,
-        }
-
-        if i in low_load_intervals:
-            load = rng.uniform(low_load_range[0], low_load_range[1]) * max_load_kbps
-        else:
-            load = rng.uniform(high_load_range[0], high_load_range[1]) * max_load_kbps
-        model["traffic_load_kbps"] = int(load)
-
-        if model_name == "Bursty":
-            model["burst_size_pkts"] = rng.randint(10, 40)
-            model["avg_inter_packet_time_us"] = rng.randint(2, 10)
-        elif model_name == "VR":
-            model["fps"] = rng.choice([60, 90, 120])
-            model["avg_inter_packet_time_us"] = rng.randint(5, 10)
-
-        flows.append({"destination": None, "model": model})
+        load_range = low_load_range if i in low_load_intervals else high_load_range
+        flows.append(
+            _create_flow(rng, dst_id, max_load_kbps, start_us, end_us, load_range)
+        )
     return flows
+
+
+def build_bss(
+    idx: int,
+    cfg: dict[str, Any],
+    traffic_flows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build a BSS entry for the scenario."""
+    return {
+        "id": idx,
+        "ap": {
+            "id": cfg["ap_id"],
+            "pos": cfg["ap_pos"],
+            "channels": cfg["channels"],
+            "primary_channel": cfg["channels"][0] if cfg["channels"] else None,
+        },
+        "stas": [{"id": cfg["sta_id"], "pos": cfg["sta_pos"]}],
+        "traffic_flows": traffic_flows,
+    }
+
+
+def build_scenario(
+    bss_configs: list[dict[str, Any]],
+    seed: int = None,
+    use_intervals: bool = False,
+    full_buffer_indices: set[int] = None,
+    low_load_selector: callable = None,
+    load_range: tuple[float, float] = (0.8, 0.9),
+) -> list[dict[str, Any]]:
+    seed = seed or random.randint(0, 2**24)
+    rng = random.Random(seed)
+    full_buffer_indices = full_buffer_indices or set()
+    scenario = []
+
+    for idx, cfg in enumerate(bss_configs, start=1):
+        ap_pos, sta_pos = cfg["ap_pos"], cfg["sta_pos"]
+
+        # Generate flows
+        if use_intervals:
+            low_intervals = (
+                low_load_selector(rng, idx, len(bss_configs))
+                if low_load_selector
+                else None
+            )
+            flows = generate_random_flows_intervals(
+                ap_pos,
+                sta_pos,
+                cfg["sta_id"],
+                seed * 10 + idx,
+                low_load_intervals=low_intervals,
+            )
+        else:
+            flows = generate_random_flows_basic(
+                ap_pos, sta_pos, cfg["sta_id"], seed * 10 + idx, load_range
+            )
+
+        # Force full-buffer APs
+        if idx in full_buffer_indices:
+            for flow in flows:
+                model = flow["model"]
+                flow["model"] = {
+                    "name": "Full",
+                    "start_time_us": model.get("start_time_us", 0),
+                    "end_time_us": model.get("end_time_us", None),
+                    "traffic_load_kbps": None,
+                }
+
+        scenario.append(build_bss(idx, cfg, flows))
+
+    return scenario
 
 
 # ---------- Scenario A ----------
 def generate_scenario_a() -> list[dict[str, Any]]:
-    scenario = []
-
     bss_configs = [
         {
             "ap_id": 1,
             "ap_pos": (3, 6, 0.5),
             "sta_id": 101,
             "sta_pos": (4, 8, 0.5),
-            "channels": [2],
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
         },
         {
             "ap_id": 2,
@@ -116,234 +224,232 @@ def generate_scenario_a() -> list[dict[str, Any]]:
         },
     ]
 
-    for idx, cfg in enumerate(bss_configs, start=1):
-        ap_pos = cfg["ap_pos"]
-        sta_pos = cfg["sta_pos"]
-
-        traffic_flows = [
-            {
-                "destination": cfg["sta_id"],
-                "model": {"name": "Full"},
-            }
-        ]
-
-        bss = {
-            "id": idx,
-            "ap": {
-                "id": cfg["ap_id"],
-                "pos": ap_pos,
-                "channels": cfg["channels"],
-                "primary_channel": cfg["channels"][0],
-            },
-            "stas": [{"id": cfg["sta_id"], "pos": sta_pos}],
-            "traffic_flows": traffic_flows,
-        }
-
-        scenario.append(bss)
-
-    return scenario
+    return build_scenario(
+        bss_configs, use_intervals=False, full_buffer_indices={1, 2, 3}
+    )
 
 
 # ---------- Scenario B ----------
-def generate_scenario_b(seed: int) -> list[dict[str, Any]]:
-    if seed is None:
-        seed = random.randint(0, 2**24)
-    rng = random.Random(seed)
-
-    scenario = []
-
-    used_positions = set()
-    bounds = cfg_module.NETWORK_BOUNDS_m
-
-    bss_configs = [
-        {
-            "ap_id": 1,
-            "ap_pos": None,
-            "sta_id": 101,
-            "sta_pos": None,
-            "channels": [1, 2, 3, 4],
-        },
-        {
-            "ap_id": 2,
-            "ap_pos": None,
-            "sta_id": 102,
-            "sta_pos": None,
-            "channels": [1, 2, 3, 4],
-        },
-        {
-            "ap_id": 3,
-            "ap_pos": None,
-            "sta_id": 103,
-            "sta_pos": None,
-            "channels": [1, 2],
-        },
-        {
-            "ap_id": 4,
-            "ap_pos": None,
-            "sta_id": 104,
-            "sta_pos": None,
-            "channels": [3, 4],
-        },
-    ]
-
-    for idx, cfg in enumerate(bss_configs, start=1):
-        ap_pos = (
-            cfg["ap_pos"]
-            if cfg["ap_pos"] is not None
-            else get_unique_position(bounds, used_positions, rng)
-        )
-        sta_pos = (
-            cfg["sta_pos"]
-            if cfg["sta_pos"] is not None
-            else get_unique_position(bounds, used_positions, rng)
-        )
-
-        traffic_flows = generate_random_flows(ap_pos, sta_pos, seed + idx)
-        for flow in traffic_flows:
-            flow["destination"] = cfg["sta_id"]
-
-        bss = {
-            "id": idx,
-            "ap": {
-                "id": cfg["ap_id"],
-                "pos": ap_pos,
-                "channels": cfg["channels"],
-                "primary_channel": cfg["channels"][0],
-            },
-            "stas": [{"id": cfg["sta_id"], "pos": sta_pos}],
-            "traffic_flows": traffic_flows,
-        }
-
-        scenario.append(bss)
-
-    return scenario
-
-
-# ---------- Scenario C ----------
-def generate_scenario_c(seed: int) -> list[dict[str, Any]]:
-    if seed is None:
-        seed = random.randint(0, 2**24)
-    rng = random.Random(seed)
-    scenario = []
-
-    used_positions = set()
-    bounds = cfg_module.NETWORK_BOUNDS_m
+def generate_scenario_b(seed: int):
+    def low_load_selector(rng, idx, num_bss):
+        # 3 distinct low-load BSS (excluding AP1), plus repeat one
+        if idx == 1:
+            return set()
+        chosen = rng.sample(range(2, num_bss + 1), 3)
+        chosen.append(rng.choice(chosen))
+        return {i for i, low_idx in enumerate(chosen) if idx == low_idx}
 
     bss_configs = [
         {
             "ap_id": 1,
-            "ap_pos": None,
+            "ap_pos": (3, 8, 1.5),
             "sta_id": 101,
-            "sta_pos": None,
+            "sta_pos": (4, 6, 0.5),
+            "rl_driven": True,
             "channels": [1, 2, 3, 4],
         },
         {
             "ap_id": 2,
-            "ap_pos": None,
+            "ap_pos": (6, 5, 1.5),
             "sta_id": 102,
-            "sta_pos": None,
+            "sta_pos": (5, 6, 1.5),
             "channels": [1],
         },
         {
             "ap_id": 3,
-            "ap_pos": None,
+            "ap_pos": (6, 3, 1),
             "sta_id": 103,
-            "sta_pos": None,
+            "sta_pos": (6, 4, 1.5),
             "channels": [2],
         },
         {
             "ap_id": 4,
-            "ap_pos": None,
+            "ap_pos": (2, 2, 0.5),
             "sta_id": 104,
-            "sta_pos": None,
+            "sta_pos": (4, 2, 1.5),
             "channels": [3],
         },
         {
             "ap_id": 5,
-            "ap_pos": None,
+            "ap_pos": (7, 6, 1),
             "sta_id": 105,
-            "sta_pos": None,
+            "sta_pos": (6, 7, 0.5),
             "channels": [4],
         },
     ]
 
-    # Choose 1 random BSS to be low load in each of the 3 intervals (distinct)
-    low_load_indices = rng.sample(
-        range(1, len(bss_configs)), 3
-    )  # Exclude BSS 1 (index 0)
+    return build_scenario(
+        bss_configs,
+        seed=seed,
+        use_intervals=True,
+        full_buffer_indices={1},
+        low_load_selector=low_load_selector,
+    )
 
-    intervals_us = [
-        (0, 40_000_000),
-        (40_000_000, 80_000_000),
-        (80_000_000, 120_000_000),
+
+# ---------- Scenario 1 ----------
+def generate_scenario_1() -> list[dict[str, Any]]:
+    bss_configs = [
+        {
+            "ap_id": 1,
+            "ap_pos": (2, 7, 1),
+            "sta_id": 101,
+            "sta_pos": (1, 6, 1),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 2,
+            "ap_pos": (3, 5, 1),
+            "sta_id": 102,
+            "sta_pos": (5, 5, 0.5),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 3,
+            "ap_pos": (7, 8, 1),
+            "sta_id": 103,
+            "sta_pos": (7, 9, 1),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
     ]
 
-    for idx, cfg in enumerate(bss_configs, start=1):
-        ap_pos = (
-            cfg["ap_pos"]
-            if cfg["ap_pos"] is not None
-            else get_unique_position(bounds, used_positions, rng)
-        )
-        sta_pos = (
-            cfg["sta_pos"]
-            if cfg["sta_pos"] is not None
-            else get_unique_position(bounds, used_positions, rng)
-        )
+    return build_scenario(
+        bss_configs, use_intervals=False, full_buffer_indices={1, 2, 3}
+    )
 
-        # Determine which intervals this BSS should have low load
-        low_load_intervals = {
-            i for i, low_idx in enumerate(low_load_indices) if idx - 1 == low_idx
-        }
 
-        traffic_flows = generate_random_flows(
-            ap_pos, sta_pos, seed + idx, (0.6, 0.9), (0, 0.2), low_load_intervals
-        )
-        for flow in traffic_flows:
-            flow["destination"] = cfg["sta_id"]
+# ---------- Scenario 2 ----------
+def generate_scenario_2(seed: int) -> list[dict[str, Any]]:
+    bss_configs = [
+        {
+            "ap_id": 1,
+            "ap_pos": (6, 9, 1),
+            "sta_id": 101,
+            "sta_pos": (7, 8, 0.5),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 2,
+            "ap_pos": (4, 5, 1),
+            "sta_id": 102,
+            "sta_pos": (4, 5, 1),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 3,
+            "ap_pos": (3, 9, 0),
+            "sta_id": 103,
+            "sta_pos": (2, 8, 0),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 4,
+            "ap_pos": (4, 4, 0.5),
+            "sta_id": 104,
+            "sta_pos": (5, 4, 1),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+    ]
 
-        bss = {
-            "id": idx,
-            "ap": {
-                "id": cfg["ap_id"],
-                "pos": ap_pos,
-                "channels": cfg["channels"],
-                "primary_channel": cfg["channels"][0],
-            },
-            "stas": [{"id": cfg["sta_id"], "pos": sta_pos}],
-            "traffic_flows": traffic_flows,
-        }
+    return build_scenario(
+        bss_configs,
+        seed=seed,
+        use_intervals=False,
+        full_buffer_indices={1, 2},
+        load_range=(0.2, 0.4),
+    )
 
-        scenario.append(bss)
 
-    return scenario
+# ---------- Scenario 3 ----------
+def generate_scenario_3(seed: int) -> list[dict[str, Any]]:
+    bss_configs = [
+        {
+            "ap_id": 1,
+            "ap_pos": (2, 7, 1),
+            "sta_id": 101,
+            "sta_pos": (1, 8, 1),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 2,
+            "ap_pos": (9, 5, 1),
+            "sta_id": 102,
+            "sta_pos": (8, 4, 0.5),
+            "rl_driven": True,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 3,
+            "ap_pos": (1, 2, 0),
+            "sta_id": 103,
+            "sta_pos": (2, 1, 0),
+            "rl_driven": False,
+            "channels": [1, 2, 3, 4],
+        },
+        {
+            "ap_id": 4,
+            "ap_pos": (7, 6, 0.5),
+            "sta_id": 104,
+            "sta_pos": (5, 6, 1),
+            "rl_driven": False,
+            "channels": [1, 2, 3, 4],
+        },
+    ]
+
+    return build_scenario(
+        bss_configs,
+        seed=seed,
+        use_intervals=False,
+        load_range=(0.6, 0.9),
+    )
 
 
 def get_scenario(
     name: str,
-    all_rl_driven: int = 0,
-    ap1_channels: list[int] | None = None,
+    baseline_channels: list[int] | None = None,
     seed: int | None = None,
 ) -> list[dict]:
     if name == "A":
         scenario = generate_scenario_a()
     elif name == "B":
         scenario = generate_scenario_b(seed)
-    elif name == "C":
-        scenario = generate_scenario_c(seed)
+    elif name == "1":
+        scenario = generate_scenario_1()
+    elif name == "2":
+        scenario = generate_scenario_2(seed)
+    elif name == "3":
+        scenario = generate_scenario_3(seed)
     else:
         raise ValueError(f"Unknown scenario: {name}")
 
-    # Manually override AP 1's channels and primary channel
-    if ap1_channels:
-        scenario[0]["ap"]["channels"] = ap1_channels
-        scenario[0]["ap"]["primary_channel"] = ap1_channels[0]
-        scenario[0]["ap"]["rl_driven"] = False
-    else:
-        scenario[0]["ap"]["rl_driven"] = True
-
-    # All aps have rl_driven set
-    if all_rl_driven == 1:
-        for bss in scenario:
-            bss["ap"]["rl_driven"] = True
+    # Manually override the AP channels and primary channel
+    if baseline_channels:
+        if name in ["A", "B"]:  # Override AP 1's channels and primary channel
+            scenario[0]["ap"]["channels"] = baseline_channels
+            scenario[0]["ap"]["primary_channel"] = baseline_channels[0]
+            scenario[0]["ap"]["rl_driven"] = False
+        else:
+            for bss in scenario:  # Override all AP's channels and primary channel
+                bss["ap"]["channels"] = baseline_channels
+                bss["ap"]["primary_channel"] = baseline_channels[0]
+                bss["ap"]["rl_driven"] = False
 
     return scenario
+
+
+# for seed in range(1,21):
+#     print("SEED", seed)
+#     scenario = get_scenario("3", seed=seed)
+
+#     for bss in scenario:
+#         print("BSS", bss["id"])
+#         for flow in bss["traffic_flows"]:
+#             print(flow)
