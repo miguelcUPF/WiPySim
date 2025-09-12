@@ -154,7 +154,7 @@ def build_scenario(
     seed: int = None,
     use_intervals: bool = False,
     full_buffer_indices: set[int] = None,
-    low_load_selector: callable = None,
+    low_load_map: dict[int, set[int]] = None,
     load_range: tuple[float, float] = (0.8, 0.9),
 ) -> list[dict[str, Any]]:
     seed = seed or random.randint(0, 2**24)
@@ -165,13 +165,11 @@ def build_scenario(
     for idx, bss_config in enumerate(bss_configs, start=1):
         ap_pos, sta_pos = bss_config["ap_pos"], bss_config["sta_pos"]
 
+        low_intervals = low_load_map.get(idx, set()) if low_load_map else set()
+        print("low_intervals", low_intervals)
+
         # Generate flows
         if use_intervals:
-            low_intervals = (
-                low_load_selector(rng, idx, len(bss_configs))
-                if low_load_selector
-                else None
-            )
             flows = generate_random_flows_intervals(
                 ap_pos,
                 sta_pos,
@@ -198,6 +196,27 @@ def build_scenario(
         scenario.append(build_bss(idx, bss_config, flows))
 
     return scenario
+
+
+def get_low_load_map(seed: int, num_bss: int) -> dict[int, set[int]]:
+    """
+    Assign low-load BSS per interval:
+    - First three intervals: one distinct BSS each (excluding BSS 1)
+    - Fourth interval: pick one of the first three again
+    """
+    rng = random.Random(seed)
+    bss_indices = list(range(2, num_bss + 1))  # exclude BSS 1
+    assert len(bss_indices) >= 3, "Need at least 4 BSS for this scheme"
+
+    selected = rng.sample(bss_indices, 3)  # first three intervals
+    repeat = rng.choice(selected)  # fourth interval
+
+    low_load_map = {i: set() for i in range(1, num_bss + 1)}
+    for interval, bss_idx in enumerate(selected):
+        low_load_map[bss_idx].add(interval)
+    low_load_map[repeat].add(3)
+
+    return low_load_map
 
 
 # ---------- Scenario A ----------
@@ -281,12 +300,14 @@ def generate_scenario_b(seed: int):
         },
     ]
 
+    low_load_map = get_low_load_map(seed, num_bss=len(bss_configs))
+
     return build_scenario(
         bss_configs,
         seed=seed,
         use_intervals=True,
         full_buffer_indices={1},
-        low_load_selector=low_load_selector,
+        low_load_map=low_load_map,
     )
 
 
@@ -450,7 +471,7 @@ def get_scenario(
 
 # for seed in range(1,21):
 #     print("SEED", seed)
-#     scenario = get_scenario("3", seed=seed)
+#     scenario = get_scenario("B", seed=seed)
 
 #     for bss in scenario:
 #         print("BSS", bss["id"])

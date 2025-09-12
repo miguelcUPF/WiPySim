@@ -2,7 +2,7 @@ import subprocess
 import sys
 import os
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def run_trial(env_vars, script_path, python_executable, run_name):
@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     print(f"Launching {len(tasks)} parallel runs with up to {max_workers} workers...")
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(
                 run_trial, env_vars, script_path, python_executable, run_name
