@@ -158,7 +158,6 @@ def build_scenario(
     load_range: tuple[float, float] = (0.8, 0.9),
 ) -> list[dict[str, Any]]:
     seed = seed or random.randint(0, 2**24)
-    rng = random.Random(seed)
     full_buffer_indices = full_buffer_indices or set()
     scenario = []
 
@@ -166,7 +165,6 @@ def build_scenario(
         ap_pos, sta_pos = bss_config["ap_pos"], bss_config["sta_pos"]
 
         low_intervals = low_load_map.get(idx, set()) if low_load_map else set()
-        print("low_intervals", low_intervals)
 
         # Generate flows
         if use_intervals:
@@ -253,14 +251,6 @@ def generate_scenario_a() -> list[dict[str, Any]]:
 
 # ---------- Scenario B ----------
 def generate_scenario_b(seed: int):
-    def low_load_selector(rng, idx, num_bss):
-        # 3 distinct low-load BSS (excluding AP1), plus repeat one
-        if idx == 1:
-            return set()
-        chosen = rng.sample(range(2, num_bss + 1), 3)
-        chosen.append(rng.choice(chosen))
-        return {i for i, low_idx in enumerate(chosen) if idx == low_idx}
-
     bss_configs = [
         {
             "ap_id": 1,
