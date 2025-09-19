@@ -1,6 +1,6 @@
 class SimParams:
     # --- MAC Layer Parameters --- #
-    MAX_TX_QUEUE_SIZE_pkts = 100
+    MAX_TX_QUEUE_SIZE_pkts = 500
 
     SLOT_TIME_us = 9
     SIFS_us = 16

@@ -39,6 +39,10 @@ CTS_TIMEOUT_us = sparams_module.SIFS_us + sparams_module.SLOT_TIME_us + CTS_TX_u
 CH_ACCESS_TIMEOUT_us = 10e3
 
 
+def one_hot(channel_set, total_channels=4):
+    return [1 if (i + 1) in channel_set else 0 for i in range(total_channels)]
+
+
 class MACState:
     IDLE = 0
     CONTEND = 1
@@ -1040,12 +1044,10 @@ class MAC:
         channels_occupancy_ratio = self.node.phy_layer.get_channels_occupancy_ratio()
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
 
-        channel_key = next(
-            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
-        )
+        channel_one_hot = one_hot(current_channel)
 
         primary_ctx = [
-            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
+            *channel_one_hot,  # already in range [0, 1]
             *channels_occupancy_ratio,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
         ]
@@ -1077,16 +1079,12 @@ class MAC:
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
         queue_size = len(self.tx_queue.items)
 
-        channel_key = next(
-            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
-        )
-        primary_key = next(
-            (k for k, v in PRIMARY_CHANNEL_MAP.items() if v == current_primary), None
-        )
+        channel_one_hot = one_hot(current_channel)
+        primary_one_hot = one_hot(current_primary)
 
         cw_ctx = [
-            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
-            primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
+            *channel_one_hot,  # already in range [0, 1]
+            *primary_one_hot,  # already in range [0, 1]
             *channels_occupancy_ratio,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]
             queue_size
@@ -1117,17 +1115,13 @@ class MAC:
         channels_occupancy_ratio = self.node.phy_layer.get_channels_occupancy_ratio()
         busy_flags_per_channel = self.node.phy_layer.get_busy_flags()
 
-        channel_key = next(
-            (k for k, v in CHANNEL_MAP.items() if v == current_channel), None
-        )
-        primary_key = next(
-            (k for k, v in PRIMARY_CHANNEL_MAP.items() if v == current_primary), None
-        )
+        channel_one_hot = one_hot(current_channel)
+        primary_one_hot = one_hot(current_primary)
         cw_key = next((k for k, v in CW_MAP.items() if v == self.cw_current), None)
 
         meta_ctx = [
-            channel_key / len(CHANNEL_MAP),  # normalized in range [0, 1]
-            primary_key / len(PRIMARY_CHANNEL_MAP),  # normalized in range [0, 1]
+            *channel_one_hot,  # already in range [0, 1]
+            *primary_one_hot,  # already in range [0, 1]
             cw_key / len(CW_MAP),  # normalized in range [0, 1]
             *channels_occupancy_ratio,  # already in range [0, 1]
             *busy_flags_per_channel,  # already in range [0, 1]

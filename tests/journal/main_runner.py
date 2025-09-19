@@ -40,7 +40,7 @@ if __name__ == "__main__":
         "sw_linucb": [0, 1],
         "epsilon_greedy": [0, 1],
     }
-    scenario = "3"  # "A", "B", "1", "2", or "3"
+    scenario = "1"  # "A", "B", "1", "2", or "3"
     seeds = range(1, 21)
 
     enable_channel_options = True

@@ -825,10 +825,10 @@ class MARLController:  # only for multi agent
             "n_actions": len(
                 PRIMARY_CHANNEL_MAP
             ),  # 0: {1}, 1: {2}, 2: {3}, 3: {4} (depending on channel)
-            "context_dim": 9
+            "context_dim": 12
             + (
                 1 if settings.get("enable_meta_agent", False) else 0
-            ),  # 1x current channel (mapped idx) + 4x channel occupation ratio + 4x channel busy flags + (1x holdtime if meta-controller enabled)
+            ),  # 4x current selected channels (one hot encoded) + 4x channel occupation ratio + 4x channel busy flags + (1x holdtime if meta-controller enabled)
             "strategy": strategy,
             "weights_r": settings.get("primary_weights", {}),
         }
@@ -838,10 +838,10 @@ class MARLController:  # only for multi agent
             "n_actions": len(
                 CW_MAP
             ),  # 0: {16}, 1: {32}, 2: {64}, 3: {128}, 4: {256}, 5: {512}, 6: {1024} (i.e., 2**(x+4))
-            "context_dim": 11
+            "context_dim": 17
             + (
                 1 if settings.get("enable_meta_agent", False) else 0
-            ),  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 4x channel occupation ratio + 4x channel busy flags + 1x queue size + (1x holdtime if meta-controller enabled)
+            ),  #  4x current selected channels (one hot encoded) + 4x current selected primary (one hot encoded) + 4x channel occupation ratio + 4x channel busy flags + 1x queue size + (1x holdtime if meta-controller enabled)
             "strategy": strategy,
             "weights_r": settings.get("cw_weights", {}),
         }
@@ -853,7 +853,7 @@ class MARLController:  # only for multi agent
                 if not settings.get("enable_meta_agent_multifreq", False)
                 else len(META_MAP_multifreq)
             ),  # 0: {1}, 1: {2}, 2: {4}, 3: {8} (i.e., 2**(x))
-            "context_dim": 11,  #  1x current channel (mapped idx) + 1x current primary (mapped idx) + 1x current cw (mapped idx) + 4x channel occupation ratio + 4x channel busy flags
+            "context_dim": 17,  #  4x current selected channels (one hot encoded) + 4x current selected primary (one hot encoded) + 1x current cw (mapped idx) + 4x channel occupation ratio + 4x channel busy flags
             "strategy": strategy,
         }
 

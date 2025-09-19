@@ -1,6 +1,6 @@
 class SimParams:
     # --- MAC Layer Parameters --- #
-    MAX_TX_QUEUE_SIZE_pkts = 100
+    MAX_TX_QUEUE_SIZE_pkts = 500  # same as in ns-3: https://github.com/nsnam/ns-3-dev-git/blob/master/src/wifi/doc/source/wifi-design.rst
 
     SLOT_TIME_us = 9
     SIFS_us = 16

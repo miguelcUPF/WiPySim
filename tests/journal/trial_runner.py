@@ -60,7 +60,7 @@ settings_mapping = {
         "ucb": {"strategy": STRATEGY, "alpha": 1.14},
         "osub": {"strategy": STRATEGY},
         "sw_osub": {"strategy": STRATEGY, "window_size": 71},
-        "sw_linucb": {"strategy": STRATEGY, "alpha": 0.52, "window_size": 0},
+        "sw_linucb": {"strategy": STRATEGY, "alpha": 0.50, "window_size": 0},
         "epsilon_greedy": {
             "strategy": STRATEGY,
             "epsilon": 0.038,
