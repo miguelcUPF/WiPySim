@@ -40,8 +40,10 @@ if __name__ == "__main__":
         "sw_linucb": [0, 1],
         "epsilon_greedy": [0, 1],
     }
-    scenario = "1"  # "A", "B", "1", "2", or "3"
+    scenario = "B"  # "A", "B", "1", "2", or "3"
     seeds = range(1, 21)
+
+    enable_DCB = False
 
     enable_channel_options = True
     channel_options = [
@@ -68,6 +70,7 @@ if __name__ == "__main__":
                     "SEED": str(seed),
                     "SCENARIO": scenario,
                     "WANDB_RUN_NAME": run_name,
+                    "ENABLE_DCB": str(enable_DCB),
                 }
                 tasks.append((env_vars, script_path, python_executable, run_name))
 
@@ -100,6 +103,7 @@ if __name__ == "__main__":
                     "SCENARIO": scenario,
                     "BASELINE_CHANNELS": ",".join(map(str, baseline_channels)),
                     "WANDB_RUN_NAME": run_name,
+                    "ENABLE_DCB": str(enable_DCB),
                 }
                 tasks.append((env_vars, script_path, python_executable, run_name))
 

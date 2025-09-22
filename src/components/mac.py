@@ -143,8 +143,8 @@ class MAC:
         )
 
         if (
-            self.rl_driven and self.sparams.BONDING_MODE == 0
-        ):  # only enabled if bonding mode is static channel bonding
+            self.rl_driven
+        ):
             if self.cfg.RL_MODE == 0:
                 self.rl_controller = SARLController(
                     sparams, cfg, env, self.node, self.rl_settings
