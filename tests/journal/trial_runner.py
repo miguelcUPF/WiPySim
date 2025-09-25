@@ -17,7 +17,7 @@ RL_MODE = int(os.environ.get("RL_MODE", 1))
 SEED = int(os.environ.get("SEED", 1))
 SCENARIO = os.environ.get("SCENARIO", "A")
 BASELINE_CHANNELS = os.environ.get("BASELINE_CHANNELS", None)
-ENABLE_DCB = bool(os.environ.get("ENABLE_DCB", False))
+ENABLE_DCB = os.environ.get("ENABLE_DCB", "False") == "True"
 WANDB_RUN_NAME = os.environ.get("WANDB_RUN_NAME", f"{STRATEGY}_rl{RL_MODE}_seed{SEED}")
 
 # Config
@@ -37,7 +37,7 @@ cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 cfg.ENABLE_STATS_COMPUTATION = False
 cfg.USE_WANDB = True
 cfg.USE_CODECARBON = False
-cfg.WANDB_PROJECT_NAME = f"journal-runs-wipysim{SCENARIO}" + "-DCB" if ENABLE_DCB else ""
+cfg.WANDB_PROJECT_NAME = f"UCBjournal-runs-wipysim{SCENARIO}{'-DCB' if ENABLE_DCB else ''}"
 
 # CW & Channels
 sparams.CW_MIN = 16
