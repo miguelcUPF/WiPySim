@@ -37,7 +37,7 @@ cfg.ENABLE_ADVANCED_NETWORK_CONFIG = True
 cfg.ENABLE_STATS_COMPUTATION = False
 cfg.USE_WANDB = True
 cfg.USE_CODECARBON = False
-cfg.WANDB_PROJECT_NAME = f"UCBjournal-runs-wipysim{SCENARIO}{'-DCB' if ENABLE_DCB else ''}"
+cfg.WANDB_PROJECT_NAME = f"journal-runs-wipysim{SCENARIO}{'-DCB' if ENABLE_DCB else ''}"
 
 # CW & Channels
 sparams.CW_MIN = 16
