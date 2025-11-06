@@ -1370,6 +1370,7 @@ class SARLController:
                     "is_linear": False,  # joint actions are not linear overall
                     "actions": self.valid_joint_actions,
                     "is_sa": True,
+                    "prob": 0,
                 }
             )
             agent_params.pop("context_dim", None)
