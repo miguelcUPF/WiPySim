@@ -49,6 +49,8 @@ sparams.BONDING_MODE = 1 if ENABLE_DCB else 0
 settings_mapping = {
     0: {
         "ucb": {"strategy": STRATEGY, "alpha": 1.096},
+        "osub": {"strategy": STRATEGY},
+        "sw_osub": {"strategy": STRATEGY, "window_size": 71},
         "sw_linucb": {"strategy": STRATEGY, "alpha": 0.52, "window_size": 0},
         "epsilon_greedy": {
             "strategy": STRATEGY,

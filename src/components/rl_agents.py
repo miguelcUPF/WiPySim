@@ -598,6 +598,7 @@ class OSUB:  # only for multi agent
         max_val: float = MAX_REWARD,
         window_size: int | None = None,
         rng: random.Random | None = None,
+        is_sa: bool = False,  # single-agent (joint) flag
     ):
         self.name = name
         self.n_actions = n_actions
@@ -629,6 +630,13 @@ class OSUB:  # only for multi agent
 
         self.rng = rng
 
+        # ---- single-agent joint action support ----
+        self.is_sa = is_sa
+        if self.is_sa:
+            self._precomputed_neighbors = [
+                self.get_neighbors_sa(i) for i in range(self.n_actions)
+            ]
+
     def get_linear_neighbors(self, k):
         # assuming a linear action space
         if k == 0:
@@ -649,7 +657,47 @@ class OSUB:  # only for multi agent
 
         return neighbors
 
+    def get_neighbors_sa(self, k):
+        """
+        Single-agent joint-action neighbor generation.
+        - neighbors share a channel region
+        - and have primary, cw within ±1 of leader
+        """
+        leader = self.actions[k]  # (c_id, p_idx, cw_id)
+        c1, p1, cw1 = leader
+
+        neighbors = set()
+        neighbors.add(k)
+
+        c1_set = set(CHANNEL_MAP.get(c1, set()))
+
+        for j_idx, (c2, p2, cw2) in enumerate(self.actions):
+            if j_idx == k:
+                continue
+
+            # must share a channel region
+            c2_set = set(CHANNEL_MAP.get(c2, set()))
+            if not (c1_set & c2_set):
+                continue
+
+            # primary within ±1 and valid for that channel
+            if abs(p1 - p2) > 1:
+                continue
+            if (p2 + 1) not in CHANNEL_MAP.get(
+                c2, set()
+            ):  # this is not necessary but it's a sanity check
+                continue
+
+            # CW within ±1
+            if abs(cw1 - cw2) > 1:
+                continue
+            neighbors.add(j_idx)
+
+        return sorted(neighbors)
+
     def get_neighbors(self, k):
+        if self.is_sa:
+            return self._precomputed_neighbors[k]
         if self.is_linear:
             return self.get_linear_neighbors(k)
         else:
@@ -1243,6 +1291,8 @@ class SARLController:
             agent_class = UCB
         elif strategy in ["e2tc"]:
             agent_class = E2TC
+        elif strategy in ["osub", "sw_osub"]:
+            agent_class = OSUB
         else:
             raise ValueError(f"Unknown strategy {strategy}")
 
@@ -1310,6 +1360,20 @@ class SARLController:
                 "min_val": settings.get("min_val", MIN_REWARD),
                 "max_val": settings.get("max_val", MAX_REWARD),
             }
+        elif agent_class == OSUB:
+            agent_params.update(
+                {
+                    "name": "joint_agent",
+                    "min_val": settings.get("min_val", MIN_REWARD),
+                    "max_val": settings.get("max_val", MAX_REWARD),
+                    "window_size": settings.get("window_size", None),
+                    "is_linear": False,  # joint actions are not linear overall
+                    "actions": self.valid_joint_actions,
+                    "is_sa": True,
+                }
+            )
+            agent_params.pop("context_dim", None)
+            agent_params.pop("strategy", None)
 
         self.joint_agent = agent_class(
             **agent_params, marl_controller=self, rng=env.rng
@@ -1330,7 +1394,7 @@ class SARLController:
         if self.emissions_tracker:
             self.emissions_tracker.start()
 
-        if isinstance(self.joint_agent, E2TC) or isinstance(self.joint_agent, UCB):
+        if isinstance(self.joint_agent, E2TC) or isinstance(self.joint_agent, UCB) or isinstance(self.joint_agent, OSUB):
             action_idx = self.joint_agent.select_action()
         else:
             self.last_context = context
@@ -1359,7 +1423,7 @@ class SARLController:
 
         if isinstance(self.joint_agent, E2TC):
             self.joint_agent.update(reward)
-        elif isinstance(self.joint_agent, UCB):
+        elif isinstance(self.joint_agent, UCB) or isinstance(self.joint_agent, OSUB):
             self.joint_agent.update(self.last_action_idx, reward)
         else:
             self.joint_agent.update(self.last_context, self.last_action_idx, reward)

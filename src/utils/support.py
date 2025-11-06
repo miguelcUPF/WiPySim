@@ -583,11 +583,6 @@ def validate_config(
 
             _param_validation(param_validations) if param_validations else None
 
-        if (strategy == "osub" or strategy == "sw_osub") and cfg.RL_MODE != 1:
-            logger.critical(
-                f"Strategy {strategy} is not compatible with RL_MODE={cfg.RL_MODE}. Please set RL_MODE=1 for using this strategy."
-            )
-
     str_settings = {
         "WANDB_PROJECT_NAME": cfg.WANDB_PROJECT_NAME,
         "WANDB_RUN_NAME": cfg.WANDB_RUN_NAME,
