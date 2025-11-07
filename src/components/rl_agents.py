@@ -637,6 +637,9 @@ class OSUB:  # only for multi agent
                 self.get_neighbors_sa(i) for i in range(self.n_actions)
             ]
 
+        self.leader_counts = np.zeros(self.n_actions)
+        self.gamma = max(len(self.get_neighbors(i)) - 1 for i in range(self.n_actions))
+
     def get_linear_neighbors(self, k):
         # assuming a linear action space
         if k == 0:
@@ -779,6 +782,7 @@ class OSUB:  # only for multi agent
         masked_means[valid_actions] = mu_hat[valid_actions]
         leader = np.argmax(masked_means)
 
+
         # neighbors of leader that are valid
         N = self.get_neighbors(leader)
         N = [a for a in N if a in valid_actions]
@@ -789,6 +793,11 @@ class OSUB:  # only for multi agent
         indices = [self.kl_ucb_index(mu_hat[k], counts[k], self.t) for k in N]
 
         max_idx = np.argmax(indices)
+
+        self.leader_counts[leader] += 1
+        if (self.leader_counts[leader] - 1) % (self.gamma + 1) == 0:
+            return leader
+
         action = N[max_idx]
 
         return action
