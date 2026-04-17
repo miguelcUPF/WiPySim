@@ -56,7 +56,16 @@ class UserConfig:
     }
 
     # Algorithm settings for each agent. Keys:
-    # - strategy (optional): "sw_linucb" or "linucb" or "epsilon_greedy" or "decay_epsilon_greedy" or "ucb" or "e2tc" or "osub" or "sw_osub". Default: "sw_linucb"
+    # - strategy (optional): 
+    #     "sw_linucb"            -> SW-LinUCB
+    #     "linucb"               -> LinUCB
+    #     "ucb"                  -> UCB
+    #     "osub"                 -> OSUB
+    #     "sw_osub"              -> Sliding-Window OSUB
+    #     "e2tc"                 -> E2TC
+    #     "epsilon_greedy"       -> E-RLB
+    #     "decay_epsilon_greedy" -> E-RLB variant with decaying exploration
+    #   Default: "sw_linucb"
 
     # only if "sw_linucb" or "linucb" or "ucb":
     # - alpha (optional): confidence bound parameter for (SW)LinUCB and UCB.  Default: 1 for (SW)LinUCB and 4 for UCB.
