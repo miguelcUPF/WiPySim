@@ -95,3 +95,6 @@ The simulator supports:
 ├── requirements.txt
 └── README.md
 ````
+
+## Research support
+This work was supported by the following projects: MLDR (Chist-ERA WAI 2022) through AEI, NCN and ANR projects PCI2023-145958-2 (MCIU/AEI/10.13039), 2023/05/Y/ST7/00004, and ANR-23-CHR4-0005, respectively; by Wi-XR PID2021-123995NB-I00 (MCIU/AEI/FEDER,UE); by TRUE Wi-Fi PID2024-155470NB-I00 (MICIU/AEI/10,13039/501100011033/FEDER,UE); by ICREA Academia 2024 (00077 AGAUR), and by MdM CEX2021-001195-M (MICIU/AEI/10.13039/501100011033).
